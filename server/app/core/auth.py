@@ -94,3 +94,11 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.permission_group != PermissionGroup.ADMIN:
         raise HTTPException(status_code=403, detail="Admin permission required")
     return current_user
+
+
+def require_download_permission(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.permission_group == PermissionGroup.GUEST:
+        raise HTTPException(status_code=403, detail="Download permission required")
+    return current_user

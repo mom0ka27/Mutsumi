@@ -1,7 +1,7 @@
 server:
   name: Mutsumi Server
   host: 0.0.0.0
-  port: 12091
+  port: 12092
   ssl:
     enabled: true
     certfile: ./server.crt
@@ -19,3 +19,4 @@ qbittorrent:
   username: ''
   password: ''
   download_path: ./data
+  share_ratio_limit: 3.0

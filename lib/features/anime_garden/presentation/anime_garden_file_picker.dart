@@ -106,7 +106,9 @@ Future<String?> showAnimeGardenFilePicker({
                     final file = files[index];
                     final isSelected = file.name == selected;
                     final paths = file.name.split("/");
-                    final filename = paths.length > 1 ? paths.skip(1).join("/") : file.name;
+                    final filename = paths.length > 1
+                        ? paths.skip(1).join("/")
+                        : file.name;
                     return ListTile(
                       selected: isSelected,
                       selectedTileColor: colorScheme.primaryContainer

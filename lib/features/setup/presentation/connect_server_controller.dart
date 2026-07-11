@@ -91,12 +91,6 @@ class ConnectServerController extends GetxController {
       return;
     }
 
-    if (settingsRepository.hasServerUrl(serverUrl) &&
-        serverUrl != initialServerUrl) {
-      message.value = '该服务器已添加，请在主页左上角服务器列表中选择。';
-      return;
-    }
-
     checking.value = true;
     message.value = null;
 

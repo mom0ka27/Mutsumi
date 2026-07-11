@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'model/danmaku.dart';
 import 'model/option.dart';
@@ -11,6 +12,7 @@ import 'package:get/get.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
+import 'package:path_provider/path_provider.dart';
 
 class IndexPlayerController {
   final _player = Player(
@@ -62,6 +64,7 @@ class IndexPlayerController {
   StreamSubscription<Duration>? _danmakuSubscription;
   double _currentRate = 1.0;
   int _lastDanmakuSecond = -1;
+  Future<Directory>? _subtitleFontDirectory;
 
   IndexPlayerController({this.options = const IndexPlayerOptions()}) {
     // (_player.platform as NativePlayer)
@@ -95,6 +98,12 @@ class IndexPlayerController {
 
     this.video.value = video;
     _lastDanmakuSecond = -1;
+    final fontDirectory = await (_subtitleFontDirectory ??=
+        _prepareSubtitleFont());
+    await _setNativeProperty('sub-font-provider', 'auto');
+    await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
+    await _setNativeProperty('sub-font', 'Resource Han Rounded CN');
+
     if (video is models.NetworkVideo) {
       await _setNativeProperty('cache', 'yes');
       await _setNativeProperty('demuxer-readahead-secs', '30');
@@ -123,6 +132,8 @@ class IndexPlayerController {
     }
     if (video.subtitleUri != null) {
       await _player.setSubtitleTrack(SubtitleTrack.uri(video.subtitleUri!));
+    } else {
+      await _selectSimplifiedChineseSubtitle();
     }
     _danmakuController?.clear();
     video.danmakuProvider?.getDanmakuList().then((l) {
@@ -226,6 +237,68 @@ class IndexPlayerController {
     await _player.setRate(rate);
   }
 
+  Future<void> setSubtitleTrack(SubtitleTrack track) async {
+    if (_disposed || state.track.subtitle == track) {
+      return;
+    }
+    await _player.setSubtitleTrack(track);
+  }
+
+  Future<void> _selectSimplifiedChineseSubtitle() async {
+    Tracks tracks = state.tracks;
+    try {
+      tracks = await stream.tracks
+          .firstWhere((value) => value.subtitle.any(_isSubtitleTrack))
+          .timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      tracks = state.tracks;
+    }
+    if (_disposed) {
+      return;
+    }
+    final candidates = tracks.subtitle.where(_isSubtitleTrack).toList();
+    if (candidates.isEmpty) {
+      return;
+    }
+    candidates.sort(
+      (left, right) => _simplifiedChineseScore(
+        right,
+      ).compareTo(_simplifiedChineseScore(left)),
+    );
+    if (_simplifiedChineseScore(candidates.first) > 0) {
+      await setSubtitleTrack(candidates.first);
+    }
+  }
+
+  bool _isSubtitleTrack(SubtitleTrack track) =>
+      track.id != 'auto' && track.id != 'no';
+
+  int _simplifiedChineseScore(SubtitleTrack track) {
+    final value = [track.title, track.language, track.id]
+        .whereType<String>()
+        .join(' ')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[-_ ]'), '');
+    if (value.contains('简体') || value.contains('简中')) {
+      return 100;
+    }
+    if (value.contains('simplified') ||
+        value.contains('zhhans') ||
+        value.contains('zhcn') ||
+        value.contains('zhochs') ||
+        value.contains('chichs')) {
+      return 90;
+    }
+    if ((value.contains('chs') || value.contains('sc')) &&
+        !value.contains('cht')) {
+      return 80;
+    }
+    if (value == 'zh' || value == 'zho' || value == 'chi') {
+      return 50;
+    }
+    return 0;
+  }
+
   Future<void> _setNativeProperty(String name, String value) async {
     try {
       if (_disposed) {
@@ -233,6 +306,22 @@ class IndexPlayerController {
       }
       await (_player.platform as dynamic).setProperty(name, value);
     } catch (_) {}
+  }
+
+  Future<Directory> _prepareSubtitleFont() async {
+    final supportDirectory = await getApplicationSupportDirectory();
+    final fontDirectory = Directory('${supportDirectory.path}/subtitle_fonts');
+    final fontFile = File(
+      '${fontDirectory.path}/ResourceHanRoundedCN-Regular.ttf',
+    );
+    if (!await fontFile.exists()) {
+      await fontDirectory.create(recursive: true);
+      final data = await rootBundle.load(
+        'assets/fonts/ResourceHanRoundedCN-Regular.ttf',
+      );
+      await fontFile.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    }
+    return fontDirectory;
   }
 
   Future<void> dispose() async {

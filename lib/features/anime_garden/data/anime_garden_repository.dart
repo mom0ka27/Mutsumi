@@ -35,15 +35,11 @@ class AnimeGardenRepository {
     );
     final response = await _dio.post<Map<String, dynamic>>(
       '/resources',
-      queryParameters: {
-        'type': '动画',
-        'page': page,
-        'pageSize': pageSize,
-        'tracker': true,
-      },
+      queryParameters: {'page': page, 'pageSize': pageSize, 'tracker': true},
       data: {
         'search': [trimmedKeyword],
         'include': ['简'],
+        'types': ['动画', '合集'],
       },
     );
 

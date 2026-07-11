@@ -6,7 +6,6 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
-import '../../anime/data/anime_service.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
 import '../data/bangumi_repository.dart';
 
@@ -21,31 +20,11 @@ class BangumiDetailPage extends StatefulWidget {
 
 class _BangumiDetailPageState extends State<BangumiDetailPage> {
   late final Future<BangumiSubjectDetail> _detailFuture;
-  final _animeService = AnimeService();
-  bool _addingAnime = false;
 
   @override
   void initState() {
     super.initState();
     _detailFuture = BangumiRepository().getSubjectDetail(widget.subject.id);
-  }
-
-  Future<void> _addAnimeOnly(BangumiSubject subject) async {
-    setState(() {
-      _addingAnime = true;
-    });
-    try {
-      await _animeService.createAnime(subject: subject);
-      Get.snackbar('已添加', 'Anime 已保存到服务器');
-    } catch (error) {
-      Get.snackbar('添加失败', messageFromDioError(error));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _addingAnime = false;
-        });
-      }
-    }
   }
 
   @override
@@ -97,18 +76,6 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                FloatingActionButton.extended(
-                  heroTag: 'addAnimeOnly',
-                  onPressed: _addingAnime ? null : () => _addAnimeOnly(subject),
-                  label: Text(_addingAnime ? '添加中' : '添加'),
-                  icon: _addingAnime
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.add_rounded),
-                ),
-                const SizedBox(height: 12),
                 FloatingActionButton.extended(
                   heroTag: 'downloadAnime',
                   onPressed: () => Get.to(

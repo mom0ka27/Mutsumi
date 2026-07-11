@@ -30,8 +30,8 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
 
-  bool _initializing = false;
-  String? _message;
+  final _initializing = false.obs;
+  final _message = RxnString();
 
   @override
   void initState() {
@@ -63,16 +63,12 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
     if (serverName.isEmpty || username.isEmpty || password.isEmpty) {
-      setState(() {
-        _message = '请输入服务器名称、管理员账号和密码。';
-      });
+      _message.value = '请输入服务器名称、管理员账号和密码。';
       return;
     }
 
-    setState(() {
-      _initializing = true;
-      _message = null;
-    });
+    _initializing.value = true;
+    _message.value = null;
 
     try {
       final token = await _setupService.initialize(
@@ -80,19 +76,17 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
         password: password,
         serverName: serverName,
       );
-      await _settingsRepository.addServerUrl(
-        widget.serverUrl,
+      if (token == null) {
+        throw StateError('服务器未返回访问令牌');
+      }
+      await _settingsRepository.saveLogin(
+        serverUrl: widget.serverUrl,
+        username: username,
+        password: password,
+        accessToken: token,
         certificateFingerprint: widget.certificateSha256,
         serverName: serverName,
       );
-      await _settingsRepository.setServerCredential(
-        widget.serverUrl,
-        username: username,
-        password: password,
-      );
-      if (token != null) {
-        await _settingsRepository.setAccessToken(widget.serverUrl, token);
-      }
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
@@ -100,14 +94,10 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
       final detail = error.response?.data is Map<String, dynamic>
           ? error.response?.data['detail']
           : null;
-      setState(() {
-        _message = '初始化失败：${detail ?? error.message}';
-      });
+      _message.value = '初始化失败：${detail ?? error.message}';
     } finally {
       if (mounted) {
-        setState(() {
-          _initializing = false;
-        });
+        _initializing.value = false;
       }
     }
   }
@@ -163,25 +153,35 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _initializing ? null : _initializeServer,
-                icon: _initializing
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.admin_panel_settings),
-                label: Text(_initializing ? '正在初始化...' : '初始化服务器'),
-              ),
-              if (_message != null) ...[
-                const SizedBox(height: 24),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(_message!),
-                  ),
+              Obx(
+                () => FilledButton.icon(
+                  onPressed: _initializing.value ? null : _initializeServer,
+                  icon: _initializing.value
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.admin_panel_settings),
+                  label: Text(_initializing.value ? '正在初始化...' : '初始化服务器'),
                 ),
-              ],
+              ),
+              Obx(() {
+                final message = _message.value;
+                if (message == null) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  children: [
+                    const SizedBox(height: 24),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(message),
+                      ),
+                    ),
+                  ],
+                );
+              }),
             ],
           ),
         ),

@@ -32,6 +32,21 @@ class DioClient {
             '${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.path}',
             tag: 'HTTP',
           );
+          final data = response.data;
+          if (data is Map && data['code'] is int && data['code'] != 0) {
+            handler.reject(
+              DioException(
+                requestOptions: response.requestOptions,
+                response: response,
+                type: DioExceptionType.badResponse,
+                error: ApiBusinessException(
+                  data['code'] as int,
+                  data['msg'] as String? ?? '请求失败',
+                ),
+              ),
+            );
+            return;
+          }
           handler.next(response);
         },
         onError: (error, handler) {
@@ -75,4 +90,14 @@ class DioClient {
   static String _normalizeFingerprint(String value) {
     return value.replaceAll(RegExp(r'[^a-fA-F0-9]'), '').toLowerCase();
   }
+}
+
+class ApiBusinessException implements Exception {
+  const ApiBusinessException(this.code, this.message);
+
+  final int code;
+  final String message;
+
+  @override
+  String toString() => message;
 }

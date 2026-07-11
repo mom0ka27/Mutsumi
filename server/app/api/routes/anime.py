@@ -2,14 +2,15 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.auth import get_current_user, get_session
+from app.core.auth import get_current_user, get_session, require_admin
 from app.core.config import config
 from app.models import Anime, Episode, User, WatchProgress
 from app.schemas import AnimeCreate, AnimeRead, WatchProgressRead, WatchProgressUpdate
+from app.api.routes.qbittorrent import delete_torrent
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 
@@ -82,6 +83,44 @@ async def get_anime(
     if not anime:
         raise HTTPException(status_code=404, detail="Anime not found")
     return (await _with_watch_progress([anime], current_user.id, session))[0]
+
+
+@router.delete(
+    "/{anime_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+async def delete_anime(
+    anime_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    anime = await session.scalar(
+        select(Anime)
+        .options(selectinload(Anime.episodes))
+        .where(Anime.id == anime_id)
+    )
+    if not anime:
+        raise HTTPException(status_code=404, detail="Anime not found")
+
+    torrent_hash = (anime.download_hash or "").strip()
+    if torrent_hash:
+        references = await session.scalar(
+            select(func.count())
+            .select_from(Anime)
+            .where(Anime.download_hash == torrent_hash, Anime.id != anime_id)
+        )
+        if references:
+            raise HTTPException(
+                status_code=409,
+                detail="Torrent is referenced by another anime",
+            )
+        await delete_torrent(torrent_hash)
+
+    await session.execute(
+        delete(WatchProgress).where(WatchProgress.anime_id == anime_id)
+    )
+    await session.delete(anime)
+    await session.commit()
 
 
 @router.put("/{anime_id}/progress", response_model=WatchProgressRead)

@@ -19,6 +19,13 @@ async def list_permission_groups():
     return list(PermissionGroup)
 
 
+@router.get("/me", response_model=UserRead)
+async def get_me(current_user: User = Depends(get_current_user_optional)):
+    if current_user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return current_user
+
+
 @router.get("", response_model=list[UserRead], dependencies=[Depends(require_admin)])
 async def list_users(session: AsyncSession = Depends(get_session)):
     result = await session.scalars(select(User).order_by(User.id))

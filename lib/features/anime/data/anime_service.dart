@@ -31,6 +31,11 @@ class AnimeService {
     return AnimeRead.fromJson(data);
   }
 
+  Future<void> deleteAnime(int id) async {
+    final dio = _serverDio();
+    await dio.delete<void>('$animeApiPath/$id');
+  }
+
   Future<void> updateWatchProgress({
     required int animeId,
     required int episodeId,

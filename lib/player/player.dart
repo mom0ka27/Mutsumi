@@ -104,9 +104,19 @@ class _IndexPlayerState extends State<IndexPlayer> {
                   color: Colors.white,
                   // fontFamily: "FangZhengZhunYuanJianTi",
                   // borderColor: Colors.pink[200],
-                  fontSize: 32,
+                  fontSize: widget.controller.isFullScreen.value ? 28 : 20,
+                  fontWeight: FontWeight.w600,
+                  shadows: const [
+                    Shadow(color: Colors.black, blurRadius: 4),
+                    Shadow(color: Colors.black, offset: Offset(1, 1)),
+                  ],
                 ),
-                padding: EdgeInsets.fromLTRB(12, 0, 12, 12),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  widget.controller.isFullScreen.value ? 24 : 12,
+                ),
                 // letterSpacing: 0.0,
                 // wordSpacing: 0.0,
               ),
@@ -183,6 +193,38 @@ class _IndexPlayerState extends State<IndexPlayer> {
                 ),
               ),
             ),
+            Center(
+              child: AnimatedOpacity(
+                opacity: showControls.value ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: IgnorePointer(
+                  ignoring: showControls.isFalse,
+                  child: StreamBuilder<bool>(
+                    stream: widget.controller.stream.playing,
+                    builder: (context, snapshot) => IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withValues(alpha: 0.48),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(64, 64),
+                        iconSize: 34,
+                      ),
+                      onPressed: () {
+                        if (widget.controller.state.playing) {
+                          widget.controller.pause();
+                        } else {
+                          widget.controller.play();
+                        }
+                      },
+                      icon: Icon(
+                        snapshot.data == true
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             Align(
               alignment: Alignment.topCenter,
               child: Obx(
@@ -212,14 +254,26 @@ class _IndexPlayerState extends State<IndexPlayer> {
                       borderRadius: BorderRadius.all(Constants.radius),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.42),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
                           ),
-                          child: Text(
-                            "倍速中",
-                            style: TextStyle(color: Colors.white),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.fast_forward_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                "2.0× 倍速播放",
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -239,14 +293,18 @@ class _IndexPlayerState extends State<IndexPlayer> {
                       borderRadius: BorderRadius.all(Constants.radius),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 4,
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.42),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
                           ),
                           child: Text(
-                            "${widget.controller.state.position.str} -> ${widget.controller.sliderPostion.value.str}",
-                            style: TextStyle(color: Colors.white),
+                            "${widget.controller.state.position.str}  →  ${widget.controller.sliderPostion.value.str}",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),

@@ -10,25 +10,50 @@ class TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          onPressed: () async {
-            // await widget.controller.exitFullscreen();
-            Get.back();
-          },
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        controller.isFullScreen.value ? 8 : 4,
+        8,
+        16,
+        24,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black.withValues(alpha: 0.78), Colors.transparent],
         ),
-        SizedBox(width: 10),
-        Obx(
-          () => Text(
-            controller.video.value?.title ?? "",
-            style: TextStyle(color: Colors.white),
+      ),
+      child: Row(
+        children: [
+          IconButton.filledTonal(
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black.withValues(alpha: 0.28),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              await controller.exitFullscreen();
+              Get.back();
+            },
+            icon: const Icon(Icons.arrow_back_rounded),
           ),
-        ),
-        Spacer(),
-      ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Obx(
+              () => Text(
+                controller.video.value?.title ?? "",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  shadows: const [Shadow(blurRadius: 8)],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

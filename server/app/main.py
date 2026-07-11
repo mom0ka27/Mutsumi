@@ -2,10 +2,12 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.router import api_router
 from app.core.constants import API_VERSION
+from app.core.qbittorrent_error import QBittorrentError
 from app.db.session import engine, init_db
 from app.models import User
 
@@ -21,6 +23,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Mutsumi Server", lifespan=lifespan)
 app.include_router(api_router)
+
+
+@app.exception_handler(QBittorrentError)
+async def qbittorrent_error_handler(_, exc: QBittorrentError):
+    return JSONResponse(status_code=200, content={"code": exc.code, "msg": exc.msg})
 
 
 @app.get("/")

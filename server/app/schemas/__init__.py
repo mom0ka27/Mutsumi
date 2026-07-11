@@ -14,6 +14,7 @@ from app.schemas.qbittorrent import (
     QBittorrentTorrentAdd,
     QBittorrentTorrentAddResult,
     QBittorrentTorrentDownload,
+    QBittorrentTorrentRead,
 )
 from app.schemas.setup import SetupCreate, SetupStatus
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -30,6 +31,7 @@ __all__ = [
     "QBittorrentTorrentAdd",
     "QBittorrentTorrentAddResult",
     "QBittorrentTorrentDownload",
+    "QBittorrentTorrentRead",
     "SetupCreate",
     "SetupStatus",
     "Token",

@@ -3,6 +3,7 @@ import 'package:hive_ce/hive.dart';
 
 import 'package:mutsumi/app/mutsumi_app.dart';
 import 'package:mutsumi/core/storage/local_storage.dart';
+import 'package:mutsumi/features/settings/data/settings_repository.dart';
 
 void main() {
   setUpAll(() async {
@@ -24,4 +25,44 @@ void main() {
     expect(find.text('连接 Mutsumi Server'), findsOneWidget);
     expect(find.text('连接并检查'), findsOneWidget);
   });
+
+  test(
+    'migrates legacy storage and keeps multiple accounts on one server',
+    () async {
+      final box = Hive.box(LocalStorage.settingsBoxName);
+      await box.clear();
+      await box.put('server_url', 'http://localhost:12091/');
+      await box.put('server_urls', ['http://localhost:12091/']);
+      await box.put('server_credentials', {
+        'http://localhost:12091': {'username': 'admin', 'password': 'secret'},
+      });
+      await box.put('server_tokens', {
+        'http://localhost:12091': 'legacy-token',
+      });
+
+      await SettingsRepository.migrate();
+      final repository = SettingsRepository();
+      expect(repository.getCurrentAccount()?.username, 'admin');
+      expect(
+        repository.getAccessToken('http://localhost:12091'),
+        'legacy-token',
+      );
+
+      await repository.saveLogin(
+        serverUrl: 'http://localhost:12091/',
+        username: 'user',
+        password: 'password',
+        accessToken: 'user-token',
+      );
+      expect(repository.getAccounts('http://localhost:12091'), hasLength(2));
+      expect(repository.getCurrentAccount()?.username, 'user');
+
+      await repository.setCurrentAccount('http://localhost:12091', 'admin');
+      expect(repository.getCurrentAccount()?.username, 'admin');
+      expect(
+        repository.getAccessToken('http://localhost:12091'),
+        'legacy-token',
+      );
+    },
+  );
 }

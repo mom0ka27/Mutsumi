@@ -32,6 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "username": "",
         "password": "",
         "download_path": "",
+        "share_ratio_limit": 3.0,
     },
 }
 

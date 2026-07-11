@@ -27,8 +27,8 @@ class _LoginPageState extends State<LoginPage> {
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
 
-  bool _loggingIn = false;
-  String? _message;
+  final _loggingIn = false.obs;
+  final _message = RxnString();
 
   @override
   void initState() {
@@ -53,16 +53,12 @@ class _LoginPageState extends State<LoginPage> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
     if (username.isEmpty || password.isEmpty) {
-      setState(() {
-        _message = '请输入账号和密码。';
-      });
+      _message.value = '请输入账号和密码。';
       return;
     }
 
-    setState(() {
-      _loggingIn = true;
-      _message = null;
-    });
+    _loggingIn.value = true;
+    _message.value = null;
 
     try {
       final token = await _authService.login(
@@ -70,17 +66,14 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
       if (token != null) {
-        await _settingsRepository.addServerUrl(
-          widget.serverUrl,
+        await _settingsRepository.saveLogin(
+          serverUrl: widget.serverUrl,
+          username: username,
+          password: password,
+          accessToken: token,
           certificateFingerprint: widget.certificateSha256,
           serverName: widget.serverName,
         );
-        await _settingsRepository.setServerCredential(
-          widget.serverUrl,
-          username: username,
-          password: password,
-        );
-        await _settingsRepository.setAccessToken(widget.serverUrl, token);
       }
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
@@ -89,14 +82,10 @@ class _LoginPageState extends State<LoginPage> {
       final detail = error.response?.data is Map<String, dynamic>
           ? error.response?.data['detail']
           : null;
-      setState(() {
-        _message = '登录失败：${detail ?? error.message}';
-      });
+      _message.value = '登录失败：${detail ?? error.message}';
     } finally {
       if (mounted) {
-        setState(() {
-          _loggingIn = false;
-        });
+        _loggingIn.value = false;
       }
     }
   }
@@ -141,25 +130,35 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _loggingIn ? null : _login,
-                icon: _loggingIn
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.login),
-                label: Text(_loggingIn ? '正在登录...' : '登录'),
-              ),
-              if (_message != null) ...[
-                const SizedBox(height: 24),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(_message!),
-                  ),
+              Obx(
+                () => FilledButton.icon(
+                  onPressed: _loggingIn.value ? null : _login,
+                  icon: _loggingIn.value
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.login),
+                  label: Text(_loggingIn.value ? '正在登录...' : '登录'),
                 ),
-              ],
+              ),
+              Obx(() {
+                final message = _message.value;
+                if (message == null) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  children: [
+                    const SizedBox(height: 24),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(message),
+                      ),
+                    ),
+                  ],
+                );
+              }),
             ],
           ),
         ),

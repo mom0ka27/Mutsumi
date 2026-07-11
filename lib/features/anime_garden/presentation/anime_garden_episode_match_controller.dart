@@ -378,7 +378,7 @@ class _ManualEpisodeDialog extends StatefulWidget {
 class _ManualEpisodeDialogState extends State<_ManualEpisodeDialog> {
   late final TextEditingController _indexController;
   final _nameController = TextEditingController();
-  String _filename = '';
+  final _filename = ''.obs;
 
   @override
   void initState() {
@@ -415,10 +415,12 @@ class _ManualEpisodeDialogState extends State<_ManualEpisodeDialog> {
               decoration: const InputDecoration(labelText: '标题（可选）'),
             ),
             const SizedBox(height: 12),
-            AnimeGardenFileField(
-              files: widget.files,
-              value: _filename,
-              onChanged: (value) => setState(() => _filename = value),
+            Obx(
+              () => AnimeGardenFileField(
+                files: widget.files,
+                value: _filename.value,
+                onChanged: (value) => _filename.value = value,
+              ),
             ),
           ],
         ),
@@ -436,7 +438,7 @@ class _ManualEpisodeDialogState extends State<_ManualEpisodeDialog> {
               result: _ManualEpisodeResult(
                 index: index,
                 name: _nameController.text.trim(),
-                filename: _filename,
+                filename: _filename.value,
               ),
             );
           },

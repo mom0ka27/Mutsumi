@@ -22,6 +22,7 @@ class AnimeDetailPage extends StatefulWidget {
 class _AnimeDetailPageState extends State<AnimeDetailPage> {
   final _animeService = AnimeService();
   late final Future<AnimeRead> _future;
+  final _deleting = false.obs;
 
   @override
   void initState() {
@@ -52,6 +53,23 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
               title: Text(anime.displayName),
               backgroundColor: Colors.transparent,
               surfaceTintColor: Colors.transparent,
+              actions: [
+                Obx(
+                  () => _deleting.value
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          tooltip: '删除番剧',
+                          onPressed: () => _deleteAnime(anime),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                ),
+              ],
             ),
             body: CustomScrollView(
               slivers: [
@@ -94,6 +112,46 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
       }
     }
     return 0;
+  }
+
+  Future<void> _deleteAnime(AnimeRead anime) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('删除番剧'),
+        content: Text(
+          '确定删除“${anime.displayName}”吗？\n\n这会同时删除数据库记录、qBittorrent 下载任务和已下载文件，且无法撤销。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: colorScheme.error,
+              foregroundColor: colorScheme.onError,
+            ),
+            onPressed: () => Get.back(result: true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    _deleting.value = true;
+    try {
+      await _animeService.deleteAnime(anime.id);
+      Get.back(result: true);
+      Get.snackbar('删除成功', '已删除“${anime.displayName}”及其下载文件');
+    } catch (error) {
+      if (mounted) {
+        _deleting.value = false;
+      }
+      Get.snackbar('删除失败', error.toString());
+    }
   }
 }
 
