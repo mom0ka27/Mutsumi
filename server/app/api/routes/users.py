@@ -1,0 +1,97 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.auth import get_current_user_optional, get_password_hash, get_session, require_admin
+from app.models import PermissionGroup, User
+from app.schemas import UserCreate, UserRead, UserUpdate
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+
+def ensure_admin(current_user: User | None):
+    if current_user is None or current_user.permission_group != PermissionGroup.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+
+
+@router.get("/permission-groups", response_model=list[PermissionGroup])
+async def list_permission_groups():
+    return list(PermissionGroup)
+
+
+@router.get("", response_model=list[UserRead], dependencies=[Depends(require_admin)])
+async def list_users(session: AsyncSession = Depends(get_session)):
+    result = await session.scalars(select(User).order_by(User.id))
+    return list(result)
+
+
+@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: UserCreate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User | None = Depends(get_current_user_optional),
+):
+    total_users = await session.scalar(select(func.count()).select_from(User))
+    if total_users != 0:
+        ensure_admin(current_user)
+
+    exists = await session.scalar(select(User).where(User.username == payload.username))
+    if exists:
+        raise HTTPException(status_code=409, detail="Username already exists")
+
+    user = User(
+        username=payload.username,
+        password_hash=get_password_hash(payload.password),
+        permission_group=payload.permission_group,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@router.get("/{user_id}", response_model=UserRead, dependencies=[Depends(require_admin)])
+async def get_user(user_id: int, session: AsyncSession = Depends(get_session)):
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.patch("/{user_id}", response_model=UserRead, dependencies=[Depends(require_admin)])
+async def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.username is not None:
+        exists = await session.scalar(
+            select(User).where(User.username == payload.username, User.id != user_id)
+        )
+        if exists:
+            raise HTTPException(status_code=409, detail="Username already exists")
+        user.username = payload.username
+
+    if payload.password is not None:
+        user.password_hash = get_password_hash(payload.password)
+
+    if payload.permission_group is not None:
+        user.permission_group = payload.permission_group
+
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
+async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)):
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await session.delete(user)
+    await session.commit()

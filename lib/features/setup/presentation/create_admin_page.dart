@@ -1,0 +1,191 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+import '../../home/presentation/home_page.dart';
+import '../../settings/data/settings_repository.dart';
+import '../data/setup_service.dart';
+
+class CreateAdminPage extends StatefulWidget {
+  const CreateAdminPage({
+    super.key,
+    required this.serverUrl,
+    this.certificateSha256,
+    this.initialServerName = '',
+  });
+
+  static const routeName = '/setup/admin';
+
+  final String serverUrl;
+  final String? certificateSha256;
+  final String initialServerName;
+
+  @override
+  State<CreateAdminPage> createState() => _CreateAdminPageState();
+}
+
+class _CreateAdminPageState extends State<CreateAdminPage> {
+  final _settingsRepository = SettingsRepository();
+  late final TextEditingController _serverNameController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _passwordController;
+
+  bool _initializing = false;
+  String? _message;
+
+  @override
+  void initState() {
+    super.initState();
+    _serverNameController = TextEditingController(
+      text: widget.initialServerName.isEmpty
+          ? 'Mutsumi Server'
+          : widget.initialServerName,
+    );
+    _usernameController = TextEditingController(text: 'admin');
+    _passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _serverNameController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  SetupService get _setupService => SetupService(
+    widget.serverUrl,
+    certificateSha256: widget.certificateSha256,
+  );
+
+  Future<void> _initializeServer() async {
+    final serverName = _serverNameController.text.trim();
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+    if (serverName.isEmpty || username.isEmpty || password.isEmpty) {
+      setState(() {
+        _message = '请输入服务器名称、管理员账号和密码。';
+      });
+      return;
+    }
+
+    setState(() {
+      _initializing = true;
+      _message = null;
+    });
+
+    try {
+      final token = await _setupService.initialize(
+        username: username,
+        password: password,
+        serverName: serverName,
+      );
+      await _settingsRepository.addServerUrl(
+        widget.serverUrl,
+        certificateFingerprint: widget.certificateSha256,
+        serverName: serverName,
+      );
+      await _settingsRepository.setServerCredential(
+        widget.serverUrl,
+        username: username,
+        password: password,
+      );
+      if (token != null) {
+        await _settingsRepository.setAccessToken(widget.serverUrl, token);
+      }
+      if (mounted) {
+        Get.offAllNamed(HomePage.routeName);
+      }
+    } on DioException catch (error) {
+      final detail = error.response?.data is Map<String, dynamic>
+          ? error.response?.data['detail']
+          : null;
+      setState(() {
+        _message = '初始化失败：${detail ?? error.message}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _initializing = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('创建管理员账户')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            shrinkWrap: true,
+            children: [
+              Text(
+                '创建管理员账户',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '服务器未初始化，请设置服务器名称并创建第一个管理员账户。',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '服务器地址：${widget.serverUrl}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _serverNameController,
+                decoration: const InputDecoration(
+                  labelText: '服务器名称',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _usernameController,
+                decoration: const InputDecoration(
+                  labelText: '管理员账号',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '管理员密码',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _initializing ? null : _initializeServer,
+                icon: _initializing
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.admin_panel_settings),
+                label: Text(_initializing ? '正在初始化...' : '初始化服务器'),
+              ),
+              if (_message != null) ...[
+                const SizedBox(height: 24),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_message!),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
