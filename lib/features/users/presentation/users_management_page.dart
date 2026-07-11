@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../data/users_repository.dart';
 
 class UsersManagementPage extends StatefulWidget {
@@ -135,85 +136,78 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return GlassPage(
+    return GlassScaffold(
       enableBackgroundSampling: false,
-      background: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colors.primaryContainer.withValues(alpha: 0.72),
-              colors.surface,
-              colors.secondaryContainer.withValues(alpha: 0.72),
-            ],
+      extendBody: false,
+      background: const AppGlassBackground(),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text('用户管理', style: Theme.of(context).textTheme.titleLarge),
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
+        ),
+        centerTitle: false,
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _edit,
+        child: const Icon(Icons.person_add_rounded),
+      ),
+      body: Obx(() {
+        if (_loading.value) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return RefreshIndicator(
+          onRefresh: _load,
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: _users.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final user = _users[index];
+              final colors = Theme.of(context).colorScheme;
+              return GlassCard(
+                useOwnLayer: true,
+                padding: EdgeInsets.zero,
+                shape: LiquidRoundedSuperellipse(
+                  borderRadius: Constants.radius.x,
+                ),
+                settings: LiquidGlassSettings.figma(
+                  refraction: 36,
+                  depth: 20,
+                  dispersion: 6,
+                  frost: 4,
+                  glassColor: colors.surface.withValues(alpha: 0.28),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: colors.primaryContainer,
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: colors.onPrimaryContainer,
+                    ),
+                  ),
+                  title: Text(user.username),
+                  subtitle: Text(user.permissionGroup),
+                  onTap: () => _edit(user),
+                  trailing: IconButton(
+                    onPressed: () => _delete(user),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
+                ),
+              );
+            },
           ),
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('用户管理'),
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _edit,
-          child: const Icon(Icons.person_add_rounded),
-        ),
-        body: Obx(() {
-          if (_loading.value) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return RefreshIndicator(
-            onRefresh: _load,
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: _users.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final user = _users[index];
-                final colors = Theme.of(context).colorScheme;
-                return GlassCard(
-                  useOwnLayer: true,
-                  padding: EdgeInsets.zero,
-                  shape: LiquidRoundedSuperellipse(
-                    borderRadius: Constants.radius.x,
-                  ),
-                  settings: LiquidGlassSettings.figma(
-                    refraction: 36,
-                    depth: 20,
-                    dispersion: 6,
-                    frost: 4,
-                    glassColor: colors.surface.withValues(alpha: 0.28),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    leading: CircleAvatar(
-                      backgroundColor: colors.primaryContainer,
-                      child: Icon(
-                        Icons.person_rounded,
-                        color: colors.onPrimaryContainer,
-                      ),
-                    ),
-                    title: Text(user.username),
-                    subtitle: Text(user.permissionGroup),
-                    onTap: () => _edit(user),
-                    trailing: IconButton(
-                      onPressed: () => _delete(user),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-        }),
-      ),
+        );
+      }),
     );
   }
 }

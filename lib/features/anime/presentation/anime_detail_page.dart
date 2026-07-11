@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
 
@@ -44,59 +45,71 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           );
         }
 
-        return GlassPage(
+        return GlassScaffold(
           enableBackgroundSampling: false,
+          extendBody: false,
           background: _DetailBackground(anime: anime),
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              title: Text(anime.displayName),
-              backgroundColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              actions: [
-                Obx(
-                  () => _deleting.value
-                      ? const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : IconButton(
-                          tooltip: '删除番剧',
-                          onPressed: () => _deleteAnime(anime),
-                          icon: const Icon(Icons.delete_outline_rounded),
+          appBar: GlassAppBar(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            title: Text(
+              anime.displayName,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            leading: GlassButton(
+              width: 40,
+              height: 40,
+              iconSize: 20,
+              icon: const Icon(Icons.arrow_back),
+              label: '返回',
+              onTap: Get.back,
+            ),
+            centerTitle: false,
+            actions: [
+              Obx(
+                () => _deleting.value
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                ),
-              ],
-            ),
-            body: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
-                  sliver: SliverToBoxAdapter(child: _DetailCard(anime: anime)),
-                ),
-                if (snapshot.connectionState != ConnectionState.done)
-                  const SliverToBoxAdapter(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-              ],
-            ),
-            floatingActionButton: anime.episodes.isEmpty
-                ? null
-                : FloatingActionButton.extended(
-                    onPressed: () => Get.to(
-                      () => AnimePlayPage(
-                        anime: anime,
-                        episodes: anime.episodes,
-                        initialEpisode: _initialEpisode(anime),
+                      )
+                    : GlassButton(
+                        width: 40,
+                        height: 40,
+                        iconSize: 20,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: '删除番剧',
+                        onTap: () => _deleteAnime(anime),
                       ),
-                    ),
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('播放'),
-                  ),
+              ),
+            ],
           ),
+          body: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+                sliver: SliverToBoxAdapter(child: _DetailCard(anime: anime)),
+              ),
+              if (snapshot.connectionState != ConnectionState.done)
+                const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
+          ),
+          floatingActionButton: anime.episodes.isEmpty
+              ? null
+              : FloatingActionButton.extended(
+                  onPressed: () => Get.to(
+                    () => AnimePlayPage(
+                      anime: anime,
+                      episodes: anime.episodes,
+                      initialEpisode: _initialEpisode(anime),
+                    ),
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('播放'),
+                ),
         );
       },
     );
@@ -166,19 +179,7 @@ class _DetailBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colorScheme.tertiaryContainer.withValues(alpha: 0.85),
-                colorScheme.surface,
-                colorScheme.primaryContainer.withValues(alpha: 0.72),
-              ],
-            ),
-          ),
-        ),
+        const AppGlassBackground(),
         if (anime.imageUrl.isNotEmpty)
           Align(
             alignment: Alignment.topCenter,

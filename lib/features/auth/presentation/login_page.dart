@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../../home/presentation/home_page.dart';
 import '../../settings/data/settings_repository.dart';
 import '../data/auth_service.dart';
+import 'current_user_controller.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -61,20 +64,23 @@ class _LoginPageState extends State<LoginPage> {
     _message.value = null;
 
     try {
-      final token = await _authService.login(
+      final result = await _authService.login(
         username: username,
         password: password,
       );
-      if (token != null) {
-        await _settingsRepository.saveLogin(
-          serverUrl: widget.serverUrl,
-          username: username,
-          password: password,
-          accessToken: token,
-          certificateFingerprint: widget.certificateSha256,
-          serverName: widget.serverName,
-        );
+      if (result == null) {
+        throw StateError('服务器未返回登录信息');
       }
+      await _settingsRepository.saveLogin(
+        serverUrl: widget.serverUrl,
+        username: username,
+        password: password,
+        accessToken: result.accessToken,
+        permissionGroup: result.permissionGroup,
+        certificateFingerprint: widget.certificateSha256,
+        serverName: widget.serverName,
+      );
+      CurrentUserController.instance.setPermissionGroup(result.permissionGroup);
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
@@ -92,14 +98,30 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('登录 Mutsumi')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            shrinkWrap: true,
+    return GlassScaffold(
+      extendBody: false,
+      enableBackgroundSampling: false,
+      background: const AppGlassBackground(),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(
+          '登录 Mutsumi',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
+        ),
+        centerTitle: false,
+      ),
+      body: Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: Column(
             children: [
               Text('登录', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 8),

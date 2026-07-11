@@ -1,5 +1,6 @@
 import 'package:hive_ce/hive.dart';
 
+import '../../../core/appearance/app_background_preset.dart';
 import '../../../core/storage/local_storage.dart';
 
 class SettingsRepository {
@@ -13,8 +14,20 @@ class SettingsRepository {
   static const _serverNamesKey = 'server_names';
   static const _serverCredentialsKey = 'server_credentials';
   static const _serverTokensKey = 'server_tokens';
+  static const _themeModeKey = 'appearance_theme_mode_v1';
 
   final Box _box;
+
+  AppThemeMode getThemeMode() {
+    final value = _box.get(_themeModeKey) as String?;
+    return AppThemeMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => AppThemeMode.system,
+    );
+  }
+
+  Future<void> setThemeMode(AppThemeMode mode) =>
+      _box.put(_themeModeKey, mode.name);
 
   static Future<void> migrate() async {
     final repository = SettingsRepository();
@@ -139,6 +152,7 @@ class SettingsRepository {
     required String username,
     required String password,
     required String accessToken,
+    required String permissionGroup,
     String? certificateFingerprint,
     String? serverName,
   }) async {
@@ -176,6 +190,7 @@ class SettingsRepository {
       'username': username,
       'password': password,
       'access_token': accessToken,
+      'permission_group': permissionGroup,
     };
     await _box.put(_storageKey, {
       'servers': servers,
@@ -262,6 +277,7 @@ class SettingsRepository {
       username: current.username,
       password: current.password,
       accessToken: accessToken,
+      permissionGroup: current.permissionGroup ?? '',
       certificateFingerprint: getCertificateFingerprint(current.serverUrl),
       serverName: getServerName(current.serverUrl),
     );
@@ -296,6 +312,7 @@ class SettingsRepository {
       username: username,
       password: value['password']?.toString() ?? '',
       accessToken: value['access_token']?.toString() ?? '',
+      permissionGroup: value['permission_group']?.toString(),
     );
   }
 
@@ -371,9 +388,11 @@ class ServerAccount extends ServerCredential {
     required super.username,
     required super.password,
     required this.accessToken,
+    required this.permissionGroup,
   });
   final String serverUrl;
   final String accessToken;
+  final String? permissionGroup;
 }
 
 class _Server {

@@ -4,6 +4,8 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../app/startup_page.dart';
+import '../../../core/widgets/app_glass_background.dart';
+import '../../auth/presentation/current_user_controller.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/settings_repository.dart';
 
@@ -107,109 +109,112 @@ class _SavedServersPageState extends State<SavedServersPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return GlassPage(
+    return GlassScaffold(
       enableBackgroundSampling: false,
-      background: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colors.primaryContainer.withValues(alpha: 0.72),
-              colors.surface,
-              colors.secondaryContainer.withValues(alpha: 0.72),
-            ],
-          ),
+      extendBody: false,
+      background: const AppGlassBackground(),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text('已保存服务器', style: Theme.of(context).textTheme.titleLarge),
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
         ),
+        centerTitle: false,
       ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('已保存服务器'),
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-        ),
-        body: Obx(() {
-          _revision.value;
-          final servers = _repository.getServerUrls();
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: servers.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final url = servers[index];
-              final accounts = _repository.getAccounts(url);
-              return GlassCard(
-                useOwnLayer: true,
-                padding: const EdgeInsets.all(16),
-                shape: LiquidRoundedSuperellipse(
-                  borderRadius: Constants.radius.x,
-                ),
-                settings: LiquidGlassSettings.figma(
-                  refraction: 36,
-                  depth: 22,
-                  dispersion: 6,
-                  frost: 5,
-                  glassColor: colors.surface.withValues(alpha: 0.3),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(child: const Icon(Icons.dns_rounded)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _repository.getServerName(url),
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              Text(
-                                url,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
+      body: Obx(() {
+        _revision.value;
+        final servers = _repository.getServerUrls();
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: servers.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final url = servers[index];
+            final accounts = _repository.getAccounts(url);
+            return GlassCard(
+              useOwnLayer: true,
+              padding: const EdgeInsets.all(16),
+              shape: LiquidRoundedSuperellipse(
+                borderRadius: Constants.radius.x,
+              ),
+              settings: LiquidGlassSettings.figma(
+                refraction: 36,
+                depth: 22,
+                dispersion: 6,
+                frost: 5,
+                glassColor: colors.surface.withValues(alpha: 0.3),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(child: const Icon(Icons.dns_rounded)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _repository.getServerName(url),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              url,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          onPressed: () => _rename(url),
-                          icon: const Icon(Icons.edit_outlined),
-                        ),
-                        IconButton(
-                          onPressed: () => _removeServer(url),
-                          icon: const Icon(Icons.delete_outline_rounded),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    ...accounts.map(
-                      (account) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.account_circle_outlined),
-                        title: Text(account.username),
-                        trailing: IconButton(
-                          onPressed: () => _removeAccount(account),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                        onTap: () async {
-                          await _repository.setCurrentAccount(
-                            account.serverUrl,
-                            account.username,
-                          );
-                          Get.offAllNamed(HomePage.routeName);
-                        },
                       ),
+                      IconButton(
+                        onPressed: () => _rename(url),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      IconButton(
+                        onPressed: () => _removeServer(url),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  ...accounts.map(
+                    (account) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.account_circle_outlined),
+                      title: Text(account.username),
+                      trailing: IconButton(
+                        onPressed: () => _removeAccount(account),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                      onTap: () async {
+                        await _repository.setCurrentAccount(
+                          account.serverUrl,
+                          account.username,
+                        );
+                        final permissionGroup = account.permissionGroup;
+                        if (permissionGroup == null ||
+                            permissionGroup.isEmpty) {
+                          Get.offAllNamed(StartupPage.routeName);
+                          return;
+                        }
+                        CurrentUserController.instance.setPermissionGroup(
+                          permissionGroup,
+                        );
+                        Get.offAllNamed(HomePage.routeName);
+                      },
                     ),
-                  ],
-                ),
-              );
-            },
-          );
-        }),
-      ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      }),
     );
   }
 }

@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: macos-13
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+      - name: Install Flutter
+        run: |
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = releases["current_release"]["stable"]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))')"
+          curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
+          unzip -q flutter.zip
+          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Validate project
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - name: Build Android ARM64 APK
+        run: ./scripts/build_android_arm64_apk.sh
+      - name: Build unsigned iOS IPA
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p build/ios/ipa build/ios/payload/Payload
+          ditto build/ios/iphoneos/Runner.app build/ios/payload/Payload/Runner.app
+          (
+            cd build/ios/payload
+            zip -qry ../ipa/Runner.ipa Payload
+          )
+          rm -rf build/ios/payload

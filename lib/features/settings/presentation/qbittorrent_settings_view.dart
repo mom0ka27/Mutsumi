@@ -6,6 +6,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/widgets/app_glass_background.dart';
 import '../data/settings_repository.dart';
 
 class QBittorrentSettingsView extends StatefulWidget {
@@ -23,31 +24,27 @@ class QBittorrentSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return GlassPage(
+    return GlassScaffold(
       enableBackgroundSampling: false,
-      background: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colors.primaryContainer.withValues(alpha: 0.72),
-              colors.surface,
-              colors.secondaryContainer.withValues(alpha: 0.72),
-            ],
-          ),
+      extendBody: false,
+      background: const AppGlassBackground(),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(
+          'qBittorrent',
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('qBittorrent'),
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
         ),
-        body: const QBittorrentSettingsView(bottomPadding: 24),
+        centerTitle: false,
       ),
+      body: const QBittorrentSettingsView(bottomPadding: 24),
     );
   }
 }

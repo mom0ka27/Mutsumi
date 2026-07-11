@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_garden_repository.dart';
@@ -35,92 +36,94 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
     );
     final colorScheme = Theme.of(context).colorScheme;
 
-    return GlassPage(
+    return GlassScaffold(
       enableBackgroundSampling: false,
-      background: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colorScheme.primaryContainer.withValues(alpha: 0.76),
-              colorScheme.surface,
-              colorScheme.secondaryContainer.withValues(alpha: 0.72),
-            ],
-          ),
+      extendBody: false,
+      background: const AppGlassBackground(),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(
+          '匹配 Episode',
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('匹配 Episode'),
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          actions: [
-            TextButton.icon(
-              onPressed: controller.addEpisode,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('添加 Episode'),
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
+        ),
+        centerTitle: false,
+        actions: [
+          GlassButton.custom(
+            height: 40,
+            label: '添加 Episode',
+            onTap: controller.addEpisode,
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: 20),
+                SizedBox(width: 8),
+                Text('添加 Episode'),
+              ],
             ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: Obx(() {
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
-            itemBuilder: (context, index) {
-              return _EpisodeMatchCard(controller: controller, index: index);
-            },
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemCount: controller.matches.length,
-          );
-        }),
-        bottomNavigationBar: SafeArea(
-          minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-          child: Center(
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: GlassCard(
-                useOwnLayer: true,
-                padding: const EdgeInsets.all(12),
-                shape: LiquidRoundedSuperellipse(
-                  borderRadius: Constants.radius.x,
-                ),
-                settings: LiquidGlassSettings.figma(
-                  refraction: 36,
-                  depth: 20,
-                  dispersion: 6,
-                  frost: 4,
-                  glassColor: colorScheme.surface.withValues(alpha: 0.34),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Obx(
-                        () => Text(
-                          '已匹配 ${controller.matches.where((m) => m.filename.isNotEmpty).length} 集',
-                        ),
+          ),
+        ],
+      ),
+      body: Obx(() {
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
+          itemBuilder: (context, index) {
+            return _EpisodeMatchCard(controller: controller, index: index);
+          },
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemCount: controller.matches.length,
+        );
+      }),
+      bottomBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: GlassCard(
+              useOwnLayer: true,
+              padding: const EdgeInsets.all(12),
+              shape: LiquidRoundedSuperellipse(
+                borderRadius: Constants.radius.x,
+              ),
+              settings: LiquidGlassSettings.figma(
+                refraction: 36,
+                depth: 20,
+                dispersion: 6,
+                frost: 4,
+                glassColor: colorScheme.surface.withValues(alpha: 0.34),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Obx(
+                      () => Text(
+                        '已匹配 ${controller.matches.where((m) => m.filename.isNotEmpty).length} 集',
                       ),
                     ),
-                    Obx(() {
-                      return FilledButton.icon(
-                        onPressed: controller.saving.value
-                            ? null
-                            : controller.save,
-                        icon: controller.saving.value
-                            ? const SizedBox.square(
-                                dimension: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.check_rounded),
-                        label: Text(controller.saving.value ? '保存中' : '确认添加'),
-                      );
-                    }),
-                  ],
-                ),
+                  ),
+                  Obx(() {
+                    return FilledButton.icon(
+                      onPressed: controller.saving.value
+                          ? null
+                          : controller.save,
+                      icon: controller.saving.value
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_rounded),
+                      label: Text(controller.saving.value ? '保存中' : '确认添加'),
+                    );
+                  }),
+                ],
               ),
             ),
           ),

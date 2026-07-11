@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
 import '../data/bangumi_repository.dart';
 
@@ -29,68 +30,77 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPage(
+    return GlassScaffold(
       enableBackgroundSampling: false,
+      extendBody: false,
       background: _DetailBackground(subject: widget.subject),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Text(widget.subject.displayName),
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(
+          widget.subject.displayName,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-        body: FutureBuilder<BangumiSubjectDetail>(
-          future: _detailFuture,
-          builder: (context, snapshot) {
-            final subject = snapshot.data ?? widget.subject;
-            final detail = snapshot.data;
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
+        ),
+        centerTitle: false,
+      ),
+      body: FutureBuilder<BangumiSubjectDetail>(
+        future: _detailFuture,
+        builder: (context, snapshot) {
+          final subject = snapshot.data ?? widget.subject;
+          final detail = snapshot.data;
 
-            if (snapshot.hasError) {
-              return _DetailError(
-                subject: widget.subject,
-                message: snapshot.error.toString(),
-              );
-            }
+          if (snapshot.hasError) {
+            return _DetailError(
+              subject: widget.subject,
+              message: snapshot.error.toString(),
+            );
+          }
 
-            return CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                  sliver: SliverToBoxAdapter(
-                    child: _DetailCard(subject: subject, detail: detail),
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                sliver: SliverToBoxAdapter(
+                  child: _DetailCard(subject: subject, detail: detail),
+                ),
+              ),
+              if (snapshot.connectionState != ConnectionState.done)
+                const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FutureBuilder<BangumiSubjectDetail>(
+        future: _detailFuture,
+        builder: (context, snapshot) {
+          final subject = snapshot.data ?? widget.subject;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              FloatingActionButton.extended(
+                heroTag: 'downloadAnime',
+                onPressed: () => Get.to(
+                  () => AnimeGardenDownloadPage(
+                    subject: subject,
+                    backgroundImageUrl: subject.imageUrl,
                   ),
                 ),
-                if (snapshot.connectionState != ConnectionState.done)
-                  const SliverToBoxAdapter(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-              ],
-            );
-          },
-        ),
-        floatingActionButton: FutureBuilder<BangumiSubjectDetail>(
-          future: _detailFuture,
-          builder: (context, snapshot) {
-            final subject = snapshot.data ?? widget.subject;
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'downloadAnime',
-                  onPressed: () => Get.to(
-                    () => AnimeGardenDownloadPage(
-                      subject: subject,
-                      backgroundImageUrl: subject.imageUrl,
-                    ),
-                  ),
-                  label: const Text('下载'),
-                  icon: const Icon(Icons.download),
-                ),
-              ],
-            );
-          },
-        ),
+                label: const Text('下载'),
+                icon: const Icon(Icons.download),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -108,19 +118,7 @@ class _DetailBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                colorScheme.tertiaryContainer.withValues(alpha: 0.85),
-                colorScheme.surface,
-                colorScheme.primaryContainer.withValues(alpha: 0.72),
-              ],
-            ),
-          ),
-        ),
+        const AppGlassBackground(),
         if (subject.imageUrl.isNotEmpty)
           Align(
             alignment: Alignment.topCenter,

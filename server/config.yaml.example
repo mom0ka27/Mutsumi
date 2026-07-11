@@ -1,0 +1,22 @@
+server:
+  name: Mutsumi Server
+  host: "::"
+  port: 12091
+  ssl:
+    enabled: false
+    certfile: ./server.crt
+    keyfile: ./server.key
+logging:
+  level: INFO
+  directory: logs
+  retention_days: 7
+auth:
+  secret_key: CHANGE_ME_TO_A_SECURE_RANDOM_VALUE
+  algorithm: HS256
+  access_token_expire_minutes: 1440
+qbittorrent:
+  url: http://localhost:1234
+  username: ''
+  password: ''
+  download_path: ./data
+  share_ratio_limit: 3.0

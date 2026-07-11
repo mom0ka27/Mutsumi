@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../../home/presentation/home_page.dart';
 import '../../settings/data/settings_repository.dart';
 import '../data/setup_service.dart';
+import '../../auth/presentation/current_user_controller.dart';
 
 class CreateAdminPage extends StatefulWidget {
   const CreateAdminPage({
@@ -71,22 +73,24 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
     _message.value = null;
 
     try {
-      final token = await _setupService.initialize(
+      final result = await _setupService.initialize(
         username: username,
         password: password,
         serverName: serverName,
       );
-      if (token == null) {
-        throw StateError('服务器未返回访问令牌');
+      if (result == null) {
+        throw StateError('服务器未返回登录信息');
       }
       await _settingsRepository.saveLogin(
         serverUrl: widget.serverUrl,
         username: username,
         password: password,
-        accessToken: token,
+        accessToken: result.accessToken,
+        permissionGroup: result.permissionGroup,
         certificateFingerprint: widget.certificateSha256,
         serverName: serverName,
       );
+      CurrentUserController.instance.setPermissionGroup(result.permissionGroup);
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
@@ -105,7 +109,19 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('创建管理员账户')),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text('创建管理员账户', style: Theme.of(context).textTheme.titleLarge),
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
+        ),
+        centerTitle: false,
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),

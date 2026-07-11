@@ -53,6 +53,7 @@ void main() {
         username: 'user',
         password: 'password',
         accessToken: 'user-token',
+        permissionGroup: 'admin',
       );
       expect(repository.getAccounts('http://localhost:12091'), hasLength(2));
       expect(repository.getCurrentAccount()?.username, 'user');

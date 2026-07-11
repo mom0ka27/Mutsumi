@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_download_controller.dart';
@@ -21,103 +22,95 @@ class AnimeGardenDownloadPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.put(AnimeGardenDownloadController(subject: subject));
-    final colorScheme = Theme.of(context).colorScheme;
 
-    return GlassPage(
+    return GlassScaffold(
       enableBackgroundSampling: false,
-      background: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colorScheme.primaryContainer.withValues(alpha: 0.76),
-              colorScheme.surface,
-              colorScheme.secondaryContainer.withValues(alpha: 0.72),
-            ],
-          ),
+      extendBody: false,
+      background: const AppGlassBackground(),
+      appBar: GlassAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text('资源', style: Theme.of(context).textTheme.titleLarge),
+        leading: GlassButton(
+          width: 40,
+          height: 40,
+          iconSize: 20,
+          icon: const Icon(Icons.arrow_back),
+          label: '返回',
+          onTap: Get.back,
         ),
+        centerTitle: false,
       ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('资源'),
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-        ),
-        body: CustomScrollView(
-          controller: controller.scrollController,
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-              sliver: SliverToBoxAdapter(
-                child: _SearchCard(controller: controller),
-              ),
+      body: CustomScrollView(
+        controller: controller.scrollController,
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            sliver: SliverToBoxAdapter(
+              child: _SearchCard(controller: controller),
             ),
-            Obx(() {
-              if (controller.message.value != null) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        controller.message.value!,
-                        textAlign: TextAlign.center,
-                      ),
+          ),
+          Obx(() {
+            if (controller.message.value != null) {
+              return SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      controller.message.value!,
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                );
-              }
-
-              final filteredResults = controller.filteredResults;
-              if (filteredResults.isEmpty && controller.results.isNotEmpty) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: Text('没有符合过滤条件的资源')),
-                );
-              }
-
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                sliver: SliverList.separated(
-                  itemBuilder: (context, index) {
-                    return _ResourceCard(
-                      controller: controller,
-                      resource: filteredResults[index],
-                    );
-                  },
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemCount: filteredResults.length,
                 ),
               );
-            }),
-            Obx(() {
-              if (controller.results.isEmpty ||
-                  (!controller.loadingMore.value &&
-                      !controller.hasMore.value)) {
-                return const SliverToBoxAdapter(child: SizedBox.shrink());
-              }
+            }
 
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: controller.loadingMore.value
-                        ? const SizedBox.square(
-                            dimension: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : TextButton(
-                            onPressed: controller.loadMore,
-                            child: const Text('加载更多'),
-                          ),
-                  ),
-                ),
+            final filteredResults = controller.filteredResults;
+            if (filteredResults.isEmpty && controller.results.isNotEmpty) {
+              return const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: Text('没有符合过滤条件的资源')),
               );
-            }),
-          ],
-        ),
+            }
+
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              sliver: SliverList.separated(
+                itemBuilder: (context, index) {
+                  return _ResourceCard(
+                    controller: controller,
+                    resource: filteredResults[index],
+                  );
+                },
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemCount: filteredResults.length,
+              ),
+            );
+          }),
+          Obx(() {
+            if (controller.results.isEmpty ||
+                (!controller.loadingMore.value && !controller.hasMore.value)) {
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
+            }
+
+            return SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: controller.loadingMore.value
+                      ? const SizedBox.square(
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : TextButton(
+                          onPressed: controller.loadMore,
+                          child: const Text('加载更多'),
+                        ),
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }

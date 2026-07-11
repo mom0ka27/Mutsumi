@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
+import '../../auth/data/auth_service.dart';
 
 class SetupService {
   SetupService(String serverUrl, {String? certificateSha256})
@@ -23,7 +24,7 @@ class SetupService {
     return status.initialized;
   }
 
-  Future<String?> initialize({
+  Future<LoginResult?> initialize({
     required String username,
     required String password,
     String? serverName,
@@ -37,7 +38,16 @@ class SetupService {
           'server_name': serverName.trim(),
       },
     );
-    return response.data?['access_token'] as String?;
+    final data = response.data;
+    final accessToken = data?['access_token'] as String?;
+    final permissionGroup = data?['permission_group'] as String?;
+    if (accessToken == null || permissionGroup == null) {
+      return null;
+    }
+    return LoginResult(
+      accessToken: accessToken,
+      permissionGroup: permissionGroup,
+    );
   }
 }
 

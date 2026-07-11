@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../features/auth/data/auth_service.dart';
+import '../features/auth/presentation/current_user_controller.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/setup/presentation/connect_server_page.dart';
@@ -40,16 +41,28 @@ class _StartupPageState extends State<StartupPage> {
     }
 
     try {
-      final token = await AuthService(
+      final result = await AuthService(
         serverUrl,
         certificateSha256: _settingsRepository.getCertificateFingerprint(
           serverUrl,
         ),
       ).login(username: credential.username, password: credential.password);
 
-      if (token != null) {
-        await _settingsRepository.setAccessToken(serverUrl, token);
+      if (result == null) {
+        throw StateError('服务器未返回登录信息');
       }
+      await _settingsRepository.saveLogin(
+        serverUrl: serverUrl,
+        username: credential.username,
+        password: credential.password,
+        accessToken: result.accessToken,
+        permissionGroup: result.permissionGroup,
+        certificateFingerprint: _settingsRepository.getCertificateFingerprint(
+          serverUrl,
+        ),
+        serverName: _settingsRepository.getServerName(serverUrl),
+      );
+      CurrentUserController.instance.setPermissionGroup(result.permissionGroup);
 
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);

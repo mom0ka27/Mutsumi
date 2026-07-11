@@ -9,7 +9,7 @@ class AuthService {
 
   final Dio _dio;
 
-  Future<String?> login({
+  Future<LoginResult?> login({
     required String username,
     required String password,
   }) async {
@@ -17,6 +17,22 @@ class AuthService {
       loginApiPath,
       data: FormData.fromMap({'username': username, 'password': password}),
     );
-    return response.data?['access_token'] as String?;
+    final data = response.data;
+    final accessToken = data?['access_token'] as String?;
+    final permissionGroup = data?['permission_group'] as String?;
+    if (accessToken == null || permissionGroup == null) {
+      return null;
+    }
+    return LoginResult(
+      accessToken: accessToken,
+      permissionGroup: permissionGroup,
+    );
   }
+}
+
+class LoginResult {
+  const LoginResult({required this.accessToken, required this.permissionGroup});
+
+  final String accessToken;
+  final String permissionGroup;
 }

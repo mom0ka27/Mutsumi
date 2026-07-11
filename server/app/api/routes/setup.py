@@ -40,4 +40,7 @@ async def initialize_server(
     session.add(user)
     await session.commit()
 
-    return Token(access_token=create_access_token(user.username))
+    return Token(
+        access_token=create_access_token(user.username),
+        permission_group=user.permission_group,
+    )
