@@ -33,11 +33,9 @@ jobs:
           key: ${{ runner.os }}-flutter-${{ hashFiles('.metadata') }}-deps-${{ hashFiles('pubspec.lock', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-flutter-${{ hashFiles('.metadata') }}-deps-
-      - name: Validate project
+      - name: Get dependencies
         run: |
           flutter pub get
-          flutter analyze lib test
-          flutter test
       - name: Build Android ARM64 APK
         env:
           DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}

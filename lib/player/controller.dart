@@ -64,7 +64,7 @@ class IndexPlayerController {
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<Duration>? _danmakuSubscription;
   double _currentRate = 1.0;
-  int _lastDanmakuSecond = -1;
+  int? _lastDanmakuSecond;
   Future<Directory>? _subtitleFontDirectory;
 
   IndexPlayerController({this.options = const IndexPlayerOptions()}) {
@@ -79,14 +79,15 @@ class IndexPlayerController {
     });
 
     _danmakuSubscription = stream.position.listen((position) {
-      _lastDanmakuSecond = position.inSeconds;
       final danmakuController = _danmakuController;
-      if (_disposed || danmakuController == null) {
+      final second = position.inSeconds;
+      if (_disposed ||
+          danmakuController == null ||
+          _lastDanmakuSecond == second) {
         return;
       }
-      danmakuController.addItems(
-        _danmakuList?.getDanmakus(position.inSeconds) ?? [],
-      );
+      _lastDanmakuSecond = second;
+      danmakuController.addItems(_danmakuList?.getDanmakus(second) ?? []);
     });
   }
 
@@ -99,7 +100,7 @@ class IndexPlayerController {
     }
 
     this.video.value = video;
-    _lastDanmakuSecond = -1;
+    _lastDanmakuSecond = null;
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
     await _setNativeProperty('sub-font-provider', 'auto');
@@ -150,11 +151,13 @@ class IndexPlayerController {
       return;
     }
     _danmakuController = controller;
+    _lastDanmakuSecond = null;
   }
 
   void clearDanmakuController(DanmakuController controller) {
     if (identical(_danmakuController, controller)) {
       _danmakuController = null;
+      _lastDanmakuSecond = null;
     }
   }
 
@@ -183,6 +186,7 @@ class IndexPlayerController {
 
     _seeking = true;
     sliderPostion.value = d;
+    _lastDanmakuSecond = null;
 
     _player.pause();
     _danmakuController?.pause();
@@ -374,6 +378,7 @@ class IndexPlayerController {
     _danmakuController?.clear();
     _danmakuController = null;
     _danmakuList = null;
+    _lastDanmakuSecond = null;
   }
 
   PlayerStream get stream => _player.stream;

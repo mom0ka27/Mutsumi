@@ -157,6 +157,29 @@ class AppearanceSettingsPage extends StatelessWidget {
                           }
                         : null,
                   ),
+                  if (hasBackgroundImage) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.opacity_rounded),
+                        const SizedBox(width: 16),
+                        const Text('背景遮罩'),
+                        const Spacer(),
+                        Text(
+                          '${(controller.backgroundOverlayOpacity.value * 100).round()}%',
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: controller.backgroundOverlayOpacity.value,
+                      min: 0,
+                      max: 0.8,
+                      divisions: 16,
+                      label:
+                          '${(controller.backgroundOverlayOpacity.value * 100).round()}%',
+                      onChanged: controller.setBackgroundOverlayOpacity,
+                    ),
+                  ],
                   if (hasBackgroundImage)
                     Align(
                       alignment: Alignment.centerRight,

@@ -19,6 +19,8 @@ class SettingsRepository {
   static const _serverTokensKey = 'server_tokens';
   static const _themeModeKey = 'appearance_theme_mode_v1';
   static const _backgroundImagePathKey = 'appearance_background_image_path_v1';
+  static const _backgroundOverlayOpacityKey =
+      'appearance_background_overlay_opacity_v1';
   static const _themeColorSourceKey = 'appearance_theme_color_source_v1';
   static const _themeSeedColorKey = 'appearance_theme_seed_color_v1';
 
@@ -60,6 +62,14 @@ class SettingsRepository {
   Future<void> setBackgroundImagePath(String? value) => value == null
       ? _box.delete(_backgroundImagePathKey)
       : _box.put(_backgroundImagePathKey, value);
+
+  double getBackgroundOverlayOpacity() {
+    final value = _box.get(_backgroundOverlayOpacityKey) as num?;
+    return (value?.toDouble() ?? 0.36).clamp(0, 0.8);
+  }
+
+  Future<void> setBackgroundOverlayOpacity(double value) =>
+      _box.put(_backgroundOverlayOpacityKey, value.clamp(0, 0.8));
 
   static Future<void> migrateBackgroundImagePath(
     String applicationSupportPath,

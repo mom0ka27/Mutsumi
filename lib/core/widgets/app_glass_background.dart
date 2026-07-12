@@ -25,10 +25,19 @@ class AppearanceController extends GetxService {
   );
   late final themeColorSource = _settings.getThemeColorSource().obs;
   late final themeSeedColor = _settings.getThemeSeedColor().obs;
+  late final backgroundOverlayOpacity = _settings
+      .getBackgroundOverlayOpacity()
+      .obs;
 
   Future<void> setThemeMode(AppThemeMode value) async {
     themeMode.value = value;
     await _settings.setThemeMode(value);
+  }
+
+  Future<void> setBackgroundOverlayOpacity(double value) async {
+    final opacity = value.clamp(0, 0.8).toDouble();
+    backgroundOverlayOpacity.value = opacity;
+    await _settings.setBackgroundOverlayOpacity(opacity);
   }
 
   Future<bool> selectBackgroundImage() async {
@@ -168,6 +177,8 @@ class AppGlassBackground extends StatelessWidget {
 
     return Obx(() {
       final path = AppearanceController.instance.backgroundImagePath.value;
+      final overlayOpacity =
+          AppearanceController.instance.backgroundOverlayOpacity.value;
       if (path == null) {
         return ColoredBox(color: colors.surface);
       }
@@ -183,7 +194,7 @@ class AppGlassBackground extends StatelessWidget {
               errorBuilder: (_, _, _) => const SizedBox.expand(),
             ),
           ),
-          ColoredBox(color: colors.surface.withValues(alpha: 0.36)),
+          ColoredBox(color: colors.surface.withValues(alpha: overlayOpacity)),
         ],
       );
     });
