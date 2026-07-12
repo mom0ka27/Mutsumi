@@ -36,6 +36,7 @@ class _IndexPlayerState extends State<IndexPlayer> {
   Timer? _autoHideControls;
   Timer? _superSpeedTimer;
   StreamSubscription<bool>? _showControlsSubscription;
+  DanmakuController? _danmakuController;
   bool _superSpeedActive = false;
 
   @override
@@ -57,6 +58,10 @@ class _IndexPlayerState extends State<IndexPlayer> {
     _autoHideControls?.cancel();
     _superSpeedTimer?.cancel();
     _showControlsSubscription?.cancel();
+    final danmakuController = _danmakuController;
+    if (danmakuController != null) {
+      widget.controller.clearDanmakuController(danmakuController);
+    }
     super.dispose();
   }
 
@@ -127,6 +132,7 @@ class _IndexPlayerState extends State<IndexPlayer> {
                 padding: EdgeInsets.symmetric(vertical: 25),
                 child: DanmakuView(
                   createdController: (c) {
+                    _danmakuController = c;
                     widget.controller.setDanmakuController(c);
                   },
                   option: DanmakuOption(strokeWidth: 1, duration: 6),
@@ -188,38 +194,6 @@ class _IndexPlayerState extends State<IndexPlayer> {
                     child: IgnorePointer(
                       ignoring: showControls.isFalse,
                       child: BottomBar(controller: widget.controller),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Center(
-              child: AnimatedOpacity(
-                opacity: showControls.value ? 1 : 0,
-                duration: const Duration(milliseconds: 180),
-                child: IgnorePointer(
-                  ignoring: showControls.isFalse,
-                  child: StreamBuilder<bool>(
-                    stream: widget.controller.stream.playing,
-                    builder: (context, snapshot) => IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black.withValues(alpha: 0.48),
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(64, 64),
-                        iconSize: 34,
-                      ),
-                      onPressed: () {
-                        if (widget.controller.state.playing) {
-                          widget.controller.pause();
-                        } else {
-                          widget.controller.play();
-                        }
-                      },
-                      icon: Icon(
-                        snapshot.data == true
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                      ),
                     ),
                   ),
                 ),

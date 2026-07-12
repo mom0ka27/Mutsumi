@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:hive_ce/hive.dart';
 
@@ -58,6 +60,24 @@ class SettingsRepository {
   Future<void> setBackgroundImagePath(String? value) => value == null
       ? _box.delete(_backgroundImagePathKey)
       : _box.put(_backgroundImagePathKey, value);
+
+  static Future<void> migrateBackgroundImagePath(
+    String applicationSupportPath,
+  ) async {
+    final repository = SettingsRepository();
+    final value = repository.getBackgroundImagePath();
+    if (value == null || !value.startsWith('/')) {
+      return;
+    }
+    final backgroundsPath = '$applicationSupportPath/backgrounds/';
+    if (!value.startsWith(backgroundsPath) || !await File(value).exists()) {
+      await repository.setBackgroundImagePath(null);
+      return;
+    }
+    await repository.setBackgroundImagePath(
+      'backgrounds/${File(value).uri.pathSegments.last}',
+    );
+  }
 
   static Future<void> migrate() async {
     final repository = SettingsRepository();

@@ -77,7 +77,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
       ),
       body: Obx(() {
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
+          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 96),
           itemBuilder: (context, index) {
             return _EpisodeMatchCard(controller: controller, index: index);
           },

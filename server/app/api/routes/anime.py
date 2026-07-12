@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.core.auth import get_current_user, get_session, require_admin
 from app.core.config import config
 from app.models import Anime, Episode, User, WatchProgress
-from app.schemas import AnimeCreate, AnimeRead, WatchProgressRead, WatchProgressUpdate
+from app.schemas import AnimeCreate, AnimeRead, EpisodeRead, WatchProgressRead, WatchProgressUpdate
 from app.api.routes.qbittorrent import delete_torrent
 
 router = APIRouter(prefix="/anime", tags=["anime"])
@@ -82,7 +84,14 @@ async def get_anime(
     )
     if not anime:
         raise HTTPException(status_code=404, detail="Anime not found")
-    return (await _with_watch_progress([anime], current_user.id, session))[0]
+    read = (await _with_watch_progress([anime], current_user.id, session))[0]
+    await asyncio.gather(
+        *[
+            _set_episode_file_hash(anime, episode, episode_read)
+            for episode, episode_read in zip(anime.episodes, read.episodes)
+        ]
+    )
+    return read
 
 
 @router.delete(
@@ -225,3 +234,19 @@ def _episode_file_path(anime: Anime, episode: Episode) -> Path | None:
     if root != path and root not in path.parents:
         return None
     return path
+
+
+async def _set_episode_file_hash(
+    anime: Anime,
+    episode: Episode,
+    episode_read: EpisodeRead,
+) -> None:
+    file_path = _episode_file_path(anime, episode)
+    if not file_path or not file_path.is_file():
+        return
+    episode_read.file_hash = await asyncio.to_thread(_first_16mb_md5, file_path)
+
+
+def _first_16mb_md5(file_path: Path) -> str:
+    with file_path.open("rb") as file:
+        return hashlib.md5(file.read(16 * 1024 * 1024)).hexdigest()

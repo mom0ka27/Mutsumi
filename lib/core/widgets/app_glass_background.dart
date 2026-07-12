@@ -7,6 +7,7 @@ import 'package:palette_generator/palette_generator.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../appearance/app_background_preset.dart';
+import '../storage/local_storage.dart';
 import '../../features/settings/data/settings_repository.dart';
 
 class AppearanceController extends GetxService {
@@ -20,7 +21,7 @@ class AppearanceController extends GetxService {
   final _settings = SettingsRepository();
   late final themeMode = _settings.getThemeMode().obs;
   late final backgroundImagePath = RxnString(
-    _settings.getBackgroundImagePath(),
+    _resolveBackgroundImagePath(_settings.getBackgroundImagePath()),
   );
   late final themeColorSource = _settings.getThemeColorSource().obs;
   late final themeSeedColor = _settings.getThemeSeedColor().obs;
@@ -44,10 +45,18 @@ class AppearanceController extends GetxService {
       '${backgroundsDirectory.path}/background_${DateTime.now().microsecondsSinceEpoch}${extension == null ? '' : '.$extension'}',
     );
     await image.saveTo(target.path);
+    if (!await target.exists() || await target.length() == 0) {
+      if (await target.exists()) {
+        await target.delete();
+      }
+      throw StateError('背景图片保存失败');
+    }
 
     final previousPath = backgroundImagePath.value;
     backgroundImagePath.value = target.path;
-    await _settings.setBackgroundImagePath(target.path);
+    await _settings.setBackgroundImagePath(
+      'backgrounds/${target.uri.pathSegments.last}',
+    );
     if (themeColorSource.value == AppThemeColorSource.wallpaper) {
       await _updateWallpaperThemeColor(target);
     }
@@ -133,6 +142,16 @@ class AppearanceController extends GetxService {
       await file.delete();
     }
   }
+
+  String? _resolveBackgroundImagePath(String? path) {
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    if (path.startsWith('/')) {
+      return path;
+    }
+    return '${LocalStorage.applicationSupportPath}/$path';
+  }
 }
 
 class AppGlassBackground extends StatelessWidget {
@@ -164,7 +183,7 @@ class AppGlassBackground extends StatelessWidget {
               errorBuilder: (_, _, _) => const SizedBox.expand(),
             ),
           ),
-          ColoredBox(color: colors.surface.withValues(alpha: 0.52)),
+          ColoredBox(color: colors.surface.withValues(alpha: 0.36)),
         ],
       );
     });

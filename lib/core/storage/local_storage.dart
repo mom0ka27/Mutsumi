@@ -5,11 +5,16 @@ import '../../features/settings/data/settings_repository.dart';
 
 class LocalStorage {
   static const settingsBoxName = 'settings';
+  static const dandanPlayBoxName = 'dandanplay';
+  static late final String applicationSupportPath;
 
   static Future<void> init() async {
     final directory = await getApplicationSupportDirectory();
+    applicationSupportPath = directory.path;
     Hive.init(directory.path);
     await Hive.openBox(settingsBoxName);
+    await Hive.openBox(dandanPlayBoxName);
     await SettingsRepository.migrate();
+    await SettingsRepository.migrateBackgroundImagePath(directory.path);
   }
 }

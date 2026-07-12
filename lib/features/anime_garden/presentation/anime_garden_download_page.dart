@@ -44,7 +44,12 @@ class AnimeGardenDownloadPage extends StatelessWidget {
         controller: controller.scrollController,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              Constants.topPadding,
+              20,
+              16,
+            ),
             sliver: SliverToBoxAdapter(
               child: _SearchCard(controller: controller),
             ),

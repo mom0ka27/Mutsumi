@@ -15,8 +15,10 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$project_dir"
-flutter build ios --release
-
+flutter build ios --release \
+  --dart-define=DANDANPLAY_APP_ID="${DANDANPLAY_APP_ID:-}" \
+  --dart-define=DANDANPLAY_APP_SECRET="${DANDANPLAY_APP_SECRET:-}"
+  
 if [[ ! -d "$app_path" ]]; then
   printf '未找到构建产物：%s\n' "$app_path" >&2
   exit 1

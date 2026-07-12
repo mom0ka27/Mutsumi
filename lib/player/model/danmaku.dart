@@ -1,10 +1,8 @@
-import 'dart:io';
-
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
 
 import '../exception/illegal_data.dart';
+import 'dandanplay_repository.dart';
 
 class DanmakuList {
   Map<int, List<DanmakuItem>> danmakuList = {};
@@ -25,56 +23,37 @@ abstract class DanmakuProvider {
 }
 
 class DandanPlayDanmakuProvider extends DanmakuProvider {
-  int epID;
+  DandanPlayDanmakuProvider({required this.fileHash, required this.fileName});
 
-  DandanPlayDanmakuProvider({required this.epID});
-
-  static final _dio = Dio(
-    BaseOptions(
-      baseUrl: "https://api.dandanplay.net",
-      headers: {"User-Agent": "IndexPlayer/${Platform.operatingSystem} 1.0.0"},
-      connectTimeout: Duration(seconds: 5),
-      sendTimeout: Duration(seconds: 5),
-      receiveTimeout: Duration(seconds: 5),
-    ),
-  );
+  final String? fileHash;
+  final String fileName;
 
   @override
   Future<DanmakuList> getDanmakuList() async {
-    int times = 0;
-    while (times++ < 5) {
-      try {
-        final resp = await _dio.get(
-          "/api/v2/comment/$epID",
-          queryParameters: {"withRelated": "true", "chConvert": "1"},
-        );
-        final list = (resp.data["comments"] as List)
-            .map((c) => fromJson(c))
-            .toList();
-
-        DanmakuList result = DanmakuList();
-        for (final d in list) {
-          result.addDanmaku(d.time, d);
-        }
-        return result;
-      } catch (e, st) {
-        debugPrint("ERROR: $e");
-        debugPrintStack(stackTrace: st);
-        await Future.delayed(Duration(seconds: 1));
-      }
+    final hash = fileHash;
+    if (hash == null || hash.isEmpty) {
+      return DanmakuList();
     }
-    return DanmakuList();
+    try {
+      final comments = await DandanPlayRepository.instance.commentsForFile(
+        fileHash: hash,
+        fileName: fileName,
+      );
+      final result = DanmakuList();
+      for (final comment in comments) {
+        final danmaku = fromJson(comment);
+        result.addDanmaku(danmaku.time, danmaku);
+      }
+      return result;
+    } catch (_) {
+      return DanmakuList();
+    }
   }
 
   static DanmakuItem fromJson(Map<String, dynamic> d) {
-    // text
-    var text = d["m"];
-
-    // 0.00,1,16777215,[Gamer]a729864919
-    var p = (d["p"] as String).split(",");
-
-    // type
-    int modeValue = int.parse(p[1]);
+    final text = d["m"] as String? ?? '';
+    final p = (d["p"] as String).split(",");
+    final modeValue = int.parse(p[1]);
     DanmakuItemType type;
     if (modeValue >= 1 && modeValue <= 3) {
       type = DanmakuItemType.scroll;
@@ -90,8 +69,7 @@ class DandanPlayDanmakuProvider extends DanmakuProvider {
         expection: "[1, 5]",
       );
     }
-    // color
-    var color = Color(int.parse(p[2]) + (255 << 24)); // 不透明度
+    final color = Color(int.parse(p[2]) + (255 << 24));
     return DanmakuItem(
       text,
       color: color,

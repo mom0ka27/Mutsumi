@@ -74,11 +74,7 @@ class _BottomBarState extends State<BottomBar> {
                           ),
                         ),
                       )
-                    : IconButton.filled(
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                        ),
+                    : IconButton(
                         onPressed: () {
                           if (widget.controller.state.playing) {
                             widget.controller.pause();
@@ -88,6 +84,7 @@ class _BottomBarState extends State<BottomBar> {
                         },
                         icon: Icon(
                           v.data == false ? Icons.play_arrow : Icons.pause,
+                          color: Colors.white,
                         ),
                       ),
               ),
@@ -114,7 +111,6 @@ class _BottomBarState extends State<BottomBar> {
                   button: true,
                   selected: widget.controller.enableDanmaku.value,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(18),
                     onTap: () => widget.controller.enableDanmaku.toggle(),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
@@ -141,6 +137,7 @@ class _BottomBarState extends State<BottomBar> {
                   ),
                 ),
               ),
+              SizedBox(width: 8),
               StreamBuilder<Tracks>(
                 stream: widget.controller.stream.tracks,
                 initialData: widget.controller.state.tracks,

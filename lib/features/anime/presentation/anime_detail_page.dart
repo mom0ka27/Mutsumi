@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -30,6 +31,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
   void initState() {
     super.initState();
     _future = _animeService.getAnime(widget.animeId);
+    unawaited(_matchDandanPlayEpisodes());
+  }
+
+  Future<void> _matchDandanPlayEpisodes() async {
+    try {
+      final anime = await _future;
+      await _animeService.matchDandanPlayEpisodes(anime.episodes);
+    } catch (_) {}
   }
 
   @override

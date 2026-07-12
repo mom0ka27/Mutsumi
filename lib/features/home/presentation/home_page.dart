@@ -37,7 +37,6 @@ class _HomePageState extends State<HomePage> {
       return GlassScaffold(
         extendBody: true,
         resizeToAvoidBottomInset: false,
-        topEdgeFadeExtent: Constants.topPadding + 40,
         appBar: GlassAppBar(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           title: Text(

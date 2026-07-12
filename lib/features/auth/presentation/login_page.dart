@@ -105,10 +105,6 @@ class _LoginPageState extends State<LoginPage> {
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        title: Text(
-          '登录 Mutsumi',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
         leading: GlassButton(
           width: 40,
           height: 40,
@@ -123,6 +119,7 @@ class _LoginPageState extends State<LoginPage> {
         padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 24),
         child: Center(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text('登录', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 8),

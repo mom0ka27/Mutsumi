@@ -11,10 +11,34 @@ class MutsumiApp extends StatelessWidget {
   const MutsumiApp({super.key});
 
   ThemeData _theme(Brightness brightness, Color seedColor) {
-    final colorScheme = ColorScheme.fromSeed(
+    final baseColorScheme = ColorScheme.fromSeed(
       seedColor: seedColor,
       brightness: brightness,
     );
+    final colorScheme = brightness == Brightness.dark
+        ? baseColorScheme.copyWith(
+            surface: _lighten(baseColorScheme.surface, 0.08),
+            surfaceDim: _lighten(baseColorScheme.surfaceDim, 0.06),
+            surfaceBright: _lighten(baseColorScheme.surfaceBright, 0.1),
+            surfaceContainerLowest: _lighten(
+              baseColorScheme.surfaceContainerLowest,
+              0.05,
+            ),
+            surfaceContainerLow: _lighten(
+              baseColorScheme.surfaceContainerLow,
+              0.07,
+            ),
+            surfaceContainer: _lighten(baseColorScheme.surfaceContainer, 0.09),
+            surfaceContainerHigh: _lighten(
+              baseColorScheme.surfaceContainerHigh,
+              0.11,
+            ),
+            surfaceContainerHighest: _lighten(
+              baseColorScheme.surfaceContainerHighest,
+              0.13,
+            ),
+          )
+        : baseColorScheme;
     final outline = colorScheme.outlineVariant.withValues(alpha: 0.56);
 
     return ThemeData(
@@ -53,6 +77,9 @@ class MutsumiApp extends StatelessWidget {
       ),
     );
   }
+
+  Color _lighten(Color color, double amount) =>
+      Color.lerp(color, Colors.white, amount)!;
 
   @override
   Widget build(BuildContext context) {

@@ -58,6 +58,7 @@ class IndexPlayerController {
   GlobalKey<VideoState> get videoKey => _videoKey;
 
   bool _disposed = false;
+  Future<void>? _fullscreenTransition;
 
   bool get disposed => _disposed;
   StreamSubscription<Duration>? _positionSubscription;
@@ -78,11 +79,12 @@ class IndexPlayerController {
     });
 
     _danmakuSubscription = stream.position.listen((position) {
-      if (_disposed || position.inSeconds == _lastDanmakuSecond) {
+      _lastDanmakuSecond = position.inSeconds;
+      final danmakuController = _danmakuController;
+      if (_disposed || danmakuController == null) {
         return;
       }
-      _lastDanmakuSecond = position.inSeconds;
-      _danmakuController?.addItems(
+      danmakuController.addItems(
         _danmakuList?.getDanmakus(position.inSeconds) ?? [],
       );
     });
@@ -150,6 +152,12 @@ class IndexPlayerController {
     _danmakuController = controller;
   }
 
+  void clearDanmakuController(DanmakuController controller) {
+    if (identical(_danmakuController, controller)) {
+      _danmakuController = null;
+    }
+  }
+
   Future<void> pause() async {
     if (_disposed) {
       return;
@@ -196,27 +204,55 @@ class IndexPlayerController {
   }
 
   Future<void> enterFullscreen() async {
-    if (_disposed) {
-      return;
-    }
-    await AutoOrientation.landscapeAutoMode();
-    if (_disposed) {
-      return;
-    }
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    isFullScreen.value = true;
+    if (_disposed || isFullScreen.value) return;
+    await (_fullscreenTransition ??= _enterFullscreen());
   }
 
   Future<void> exitFullscreen() async {
-    if (_disposed) {
+    if (_disposed || !isFullScreen.value) return;
+    await (_fullscreenTransition ??= _exitFullscreen());
+  }
+
+  Future<void> restoreFullscreenOrientation() async {
+    if (_disposed || !isFullScreen.value || _fullscreenTransition != null) {
       return;
     }
-    await AutoOrientation.portraitAutoMode();
-    if (_disposed) {
-      return;
+    await AutoOrientation.landscapeAutoMode();
+    if (!_disposed) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     }
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    isFullScreen.value = false;
+  }
+
+  Future<void> _enterFullscreen() async {
+    isFullScreen.value = true;
+    try {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      if (!_disposed) {
+        await AutoOrientation.landscapeAutoMode();
+      }
+    } finally {
+      _fullscreenTransition = null;
+    }
+  }
+
+  Future<void> _exitFullscreen() async {
+    try {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+      );
+      if (!_disposed) {
+        await AutoOrientation.portraitAutoMode();
+      }
+      if (!_disposed) {
+        isFullScreen.value = false;
+      }
+    } finally {
+      _fullscreenTransition = null;
+    }
   }
 
   Future<void> setSpeed(double rate) async {
@@ -332,8 +368,12 @@ class IndexPlayerController {
     _disposed = true;
     await _positionSubscription?.cancel();
     await _danmakuSubscription?.cancel();
+    _positionSubscription = null;
+    _danmakuSubscription = null;
     await _player.dispose();
     _danmakuController?.clear();
+    _danmakuController = null;
+    _danmakuList = null;
   }
 
   PlayerStream get stream => _player.stream;

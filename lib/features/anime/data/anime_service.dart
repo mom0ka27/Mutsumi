@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../player/model/dandanplay_repository.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../settings/data/settings_repository.dart';
 
@@ -29,6 +30,18 @@ class AnimeService {
       throw StateError('服务器返回了空 Anime');
     }
     return AnimeRead.fromJson(data);
+  }
+
+  Future<void> matchDandanPlayEpisodes(List<AnimeEpisodeRead> episodes) async {
+    await DandanPlayRepository.instance.matchFiles(
+      episodes
+          .where((episode) => episode.fileHash?.isNotEmpty == true)
+          .map(
+            (episode) =>
+                DandanPlayFile(hash: episode.fileHash!, name: episode.filename),
+          )
+          .toList(),
+    );
   }
 
   Future<void> deleteAnime(int id) async {
@@ -171,6 +184,7 @@ class AnimeEpisodeRead {
     required this.index,
     required this.name,
     required this.filename,
+    required this.fileHash,
   });
 
   factory AnimeEpisodeRead.fromJson(Map<String, dynamic> json) {
@@ -179,6 +193,7 @@ class AnimeEpisodeRead {
       index: json['index'] as int? ?? 0,
       name: json['name'] as String? ?? '',
       filename: json['filename'] as String? ?? '',
+      fileHash: json['file_hash'] as String?,
     );
   }
 
@@ -186,6 +201,7 @@ class AnimeEpisodeRead {
   final int index;
   final String name;
   final String filename;
+  final String? fileHash;
 
   String get displayName => name.isEmpty ? 'Episode $index' : name;
 }

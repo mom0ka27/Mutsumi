@@ -26,16 +26,15 @@ class TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton.filledTonal(
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.28),
-              foregroundColor: Colors.white,
-            ),
+          IconButton(
             onPressed: () async {
-              await controller.exitFullscreen();
-              Get.back();
+              if (controller.isFullScreen.value) {
+                await controller.exitFullscreen();
+              } else {
+                Get.back();
+              }
             },
-            icon: const Icon(Icons.arrow_back_rounded),
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
           ),
           const SizedBox(width: 12),
           Expanded(

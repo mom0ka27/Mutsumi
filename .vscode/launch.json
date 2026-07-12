@@ -1,0 +1,38 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Mutsumi",
+            "request": "launch",
+            "type": "dart",
+            "program": "${workspaceFolder}/lib/main.dart",
+            "args": [
+                "--dart-define=DANDANPLAY_APP_ID=${env:DANDANPLAY_APP_ID}",
+                "--dart-define=DANDANPLAY_APP_SECRET=${env:DANDANPLAY_APP_SECRET}"
+            ]
+        },
+        {
+            "name": "Mutsumi (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "args": [
+                "--dart-define=DANDANPLAY_APP_ID=${env:DANDANPLAY_APP_ID}",
+                "--dart-define=DANDANPLAY_APP_SECRET=${env:DANDANPLAY_APP_SECRET}"
+            ]
+        },
+        {
+            "name": "Mutsumi (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "args": [
+                "--dart-define=DANDANPLAY_APP_ID=${env:DANDANPLAY_APP_ID}",
+                "--dart-define=DANDANPLAY_APP_SECRET=${env:DANDANPLAY_APP_SECRET}"
+            ]
+        }
+    ]
+}

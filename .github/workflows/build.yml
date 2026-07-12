@@ -23,16 +23,32 @@ jobs:
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
           echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Restore dependency caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-flutter-${{ hashFiles('.metadata') }}-deps-${{ hashFiles('pubspec.lock', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-${{ hashFiles('.metadata') }}-deps-
       - name: Validate project
         run: |
           flutter pub get
-          flutter analyze
+          flutter analyze lib test
           flutter test
       - name: Build Android ARM64 APK
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
         run: ./scripts/build_android_arm64_apk.sh
       - name: Build unsigned iOS IPA
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
         run: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --dart-define=DANDANPLAY_APP_ID="$DANDANPLAY_APP_ID" --dart-define=DANDANPLAY_APP_SECRET="$DANDANPLAY_APP_SECRET"
           mkdir -p build/ios/ipa build/ios/payload/Payload
           ditto build/ios/iphoneos/Runner.app build/ios/payload/Payload/Runner.app
           (
