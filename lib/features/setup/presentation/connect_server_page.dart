@@ -26,8 +26,8 @@ class ConnectServerPage extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -46,7 +46,7 @@ class ConnectServerPage extends StatelessWidget {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: GlassCard(

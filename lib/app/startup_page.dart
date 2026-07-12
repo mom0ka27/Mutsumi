@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../features/auth/data/auth_service.dart';
 import '../features/auth/presentation/current_user_controller.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/setup/presentation/connect_server_page.dart';
+import '../core/widgets/app_glass_background.dart';
 
 class StartupPage extends StatefulWidget {
   const StartupPage({super.key});
@@ -84,7 +86,9 @@ class _StartupPageState extends State<StartupPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
+    return GlassScaffold(
+      enableBackgroundSampling: true,
+      background: const AppGlassBackground(),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

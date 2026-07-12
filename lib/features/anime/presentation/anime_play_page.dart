@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../../../player/controller.dart';
 import '../../../player/model/video.dart';
 import '../../../player/player.dart';
@@ -129,60 +131,56 @@ class _AnimePlayPageState extends State<AnimePlayPage> {
   Widget build(BuildContext context) {
     return Obx(() {
       final fullScreen = controller.isFullScreen.value;
-      return Scaffold(
-        backgroundColor: fullScreen
-            ? Colors.black
-            : Theme.of(context).colorScheme.surface,
-        body: fullScreen
-            ? IndexPlayer(controller)
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ColoredBox(
-                    color: Colors.black,
-                    child: SafeArea(
-                      bottom: false,
-                      child: IndexPlayer(controller),
+      if (fullScreen) {
+        return ColoredBox(color: Colors.black, child: IndexPlayer(controller));
+      }
+      return GlassScaffold(
+        enableBackgroundSampling: true,
+        background: const AppGlassBackground(),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ColoredBox(
+              color: Colors.black,
+              child: SafeArea(bottom: false, child: IndexPlayer(controller)),
+            ),
+            Expanded(
+              child: SafeArea(
+                top: false,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                  children: [
+                    SizedBox(
+                      height: 92,
+                      child: Obx(() {
+                        final selectedIndex = currentIndex.value;
+                        return ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemBuilder: (context, index) {
+                            final episode = widget.episodes[index];
+                            final selected = index == selectedIndex;
+                            return _EpisodeTile(
+                              episode: episode,
+                              selected: selected,
+                              onTap: selected
+                                  ? null
+                                  : () async {
+                                      await _saveProgress();
+                                      currentIndex.value = index;
+                                    },
+                            );
+                          },
+                          separatorBuilder: (_, _) => const SizedBox(width: 10),
+                          itemCount: widget.episodes.length,
+                        );
+                      }),
                     ),
-                  ),
-                  Expanded(
-                    child: SafeArea(
-                      top: false,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-                        children: [
-                          SizedBox(
-                            height: 92,
-                            child: Obx(() {
-                              final selectedIndex = currentIndex.value;
-                              return ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemBuilder: (context, index) {
-                                  final episode = widget.episodes[index];
-                                  final selected = index == selectedIndex;
-                                  return _EpisodeTile(
-                                    episode: episode,
-                                    selected: selected,
-                                    onTap: selected
-                                        ? null
-                                        : () async {
-                                            await _saveProgress();
-                                            currentIndex.value = index;
-                                          },
-                                  );
-                                },
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(width: 10),
-                                itemCount: widget.episodes.length,
-                              );
-                            }),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
+          ],
+        ),
       );
     });
   }

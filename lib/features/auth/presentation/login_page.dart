@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../home/presentation/home_page.dart';
@@ -99,8 +100,8 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      extendBody: false,
-      enableBackgroundSampling: false,
+      extendBody: true,
+      enableBackgroundSampling: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -119,7 +120,7 @@ class _LoginPageState extends State<LoginPage> {
         centerTitle: false,
       ),
       body: Padding(
-        padding: EdgeInsets.all(24),
+        padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 24),
         child: Center(
           child: Column(
             children: [

@@ -137,8 +137,8 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -164,7 +164,12 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
         return RefreshIndicator(
           onRefresh: _load,
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              Constants.topPadding,
+              16,
+              16,
+            ),
             itemCount: _users.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {

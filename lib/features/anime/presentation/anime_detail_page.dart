@@ -46,8 +46,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
         }
 
         return GlassScaffold(
-          enableBackgroundSampling: false,
-          extendBody: false,
+          enableBackgroundSampling: true,
+          extendBody: true,
           background: _DetailBackground(anime: anime),
           appBar: GlassAppBar(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -99,16 +99,27 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           ),
           floatingActionButton: anime.episodes.isEmpty
               ? null
-              : FloatingActionButton.extended(
-                  onPressed: () => Get.to(
+              : GlassButton.custom(
+                  onTap: () => Get.to(
                     () => AnimePlayPage(
                       anime: anime,
                       episodes: anime.episodes,
                       initialEpisode: _initialEpisode(anime),
                     ),
                   ),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('播放'),
+                  width: 100,
+                  shape: LiquidRoundedRectangle(
+                    borderRadius: Constants.radius.x,
+                  ),
+                  label: '播放',
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.play_arrow, size: 28),
+                      SizedBox(width: 12),
+                      Text('播放'),
+                    ],
+                  ),
                 ),
         );
       },
@@ -184,7 +195,6 @@ class _DetailBackground extends StatelessWidget {
           Align(
             alignment: Alignment.topCenter,
             child: SizedBox(
-              height: 520,
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
                 child: CachedNetworkImage(

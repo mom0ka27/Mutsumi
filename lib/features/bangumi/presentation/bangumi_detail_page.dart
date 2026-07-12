@@ -31,8 +31,8 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: _DetailBackground(subject: widget.subject),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),

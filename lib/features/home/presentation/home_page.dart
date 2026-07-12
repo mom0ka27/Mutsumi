@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../anime/presentation/anime_home_view.dart';
@@ -34,8 +35,9 @@ class _HomePageState extends State<HomePage> {
       final selectedIndex = _selectedIndex.value;
 
       return GlassScaffold(
-        extendBody: false,
+        extendBody: true,
         resizeToAvoidBottomInset: false,
+        topEdgeFadeExtent: Constants.topPadding + 40,
         appBar: GlassAppBar(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           title: Text(
@@ -44,8 +46,15 @@ class _HomePageState extends State<HomePage> {
           ),
           centerTitle: false,
         ),
-        body: _HomeContent(selectedIndex: selectedIndex),
-        enableBackgroundSampling: false,
+        body: IndexedStack(
+          index: selectedIndex,
+          children: [
+            const AnimeHomeView(),
+            const BangumiSearchView(),
+            DownloadProgressView(isActive: selectedIndex == 2),
+            const SettingsHomeView(),
+          ],
+        ),
         background: const AppGlassBackground(),
         bottomBar: GlassTabBar.bottom(
           selectedIndex: selectedIndex,
@@ -57,32 +66,16 @@ class _HomePageState extends State<HomePage> {
             GlassTab(icon: Icon(Icons.settings_rounded), label: '设置'),
           ],
           settings: LiquidGlassSettings.figma(
-            refraction: 42,
+            glassColor: Colors.white.withAlpha(20),
+            refraction: 50,
             depth: 24,
             dispersion: 8,
-            frost: 5,
-            glassColor: colorScheme.surface.withValues(alpha: 0.34),
+            frost: 0.2,
           ),
           selectedIconColor: colorScheme.primary,
           selectedLabelColor: colorScheme.primary,
         ),
       );
     });
-  }
-}
-
-class _HomeContent extends StatelessWidget {
-  const _HomeContent({required this.selectedIndex});
-
-  final int selectedIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    return switch (selectedIndex) {
-      1 => const BangumiSearchView(bottomPadding: 120),
-      2 => const DownloadProgressView(bottomPadding: 120),
-      3 => const SettingsHomeView(bottomPadding: 120),
-      _ => const AnimeHomeView(bottomPadding: 120),
-    };
   }
 }

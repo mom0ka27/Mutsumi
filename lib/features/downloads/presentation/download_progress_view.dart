@@ -2,15 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mutsumi/constants.dart';
 
 import '../../../core/network/dio_client.dart';
 
 import '../data/download_repository.dart';
 
 class DownloadProgressView extends StatefulWidget {
-  const DownloadProgressView({super.key, this.bottomPadding = 120});
+  const DownloadProgressView({super.key, this.isActive = true});
 
-  final double bottomPadding;
+  final bool isActive;
 
   @override
   State<DownloadProgressView> createState() => _DownloadProgressViewState();
@@ -25,6 +27,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
   final _loading = true.obs;
   bool _requesting = false;
   bool _showingError = false;
+  bool _appIsResumed = true;
   final _filter = _DownloadFilter.downloading.obs;
   final _pausing = <String>{}.obs;
 
@@ -32,7 +35,15 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _startPolling();
+    _syncPolling();
+  }
+
+  @override
+  void didUpdateWidget(covariant DownloadProgressView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _syncPolling();
+    }
   }
 
   @override
@@ -44,11 +55,17 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    _appIsResumed = state == AppLifecycleState.resumed;
+    _syncPolling();
+  }
+
+  void _syncPolling() {
+    if (widget.isActive && _appIsResumed) {
       _startPolling();
-    } else {
-      _timer?.cancel();
+      return;
     }
+    _timer?.cancel();
+    _timer = null;
   }
 
   void _startPolling() {
@@ -108,7 +125,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
         return RefreshIndicator(
           onRefresh: _refresh,
           child: ListView(
-            padding: EdgeInsets.fromLTRB(24, 24, 24, widget.bottomPadding),
+            padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 0),
             children: [Center(child: Text('加载下载任务失败\n${_error.value}'))],
           ),
         );
@@ -124,7 +141,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       return RefreshIndicator(
         onRefresh: _refresh,
         child: ListView.separated(
-          padding: EdgeInsets.fromLTRB(20, 12, 20, widget.bottomPadding),
+          padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
           itemCount: tasks.length + 1,
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
@@ -201,59 +218,56 @@ class _DownloadCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final progress = task.progress.clamp(0.0, 1.0);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              task.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Text('${(progress * 100).toStringAsFixed(1)}%'),
-                const Spacer(),
-                Text(
-                  '${_bytes(task.downloadSpeed)}/s',
-                  style: TextStyle(color: colors.primary),
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            task.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text('${(progress * 100).toStringAsFixed(1)}%'),
+              const Spacer(),
+              Text(
+                '${_bytes(task.downloadSpeed)}/s',
+                style: TextStyle(color: colors.primary),
+              ),
+              if (onPause != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: '暂停',
+                  onPressed: pausing ? null : onPause,
+                  icon: pausing
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.pause_rounded),
                 ),
-                if (onPause != null) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: '暂停',
-                    onPressed: pausing ? null : onPause,
-                    icon: pausing
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.pause_rounded),
-                  ),
-                ],
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${_state(task.state)} · ${_bytes(task.downloaded)} / ${_bytes(task.totalSize)} · 剩余 ${_eta(task.eta)}',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_state(task.state)} · ${_bytes(task.downloaded)} / ${_bytes(task.totalSize)} · 剩余 ${_eta(task.eta)}',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }

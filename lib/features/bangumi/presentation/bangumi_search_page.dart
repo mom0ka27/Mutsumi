@@ -9,9 +9,7 @@ import 'bangumi_detail_page.dart';
 import 'bangumi_search_controller.dart';
 
 class BangumiSearchView extends StatelessWidget {
-  const BangumiSearchView({super.key, this.bottomPadding = 24});
-
-  final double bottomPadding;
+  const BangumiSearchView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +18,7 @@ class BangumiSearchView extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 16),
           sliver: SliverToBoxAdapter(
             child: _SearchHeader(controller: controller),
           ),
@@ -42,7 +40,7 @@ class BangumiSearchView extends StatelessWidget {
           }
 
           return SliverPadding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+            padding: EdgeInsets.symmetric(horizontal: 20),
             sliver: SliverList.separated(
               itemBuilder: (context, index) {
                 return _SubjectCard(subject: controller.results[index]);

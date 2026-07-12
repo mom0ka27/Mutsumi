@@ -37,8 +37,8 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -58,15 +58,19 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
         actions: [
           GlassButton.custom(
             height: 40,
-            label: '添加 Episode',
+            label: '添加剧集',
             onTap: controller.addEpisode,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add_rounded, size: 20),
-                SizedBox(width: 8),
-                Text('添加 Episode'),
-              ],
+            shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Text('添加剧集'),
+                ],
+              ),
             ),
           ),
         ],

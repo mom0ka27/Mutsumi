@@ -110,8 +110,8 @@ class _SavedServersPageState extends State<SavedServersPage> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -130,7 +130,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
         _revision.value;
         final servers = _repository.getServerUrls();
         return ListView.separated(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, Constants.topPadding, 16, 16),
           itemCount: servers.length,
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {

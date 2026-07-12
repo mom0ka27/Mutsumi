@@ -39,10 +39,10 @@ async def get_torrents(_: User = Depends(get_current_user)):
             },
         )
         if response.status_code >= 400:
-            raise QBittorrentError(21004, "获取下载任务失败")
+            raise QBittorrentError(21004, f"获取下载任务失败: {response.text.strip()}")
         data = response.json()
         if not isinstance(data, list):
-            raise QBittorrentError(21004, "qBittorrent 返回了无效数据")
+            raise QBittorrentError(21004, f"qBittorrent 返回了无效数据: {data}")
         return [_torrent_read(item) for item in data if isinstance(item, dict)]
     finally:
         await client.aclose()
@@ -84,7 +84,7 @@ async def download_torrent_files(
             data=add_data,
         )
         if response.status_code >= 400 or response.text.strip() == "Fails.":
-            raise QBittorrentError(21006, "添加下载任务失败")
+            raise QBittorrentError(21006, f"添加下载任务失败: {response.text.strip()}")
     finally:
         await client.aclose()
 
@@ -291,7 +291,7 @@ async def _qbittorrent_login(client: httpx.AsyncClient) -> None:
     )
     await _save_qbittorrent_cookies(client)
     if response.status_code >= 400 or response.text.strip() == "Fails.":
-        raise QBittorrentError(21003, "qBittorrent 登录失败")
+        raise QBittorrentError(21003, f"qBittorrent 登录失败: {response.text.strip()}")
 
 
 async def _ensure_qbittorrent_category(client: httpx.AsyncClient) -> None:
@@ -307,7 +307,7 @@ async def _ensure_qbittorrent_category(client: httpx.AsyncClient) -> None:
         data={"category": _qbittorrent_category},
     )
     if response.status_code >= 400 or response.text.strip() == "Fails.":
-        raise QBittorrentError(21009, "创建 Mutsumi 分类失败")
+        raise QBittorrentError(21009, f"创建 Mutsumi 分类失败: {response.text.strip()}")
 
 
 async def _save_qbittorrent_cookies(client: httpx.AsyncClient) -> None:

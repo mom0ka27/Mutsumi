@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mutsumi/constants.dart';
 
 import '../../../core/appearance/app_background_preset.dart';
 import '../../../core/widgets/app_glass_background.dart';
@@ -18,8 +19,8 @@ class AppearanceSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = AppearanceController.instance;
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -36,7 +37,7 @@ class AppearanceSettingsPage extends StatelessWidget {
       ),
       body: Obx(
         () => ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 20),
           children: [
             Text('主题模式', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),

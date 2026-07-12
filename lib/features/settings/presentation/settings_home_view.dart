@@ -13,9 +13,7 @@ import 'appearance_settings_page.dart';
 import 'saved_servers_page.dart';
 
 class SettingsHomeView extends StatefulWidget {
-  const SettingsHomeView({super.key, this.bottomPadding = 120});
-
-  final double bottomPadding;
+  const SettingsHomeView({super.key});
 
   @override
   State<SettingsHomeView> createState() => _SettingsHomeViewState();
@@ -51,7 +49,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
       glassColor: colors.surface.withValues(alpha: 0.3),
     );
     return ListView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, widget.bottomPadding),
+      padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
       children: [
         GlassCard(
           useOwnLayer: true,

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/media_summary_card.dart';
 import '../data/anime_service.dart';
 import 'anime_detail_page.dart';
 
 class AnimeHomeView extends StatefulWidget {
-  const AnimeHomeView({super.key, this.bottomPadding = 120});
-
-  final double bottomPadding;
+  const AnimeHomeView({super.key});
 
   @override
   State<AnimeHomeView> createState() => _AnimeHomeViewState();
@@ -43,7 +42,7 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
             }
             if (snapshot.hasError) {
               return ListView(
-                padding: EdgeInsets.fromLTRB(24, 24, 24, widget.bottomPadding),
+                padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 0),
                 children: [
                   Center(child: Text('加载 Anime 失败\n${snapshot.error}')),
                 ],
@@ -53,12 +52,12 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
             final animes = snapshot.data ?? const <AnimeRead>[];
             if (animes.isEmpty) {
               return ListView(
-                padding: EdgeInsets.fromLTRB(24, 24, 24, widget.bottomPadding),
+                padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 0),
               );
             }
 
             return ListView.separated(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, widget.bottomPadding),
+              padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
               itemBuilder: (context, index) =>
                   _AnimeCard(anime: animes[index], onDeleted: _refresh),
               separatorBuilder: (_, _) => const SizedBox(height: 14),

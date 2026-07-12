@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/widgets/app_glass_background.dart';
 import '../../home/presentation/home_page.dart';
 import '../../settings/data/settings_repository.dart';
 import '../data/setup_service.dart';
@@ -108,7 +109,9 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return GlassScaffold(
+      enableBackgroundSampling: true,
+      background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         title: Text('创建管理员账户', style: Theme.of(context).textTheme.titleLarge),
@@ -127,7 +130,6 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
           constraints: const BoxConstraints(maxWidth: 480),
           child: ListView(
             padding: const EdgeInsets.all(24),
-            shrinkWrap: true,
             children: [
               Text(
                 '创建管理员账户',

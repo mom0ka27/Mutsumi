@@ -25,8 +25,8 @@ class QBittorrentSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
-      enableBackgroundSampling: false,
-      extendBody: false,
+      enableBackgroundSampling: true,
+      extendBody: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -152,7 +152,12 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
         );
       }
       return ListView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, widget.bottomPadding),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          Constants.topPadding,
+          20,
+          widget.bottomPadding,
+        ),
         children: [
           Text('下载设置', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 20),
@@ -246,7 +251,7 @@ class _AccessDenied extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: EdgeInsets.fromLTRB(20, 32, 20, bottomPadding),
+    padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, bottomPadding),
     children: [
       GlassCard(
         useOwnLayer: true,
@@ -291,7 +296,7 @@ class _LoadError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: EdgeInsets.fromLTRB(20, 32, 20, bottomPadding),
+    padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, bottomPadding),
     children: [
       Center(child: Text('加载设置失败\n$message', textAlign: TextAlign.center)),
       const SizedBox(height: 16),

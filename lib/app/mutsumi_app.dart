@@ -10,22 +10,57 @@ import 'startup_page.dart';
 class MutsumiApp extends StatelessWidget {
   const MutsumiApp({super.key});
 
+  ThemeData _theme(Brightness brightness) {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF6750A4),
+      brightness: brightness,
+    );
+    final outline = colorScheme.outlineVariant.withValues(alpha: 0.56);
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: Colors.transparent,
+      textTheme: ThemeData(brightness: brightness).textTheme.apply(
+        bodyColor: colorScheme.onSurface,
+        displayColor: colorScheme.onSurface,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surface.withValues(alpha: 0.56),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: outline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: outline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      dividerTheme: DividerThemeData(color: outline),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colorScheme.primaryContainer,
+        foregroundColor: colorScheme.onPrimaryContainer,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(
       () => GetMaterialApp(
         title: 'Mutsumi',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepPurple,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-        ),
+        theme: _theme(Brightness.light),
+        darkTheme: _theme(Brightness.dark),
         themeMode: switch (AppearanceController.instance.themeMode.value) {
           AppThemeMode.system => ThemeMode.system,
           AppThemeMode.light => ThemeMode.light,
