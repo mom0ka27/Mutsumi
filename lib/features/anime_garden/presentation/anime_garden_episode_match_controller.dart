@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_file_picker.dart';
 
@@ -71,7 +72,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
 
   Future<void> editEpisodeName(int index) async {
     final match = matches[index];
-    final result = await Get.dialog<String>(
+    final result = await showAppDialog<String>(
       _EpisodeNameDialog(episodeIndex: match.index, initialName: match.name),
     );
     if (result == null) {
@@ -83,7 +84,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
   }
 
   Future<void> addEpisode() async {
-    final result = await Get.dialog<_ManualEpisodeResult>(
+    final result = await showAppDialog<_ManualEpisodeResult>(
       _ManualEpisodeDialog(
         initialIndex: _nextEpisodeIndex(),
         files: videoFiles,
@@ -191,18 +192,22 @@ class AnimeGardenEpisodeMatchController extends GetxController {
       );
     }
 
-    final result = await Get.dialog<bool>(
+    final result = await showAppDialog<bool>(
       AlertDialog(
         title: const Text('发现重复匹配'),
         content: Text('${messages.join('\n')}\n\n仍然要继续添加吗？'),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('继续添加'),
+          Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('继续添加'),
+            ),
           ),
         ],
       ),
@@ -341,12 +346,16 @@ class _EpisodeNameDialogState extends State<_EpisodeNameDialog> {
         controller: _nameController,
         autofocus: true,
         decoration: const InputDecoration(labelText: 'Episode 名称'),
-        onSubmitted: (value) => Get.back(result: value.trim()),
+        onSubmitted: (value) => AppDialog.dismiss(context, value.trim()),
       ),
       actions: [
-        TextButton(onPressed: Get.back, child: const Text('取消')),
+        TextButton(
+          onPressed: () => AppDialog.dismiss(context),
+          child: const Text('取消'),
+        ),
         FilledButton(
-          onPressed: () => Get.back(result: _nameController.text.trim()),
+          onPressed: () =>
+              AppDialog.dismiss(context, _nameController.text.trim()),
           child: const Text('保存'),
         ),
       ],
@@ -427,7 +436,10 @@ class _ManualEpisodeDialogState extends State<_ManualEpisodeDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: Get.back, child: const Text('取消')),
+        TextButton(
+          onPressed: () => AppDialog.dismiss(context),
+          child: const Text('取消'),
+        ),
         FilledButton(
           onPressed: () async {
             final index = int.tryParse(_indexController.text.trim());
@@ -435,8 +447,9 @@ class _ManualEpisodeDialogState extends State<_ManualEpisodeDialog> {
               await showErrorDialog(title: '无法添加', message: '请输入有效集数');
               return;
             }
-            Get.back(
-              result: _ManualEpisodeResult(
+            AppDialog.dismiss(
+              context,
+              _ManualEpisodeResult(
                 index: index,
                 name: _nameController.text.trim(),
                 filename: _filename.value,

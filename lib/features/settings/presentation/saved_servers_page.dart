@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../app/startup_page.dart';
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../../auth/presentation/current_user_controller.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/settings_repository.dart';
@@ -22,7 +23,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
 
   Future<void> _rename(String url) async {
     var serverName = _repository.getServerName(url);
-    final confirmed = await Get.dialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       AlertDialog(
         title: const Text('重命名服务器'),
         content: TextFormField(
@@ -32,13 +33,17 @@ class _SavedServersPageState extends State<SavedServersPage> {
           onChanged: (value) => serverName = value,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('保存'),
+          Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('保存'),
+            ),
           ),
         ],
       ),
@@ -50,18 +55,22 @@ class _SavedServersPageState extends State<SavedServersPage> {
   }
 
   Future<void> _removeServer(String url) async {
-    final confirmed = await Get.dialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       AlertDialog(
         title: const Text('删除服务器'),
         content: Text('将删除“${_repository.getServerName(url)}”及其所有本地账户信息。'),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('删除'),
+          Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('删除'),
+            ),
           ),
         ],
       ),
@@ -77,20 +86,24 @@ class _SavedServersPageState extends State<SavedServersPage> {
   }
 
   Future<void> _removeAccount(ServerAccount account) async {
-    final confirmed = await Get.dialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       AlertDialog(
         title: const Text('删除账户'),
         content: Text(
           '确定删除“${account.username}”吗？\n\n只会删除此设备保存的登录信息，不会删除服务器上的用户。',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('删除'),
+          Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('删除'),
+            ),
           ),
         ],
       ),

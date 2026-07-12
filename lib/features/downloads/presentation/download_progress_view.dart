@@ -6,6 +6,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/widgets/error_dialog.dart';
 
 import '../data/download_repository.dart';
 
@@ -105,13 +106,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
     final message = error is ApiBusinessException
         ? error.message
         : error.toString();
-    await Get.dialog<void>(
-      AlertDialog(
-        title: const Text('下载服务异常'),
-        content: Text(message),
-        actions: [FilledButton(onPressed: Get.back, child: const Text('知道了'))],
-      ),
-    );
+    await showErrorDialog(title: '下载服务异常', message: message);
     _showingError = false;
   }
 

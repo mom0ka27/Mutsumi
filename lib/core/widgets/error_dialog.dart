@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
+
+import 'app_dialog.dart';
 
 Future<void> showErrorDialog({
   required String title,
   required String message,
-}) => Get.dialog<void>(
+}) => showAppDialog<void>(
   AlertDialog(
     title: Text(title),
     content: Text(message),
-    actions: [FilledButton(onPressed: Get.back, child: const Text('知道了'))],
+    actions: [
+      Builder(
+        builder: (context) => FilledButton(
+          onPressed: () => AppDialog.dismiss(context),
+          child: const Text('知道了'),
+        ),
+      ),
+    ],
   ),
 );

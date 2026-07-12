@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
@@ -46,7 +47,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
     final newPassword = TextEditingController();
     final confirmedPassword = TextEditingController();
     try {
-      final confirmed = await Get.dialog<bool>(
+      final confirmed = await showAppDialog<bool>(
         AlertDialog(
           title: const Text('修改密码'),
           content: SingleChildScrollView(
@@ -58,11 +59,13 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
                   obscureText: true,
                   decoration: const InputDecoration(labelText: '当前密码'),
                 ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: newPassword,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: '新密码'),
                 ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: confirmedPassword,
                   obscureText: true,
@@ -72,13 +75,17 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Get.back(result: false),
-              child: const Text('取消'),
+            Builder(
+              builder: (context) => TextButton(
+                onPressed: () => AppDialog.dismiss(context, false),
+                child: const Text('取消'),
+              ),
             ),
-            FilledButton(
-              onPressed: () => Get.back(result: true),
-              child: const Text('保存'),
+            Builder(
+              builder: (context) => FilledButton(
+                onPressed: () => AppDialog.dismiss(context, true),
+                child: const Text('保存'),
+              ),
             ),
           ],
         ),

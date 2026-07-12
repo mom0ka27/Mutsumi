@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../data/users_repository.dart';
 
@@ -40,7 +41,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     final username = TextEditingController(text: user?.username);
     final password = TextEditingController();
     final permission = (user?.permissionGroup ?? 'User').obs;
-    final confirmed = await Get.dialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       AlertDialog(
         title: Text(user == null ? '新增用户' : '编辑用户'),
         content: SingleChildScrollView(
@@ -78,13 +79,17 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('保存'),
+          Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('保存'),
+            ),
           ),
         ],
       ),
@@ -113,18 +118,22 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
   }
 
   Future<void> _delete(ManagedUser user) async {
-    final confirmed = await Get.dialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       AlertDialog(
         title: const Text('删除用户'),
         content: Text('确定删除“${user.username}”吗？'),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('删除'),
+          Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('删除'),
+            ),
           ),
         ],
       ),
@@ -182,31 +191,31 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
                 shape: LiquidRoundedSuperellipse(
                   borderRadius: Constants.radius.x,
                 ),
-                settings: LiquidGlassSettings.figma(
-                  refraction: 36,
-                  depth: 20,
-                  dispersion: 6,
-                  frost: 4,
-                  glassColor: colors.surface.withValues(alpha: 0.28),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
+                child: Material(
+                  color: Colors.transparent,
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.all(Constants.radius),
                   ),
-                  leading: CircleAvatar(
-                    backgroundColor: colors.primaryContainer,
-                    child: Icon(
-                      Icons.person_rounded,
-                      color: colors.onPrimaryContainer,
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
                     ),
-                  ),
-                  title: Text(user.username),
-                  subtitle: Text(user.permissionGroup),
-                  onTap: () => _edit(user),
-                  trailing: IconButton(
-                    onPressed: () => _delete(user),
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    leading: CircleAvatar(
+                      backgroundColor: colors.primaryContainer,
+                      child: Icon(
+                        Icons.person_rounded,
+                        color: colors.onPrimaryContainer,
+                      ),
+                    ),
+                    title: Text(user.username),
+                    subtitle: Text(user.permissionGroup),
+                    onTap: () => _edit(user),
+                    trailing: IconButton(
+                      onPressed: () => _delete(user),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
                   ),
                 ),
               );

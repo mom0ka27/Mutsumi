@@ -8,6 +8,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
@@ -151,24 +152,28 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
 
   Future<void> _deleteAnime(AnimeRead anime) async {
     final colorScheme = Theme.of(context).colorScheme;
-    final confirmed = await Get.dialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       AlertDialog(
         title: const Text('删除番剧'),
         content: Text(
           '确定删除“${anime.displayName}”吗？\n\n这会同时删除数据库记录、qBittorrent 下载任务和已下载文件，且无法撤销。',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: colorScheme.error,
-              foregroundColor: colorScheme.onError,
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => AppDialog.dismiss(context, false),
+              child: const Text('取消'),
             ),
-            onPressed: () => Get.back(result: true),
-            child: const Text('删除'),
+          ),
+          Builder(
+            builder: (context) => FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.error,
+                foregroundColor: colorScheme.onError,
+              ),
+              onPressed: () => AppDialog.dismiss(context, true),
+              child: const Text('删除'),
+            ),
           ),
         ],
       ),
