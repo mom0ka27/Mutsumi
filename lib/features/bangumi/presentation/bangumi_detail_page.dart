@@ -45,10 +45,6 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
           background: _DetailBackground(subject: subject),
           appBar: GlassAppBar(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            title: Text(
-              subject.displayName,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
             leading: GlassButton(
               width: 40,
               height: 40,

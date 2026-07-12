@@ -61,10 +61,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           background: _DetailBackground(anime: anime),
           appBar: GlassAppBar(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            title: Text(
-              anime.displayName,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
             leading: GlassButton(
               width: 40,
               height: 40,

@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/error_dialog.dart';
+import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
 import '../../auth/presentation/current_user_controller.dart';
 import '../../setup/presentation/connect_server_page.dart';
@@ -35,6 +37,86 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
         serverName: _settings.getServerName(account.serverUrl),
       ),
     );
+  }
+
+  Future<void> _changePassword() async {
+    final account = _settings.getCurrentAccount();
+    if (account == null) return;
+    final currentPassword = TextEditingController();
+    final newPassword = TextEditingController();
+    final confirmedPassword = TextEditingController();
+    try {
+      final confirmed = await Get.dialog<bool>(
+        AlertDialog(
+          title: const Text('修改密码'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '当前密码'),
+                ),
+                TextField(
+                  controller: newPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '新密码'),
+                ),
+                TextField(
+                  controller: confirmedPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '确认新密码'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(result: false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Get.back(result: true),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      if (currentPassword.text.isEmpty || newPassword.text.isEmpty) {
+        await showErrorDialog(title: '修改失败', message: '请填写当前密码和新密码');
+        return;
+      }
+      if (newPassword.text != confirmedPassword.text) {
+        await showErrorDialog(title: '修改失败', message: '两次输入的新密码不一致');
+        return;
+      }
+      await AuthService(
+        account.serverUrl,
+        certificateSha256: _settings.getCertificateFingerprint(
+          account.serverUrl,
+        ),
+        accessToken: account.accessToken,
+      ).changePassword(
+        currentPassword: currentPassword.text,
+        newPassword: newPassword.text,
+      );
+      await _settings.saveLogin(
+        serverUrl: account.serverUrl,
+        username: account.username,
+        password: newPassword.text,
+        accessToken: account.accessToken,
+        permissionGroup: account.permissionGroup ?? 'User',
+      );
+      Get.snackbar('修改成功', '密码已更新');
+    } catch (error) {
+      await showErrorDialog(title: '修改失败', message: error.toString());
+    } finally {
+      currentPassword.dispose();
+      newPassword.dispose();
+      confirmedPassword.dispose();
+    }
   }
 
   @override
@@ -121,6 +203,14 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
                 subtitle: const Text('登录当前服务器的其他账户'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: account == null ? null : _addAccount,
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.password_rounded),
+                title: const Text('修改密码'),
+                subtitle: const Text('更新当前账户的登录密码'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: account == null ? null : _changePassword,
               ),
               const Divider(height: 1),
               ListTile(

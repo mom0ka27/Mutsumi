@@ -15,6 +15,11 @@ class UserUpdate(BaseModel):
     permission_group: PermissionGroup | None = None
 
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

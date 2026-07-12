@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../anime/presentation/anime_home_view.dart';

@@ -4,8 +4,15 @@ import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
 
 class AuthService {
-  AuthService(String serverUrl, {String? certificateSha256})
-    : _dio = DioClient(serverUrl, certificateSha256: certificateSha256).dio;
+  AuthService(
+    String serverUrl, {
+    String? certificateSha256,
+    String? accessToken,
+  }) : _dio = DioClient(
+         serverUrl,
+         certificateSha256: certificateSha256,
+         accessToken: accessToken,
+       ).dio;
 
   final Dio _dio;
 
@@ -28,6 +35,14 @@ class AuthService {
       permissionGroup: permissionGroup,
     );
   }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => _dio.patch<void>(
+    changePasswordApiPath,
+    data: {'current_password': currentPassword, 'new_password': newPassword},
+  );
 }
 
 class LoginResult {

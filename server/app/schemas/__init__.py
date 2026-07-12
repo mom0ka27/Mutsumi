@@ -17,7 +17,7 @@ from app.schemas.qbittorrent import (
     QBittorrentTorrentRead,
 )
 from app.schemas.setup import SetupCreate, SetupStatus
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import PasswordChange, UserCreate, UserRead, UserUpdate
 
 __all__ = [
     "AnimeCreate",
@@ -38,6 +38,7 @@ __all__ = [
     "WatchProgressRead",
     "WatchProgressUpdate",
     "UserCreate",
+    "PasswordChange",
     "UserRead",
     "UserUpdate",
 ]

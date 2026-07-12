@@ -6,3 +6,4 @@ const animeApiPath = '$apiPrefix/anime';
 const qbittorrentApiPath = '$apiPrefix/qbittorrent';
 const qbittorrentConfigApiPath = '$apiPrefix/config/qbittorrent';
 const usersApiPath = '$apiPrefix/users';
+const changePasswordApiPath = '$usersApiPath/me/password';

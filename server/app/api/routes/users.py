@@ -2,9 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user_optional, get_password_hash, get_session, require_admin
+from app.core.auth import (
+    get_current_user,
+    get_current_user_optional,
+    get_password_hash,
+    get_session,
+    require_admin,
+    verify_password,
+)
 from app.models import PermissionGroup, User
-from app.schemas import UserCreate, UserRead, UserUpdate
+from app.schemas import PasswordChange, UserCreate, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -24,6 +31,21 @@ async def get_me(current_user: User = Depends(get_current_user_optional)):
     if current_user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return current_user
+
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: PasswordChange,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    if not payload.new_password:
+        raise HTTPException(status_code=422, detail="New password cannot be empty")
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    current_user.password_hash = get_password_hash(payload.new_password)
+    await session.commit()
 
 
 @router.get("", response_model=list[UserRead], dependencies=[Depends(require_admin)])

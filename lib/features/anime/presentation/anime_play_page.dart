@@ -262,19 +262,9 @@ class _EpisodeTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+      child: GlassContainer(
         width: 160,
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: selected
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? colorScheme.primary : colorScheme.outlineVariant,
-          ),
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,6 +275,7 @@ class _EpisodeTile extends StatelessWidget {
                 color: selected
                     ? colorScheme.onPrimaryContainer
                     : colorScheme.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.w900 : null,
               ),
             ),
             const SizedBox(height: 6),
