@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/media_summary_card.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../data/bangumi_repository.dart';
 import 'bangumi_detail_page.dart';
 import 'bangumi_search_controller.dart';
@@ -63,7 +64,6 @@ class _SearchHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
@@ -71,13 +71,7 @@ class _SearchHeader extends StatelessWidget {
           useOwnLayer: true,
           padding: const EdgeInsets.all(22),
           shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: LiquidGlassSettings.figma(
-            refraction: 42,
-            depth: 24,
-            dispersion: 8,
-            frost: 5,
-            glassColor: colorScheme.surface.withValues(alpha: 0.32),
-          ),
+          settings: AppGlassSettings.standard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

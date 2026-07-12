@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../data/users_repository.dart';
 
@@ -191,6 +192,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
                 shape: LiquidRoundedSuperellipse(
                   borderRadius: Constants.radius.x,
                 ),
+                settings: AppGlassSettings.standard(context),
                 child: Material(
                   color: Colors.transparent,
                   shape: RoundedSuperellipseBorder(

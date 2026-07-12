@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import 'connect_server_controller.dart';
 
 class ConnectServerPage extends StatelessWidget {
@@ -55,13 +56,7 @@ class ConnectServerPage extends StatelessWidget {
               shape: LiquidRoundedSuperellipse(
                 borderRadius: Constants.radius.x,
               ),
-              settings: LiquidGlassSettings.figma(
-                refraction: 42,
-                depth: 26,
-                dispersion: 8,
-                frost: 5,
-                glassColor: colorScheme.surface.withValues(alpha: 0.32),
-              ),
+              settings: AppGlassSettings.standard(context),
               child: Obx(
                 () => Column(
                   mainAxisSize: MainAxisSize.min,

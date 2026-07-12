@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_garden_repository.dart';
@@ -34,8 +35,6 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
         bangumiEpisodes: bangumiEpisodes,
       ),
     );
-    final colorScheme = Theme.of(context).colorScheme;
-
     return GlassScaffold(
       enableBackgroundSampling: true,
       extendBody: true,
@@ -97,13 +96,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
               shape: LiquidRoundedSuperellipse(
                 borderRadius: Constants.radius.x,
               ),
-              settings: LiquidGlassSettings.figma(
-                refraction: 36,
-                depth: 20,
-                dispersion: 6,
-                frost: 4,
-                glassColor: colorScheme.surface.withValues(alpha: 0.34),
-              ),
+              settings: AppGlassSettings.standard(context),
               child: Row(
                 children: [
                   Expanded(
@@ -145,7 +138,6 @@ class _EpisodeMatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final match = controller.matches[index];
     final files = controller.videoFiles;
 
@@ -156,13 +148,7 @@ class _EpisodeMatchCard extends StatelessWidget {
           useOwnLayer: true,
           padding: const EdgeInsets.all(16),
           shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: LiquidGlassSettings.figma(
-            refraction: 36,
-            depth: 20,
-            dispersion: 6,
-            frost: 4,
-            glassColor: colorScheme.surface.withValues(alpha: 0.28),
-          ),
+          settings: AppGlassSettings.standard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

@@ -7,6 +7,7 @@ import 'package:mutsumi/constants.dart';
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../data/settings_repository.dart';
 
@@ -166,15 +167,7 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
             useOwnLayer: true,
             padding: const EdgeInsets.all(16),
             shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-            settings: LiquidGlassSettings.figma(
-              refraction: 36,
-              depth: 22,
-              dispersion: 6,
-              frost: 5,
-              glassColor: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.3),
-            ),
+            settings: AppGlassSettings.standard(context),
             child: Padding(
               padding: EdgeInsets.zero,
               child: Column(
@@ -258,15 +251,7 @@ class _AccessDenied extends StatelessWidget {
         useOwnLayer: true,
         padding: const EdgeInsets.all(24),
         shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-        settings: LiquidGlassSettings.figma(
-          refraction: 36,
-          depth: 22,
-          dispersion: 6,
-          frost: 5,
-          glassColor: Theme.of(
-            context,
-          ).colorScheme.surface.withValues(alpha: 0.3),
-        ),
+        settings: AppGlassSettings.standard(context),
         child: const Column(
           children: [
             Icon(Icons.lock_outline_rounded, size: 48),

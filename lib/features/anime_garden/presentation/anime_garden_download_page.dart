@@ -5,6 +5,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_download_controller.dart';
@@ -129,7 +130,6 @@ class _SearchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
@@ -137,13 +137,7 @@ class _SearchCard extends StatelessWidget {
           useOwnLayer: true,
           padding: const EdgeInsets.all(20),
           shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: LiquidGlassSettings.figma(
-            refraction: 42,
-            depth: 24,
-            dispersion: 8,
-            frost: 5,
-            glassColor: colorScheme.surface.withValues(alpha: 0.32),
-          ),
+          settings: AppGlassSettings.standard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -271,8 +265,6 @@ class _ResourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
@@ -280,13 +272,7 @@ class _ResourceCard extends StatelessWidget {
           useOwnLayer: true,
           padding: const EdgeInsets.all(16),
           shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: LiquidGlassSettings.figma(
-            refraction: 36,
-            depth: 20,
-            dispersion: 6,
-            frost: 4,
-            glassColor: colorScheme.surface.withValues(alpha: 0.28),
-          ),
+          settings: AppGlassSettings.standard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

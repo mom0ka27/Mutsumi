@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import 'app_glass_settings.dart';
+
 class MediaSummaryCard extends StatelessWidget {
   const MediaSummaryCard({
     super.key,
@@ -35,13 +37,7 @@ class MediaSummaryCard extends StatelessWidget {
             useOwnLayer: true,
             padding: const EdgeInsets.only(right: 14),
             shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-            settings: LiquidGlassSettings.figma(
-              refraction: 36,
-              depth: 20,
-              dispersion: 6,
-              frost: 4,
-              glassColor: colorScheme.surface.withValues(alpha: 0.28),
-            ),
+            settings: AppGlassSettings.standard(context),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

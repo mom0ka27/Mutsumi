@@ -6,6 +6,7 @@ import 'package:mutsumi/constants.dart';
 import '../../../app/startup_page.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../auth/presentation/current_user_controller.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/settings_repository.dart';
@@ -121,7 +122,6 @@ class _SavedServersPageState extends State<SavedServersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return GlassScaffold(
       enableBackgroundSampling: true,
       extendBody: true,
@@ -155,13 +155,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
               shape: LiquidRoundedSuperellipse(
                 borderRadius: Constants.radius.x,
               ),
-              settings: LiquidGlassSettings.figma(
-                refraction: 36,
-                depth: 22,
-                dispersion: 6,
-                frost: 5,
-                glassColor: colors.surface.withValues(alpha: 0.3),
-              ),
+              settings: AppGlassSettings.standard(context),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

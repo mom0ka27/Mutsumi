@@ -66,6 +66,13 @@ class _AnimePlayPageState extends State<AnimePlayPage>
 
   @override
   void dispose() {
+    _disposed = true;
+    _progressTimer?.cancel();
+    _errorSubscription?.cancel();
+    _saveProgress();
+    controller.pause();
+    controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     final brightness = Theme.of(context).brightness;
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
@@ -75,13 +82,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         statusBarBrightness: brightness,
       ),
     );
-    controller.dispose();
-    WidgetsBinding.instance.removeObserver(this);
-    _progressTimer?.cancel();
-    _errorSubscription?.cancel();
-    _saveProgress();
     super.dispose();
-    _disposed = true;
   }
 
   @override

@@ -370,11 +370,11 @@ class IndexPlayerController {
     }
 
     _disposed = true;
-    await _positionSubscription?.cancel();
-    await _danmakuSubscription?.cancel();
+    _positionSubscription?.cancel();
+    _danmakuSubscription?.cancel();
     _positionSubscription = null;
     _danmakuSubscription = null;
-    await _player.dispose();
+    _player.dispose();
     _danmakuController?.clear();
     _danmakuController = null;
     _danmakuList = null;

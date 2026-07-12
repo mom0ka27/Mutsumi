@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
 import '../../auth/presentation/current_user_controller.dart';
@@ -130,13 +131,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
   Widget build(BuildContext context) => Obx(() {
     final account = _settings.getCurrentAccount();
     final colors = Theme.of(context).colorScheme;
-    final glassSettings = LiquidGlassSettings.figma(
-      refraction: 36,
-      depth: 22,
-      dispersion: 6,
-      frost: 5,
-      glassColor: colors.surface.withValues(alpha: 0.3),
-    );
+    final glassSettings = AppGlassSettings.standard(context);
     return ListView(
       padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
       children: [

@@ -7,6 +7,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 
 import '../data/download_repository.dart';
 
@@ -214,6 +215,9 @@ class _DownloadCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final progress = task.progress.clamp(0.0, 1.0);
     return GlassCard(
+      useOwnLayer: true,
+      shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
+      settings: AppGlassSettings.standard(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
