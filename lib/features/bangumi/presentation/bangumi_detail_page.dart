@@ -30,78 +30,80 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return GlassScaffold(
-      enableBackgroundSampling: true,
-      extendBody: true,
-      background: _DetailBackground(subject: widget.subject),
-      appBar: GlassAppBar(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        title: Text(
-          widget.subject.displayName,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        leading: GlassButton(
-          width: 40,
-          height: 40,
-          iconSize: 20,
-          icon: const Icon(Icons.arrow_back),
-          label: '返回',
-          onTap: Get.back,
-        ),
-        centerTitle: false,
-      ),
-      body: FutureBuilder<BangumiSubjectDetail>(
-        future: _detailFuture,
-        builder: (context, snapshot) {
-          final subject = snapshot.data ?? widget.subject;
-          final detail = snapshot.data;
+    return FutureBuilder<BangumiSubjectDetail>(
+      future: _detailFuture,
+      initialData: widget.subject is BangumiSubjectDetail
+          ? widget.subject as BangumiSubjectDetail
+          : null,
+      builder: (context, snapshot) {
+        final subject = snapshot.data ?? widget.subject;
+        final detail = snapshot.data;
 
-          if (snapshot.hasError) {
-            return _DetailError(
-              subject: widget.subject,
-              message: snapshot.error.toString(),
-            );
-          }
-
-          return CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                sliver: SliverToBoxAdapter(
-                  child: _DetailCard(subject: subject, detail: detail),
+        return GlassScaffold(
+          enableBackgroundSampling: true,
+          extendBody: true,
+          background: _DetailBackground(subject: subject),
+          appBar: GlassAppBar(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            title: Text(
+              subject.displayName,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            leading: GlassButton(
+              width: 40,
+              height: 40,
+              iconSize: 20,
+              icon: const Icon(Icons.arrow_back),
+              label: '返回',
+              onTap: Get.back,
+            ),
+            centerTitle: false,
+          ),
+          body: snapshot.hasError
+              ? _DetailError(
+                  subject: widget.subject,
+                  message: snapshot.error.toString(),
+                )
+              : CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(
+                        20,
+                        Constants.topPadding,
+                        20,
+                        120,
+                      ),
+                      sliver: SliverToBoxAdapter(
+                        child: _DetailCard(subject: subject, detail: detail),
+                      ),
+                    ),
+                    if (snapshot.connectionState != ConnectionState.done)
+                      const SliverToBoxAdapter(
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                  ],
                 ),
+          floatingActionButton: GlassButton.custom(
+            onTap: () => Get.to(
+              () => AnimeGardenDownloadPage(
+                subject: subject,
+                backgroundImageUrl: subject.imageUrl,
               ),
-              if (snapshot.connectionState != ConnectionState.done)
-                const SliverToBoxAdapter(
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FutureBuilder<BangumiSubjectDetail>(
-        future: _detailFuture,
-        builder: (context, snapshot) {
-          final subject = snapshot.data ?? widget.subject;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              FloatingActionButton.extended(
-                heroTag: 'downloadAnime',
-                onPressed: () => Get.to(
-                  () => AnimeGardenDownloadPage(
-                    subject: subject,
-                    backgroundImageUrl: subject.imageUrl,
-                  ),
-                ),
-                label: const Text('下载'),
-                icon: const Icon(Icons.download),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
+            width: 100,
+            shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
+            label: '下载',
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.download_rounded, size: 24),
+                SizedBox(width: 12),
+                Text('下载'),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -118,15 +120,15 @@ class _DetailBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const AppGlassBackground(),
+        const AppGlassBackground(showCustomImage: false),
         if (subject.imageUrl.isNotEmpty)
           Align(
             alignment: Alignment.topCenter,
             child: SizedBox(
-              height: 520,
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
                 child: CachedNetworkImage(
+                  useOldImageOnUrlChange: true,
                   imageUrl: subject.imageUrl,
                   fit: BoxFit.fitHeight,
                   alignment: Alignment.topCenter,
@@ -150,8 +152,6 @@ class _DetailBackground extends StatelessWidget {
               ),
             ),
           ),
-        if (subject.imageUrl.isNotEmpty)
-          ColoredBox(color: colorScheme.primary.withValues(alpha: 0.08)),
       ],
     );
   }
@@ -168,7 +168,7 @@ class _DetailError extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 120),
           sliver: SliverToBoxAdapter(
             child: Column(
               children: [
@@ -194,89 +194,90 @@ class _DetailCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 860),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 560;
-              final cover = _CoverImage(subject: subject);
-              final content = _TitleAndMeta(subject: subject, detail: detail);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 860),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 560;
+                final cover = _CoverImage(subject: subject);
+                final content = _TitleAndMeta(subject: subject, detail: detail);
 
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [cover, const SizedBox(height: 16), content],
-                );
-              }
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [cover, const SizedBox(height: 16), content],
+                  );
+                }
 
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  cover,
-                  const SizedBox(width: 20),
-                  Expanded(child: content),
-                ],
-              );
-            },
-          ),
-          if (subject.summary.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            Text('简介', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              subject.summary,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                height: 1.5,
-              ),
-            ),
-          ],
-          if (detail != null && detail!.tags.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            Text('标签', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: detail!.tags.take(16).map((tag) {
-                return _DetailInfoChip(icon: Icons.sell_outlined, label: tag);
-              }).toList(),
-            ),
-          ],
-          if (detail != null && detail!.infobox.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            Text('信息', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            ...detail!.infobox.map((item) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      width: 88,
-                      child: Text(
-                        item.key,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                    cover,
+                    const SizedBox(width: 20),
+                    Expanded(child: content),
+                  ],
+                );
+              },
+            ),
+            if (subject.summary.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              Text('简介', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                subject.summary,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+            ],
+            if (detail != null && detail!.tags.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              Text('标签', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: detail!.tags.take(16).map((tag) {
+                  return _DetailInfoChip(icon: Icons.sell_outlined, label: tag);
+                }).toList(),
+              ),
+            ],
+            if (detail != null && detail!.infobox.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              Text('信息', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              ...detail!.infobox.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 88,
+                        child: Text(
+                          item.key,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        item.value,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      Expanded(
+                        child: Text(
+                          item.value,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+                    ],
+                  ),
+                );
+              }),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -291,21 +292,28 @@ class _CoverImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.all(Constants.radius),
-      child: SizedBox(
-        width: 180,
-        height: 252,
-        child: subject.imageUrl.isEmpty
-            ? ColoredBox(
-                color: colorScheme.surfaceContainerHighest,
-                child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: colorScheme.onSurfaceVariant,
+    return SizedBox(
+      width: 180,
+      height: 252,
+      child: subject.imageUrl.isEmpty
+          ? ColoredBox(
+              color: colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.image_not_supported_outlined,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            )
+          : Hero(
+              tag: 'bangumi-cover-${subject.id}',
+              child: ClipRRect(
+                borderRadius: BorderRadius.all(Constants.radius),
+                child: CachedNetworkImage(
+                  useOldImageOnUrlChange: true,
+                  imageUrl: subject.imageUrl,
+                  fit: BoxFit.cover,
                 ),
-              )
-            : CachedNetworkImage(imageUrl: subject.imageUrl, fit: BoxFit.cover),
-      ),
+              ),
+            ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_file_picker.dart';
 
@@ -111,15 +112,15 @@ class AnimeGardenEpisodeMatchController extends GetxController {
         .where((match) => match.filename.isEmpty)
         .toList();
     if (emptyMatches.isNotEmpty) {
-      Get.snackbar(
-        '无法保存',
-        '还有 ${emptyMatches.length} 个 Episode 未选择文件，请先完成匹配或移除。',
+      await showErrorDialog(
+        title: '无法保存',
+        message: '还有 ${emptyMatches.length} 个 Episode 未选择文件，请先完成匹配或移除。',
       );
       return;
     }
 
     if (matches.isEmpty) {
-      Get.snackbar('无法保存', '请至少保留一个 Episode');
+      await showErrorDialog(title: '无法保存', message: '请至少保留一个 Episode');
       return;
     }
 
@@ -156,7 +157,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
         ..back()
         ..snackbar('已添加', 'Anime、BT 任务和 Episode 已保存到服务器');
     } catch (error) {
-      Get.snackbar('添加失败', messageFromDioError(error));
+      await showErrorDialog(title: '添加失败', message: messageFromDioError(error));
     } finally {
       saving.value = false;
     }
@@ -428,10 +429,10 @@ class _ManualEpisodeDialogState extends State<_ManualEpisodeDialog> {
       actions: [
         TextButton(onPressed: Get.back, child: const Text('取消')),
         FilledButton(
-          onPressed: () {
+          onPressed: () async {
             final index = int.tryParse(_indexController.text.trim());
             if (index == null || index <= 0) {
-              Get.snackbar('无法添加', '请输入有效集数');
+              await showErrorDialog(title: '无法添加', message: '请输入有效集数');
               return;
             }
             Get.back(

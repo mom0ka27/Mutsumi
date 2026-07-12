@@ -7,6 +7,7 @@ import 'package:mutsumi/constants.dart';
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/settings_repository.dart';
 
 class QBittorrentSettingsView extends StatefulWidget {
@@ -126,10 +127,10 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
       if (error.response?.statusCode == 403) {
         _forbidden.value = true;
       } else {
-        Get.snackbar('保存失败', _errorText(error));
+        await showErrorDialog(title: '保存失败', message: _errorText(error));
       }
     } catch (error) {
-      Get.snackbar('保存失败', error.toString());
+      await showErrorDialog(title: '保存失败', message: error.toString());
     } finally {
       if (mounted) _saving.value = false;
     }

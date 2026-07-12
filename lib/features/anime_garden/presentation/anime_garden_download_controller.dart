@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_episode_match_page.dart';
 
@@ -107,7 +108,7 @@ class AnimeGardenDownloadController extends GetxController {
       results.addAll(result.resources);
       hasMore.value = !result.complete;
     } catch (error) {
-      Get.snackbar('加载失败', error.toString());
+      await showErrorDialog(title: '加载失败', message: error.toString());
     } finally {
       loadingMore.value = false;
     }
@@ -135,7 +136,10 @@ class AnimeGardenDownloadController extends GetxController {
         ),
       );
     } catch (error) {
-      Get.snackbar('获取文件列表失败', messageFromDioError(error));
+      await showErrorDialog(
+        title: '获取文件列表失败',
+        message: messageFromDioError(error),
+      );
     } finally {
       addingResourceIds.remove(resource.id);
     }

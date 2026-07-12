@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../../core/appearance/app_background_preset.dart';
@@ -15,6 +16,9 @@ class SettingsRepository {
   static const _serverCredentialsKey = 'server_credentials';
   static const _serverTokensKey = 'server_tokens';
   static const _themeModeKey = 'appearance_theme_mode_v1';
+  static const _backgroundImagePathKey = 'appearance_background_image_path_v1';
+  static const _themeColorSourceKey = 'appearance_theme_color_source_v1';
+  static const _themeSeedColorKey = 'appearance_theme_seed_color_v1';
 
   final Box _box;
 
@@ -28,6 +32,32 @@ class SettingsRepository {
 
   Future<void> setThemeMode(AppThemeMode mode) =>
       _box.put(_themeModeKey, mode.name);
+
+  AppThemeColorSource getThemeColorSource() {
+    final value = _box.get(_themeColorSourceKey) as String?;
+    return AppThemeColorSource.values.firstWhere(
+      (source) => source.name == value,
+      orElse: () => AppThemeColorSource.preset,
+    );
+  }
+
+  Future<void> setThemeColorSource(AppThemeColorSource value) =>
+      _box.put(_themeColorSourceKey, value.name);
+
+  Color getThemeSeedColor() {
+    final value = _box.get(_themeSeedColorKey) as int?;
+    return Color(value ?? AppThemeColorPreset.defaultColor.toARGB32());
+  }
+
+  Future<void> setThemeSeedColor(Color value) =>
+      _box.put(_themeSeedColorKey, value.toARGB32());
+
+  String? getBackgroundImagePath() =>
+      _box.get(_backgroundImagePathKey) as String?;
+
+  Future<void> setBackgroundImagePath(String? value) => value == null
+      ? _box.delete(_backgroundImagePathKey)
+      : _box.put(_backgroundImagePathKey, value);
 
   static Future<void> migrate() async {
     final repository = SettingsRepository();

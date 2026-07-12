@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/users_repository.dart';
 
 class UsersManagementPage extends StatefulWidget {
@@ -29,7 +30,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     try {
       _users.assignAll(await _repository.listUsers());
     } catch (error) {
-      Get.snackbar('加载失败', error.toString());
+      await showErrorDialog(title: '加载失败', message: error.toString());
     } finally {
       _loading.value = false;
     }

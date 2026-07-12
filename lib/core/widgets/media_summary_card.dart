@@ -12,12 +12,14 @@ class MediaSummaryCard extends StatelessWidget {
     required this.onTap,
     this.subtitle = '',
     this.summary = '',
+    this.heroTag,
   });
 
   final String imageUrl;
   final String title;
   final String subtitle;
   final String summary;
+  final Object? heroTag;
   final List<Widget> chips;
   final VoidCallback onTap;
 
@@ -44,22 +46,12 @@ class MediaSummaryCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.all(Constants.radius),
-                    child: SizedBox(
-                      width: 128,
-                      child: imageUrl.isEmpty
-                          ? ColoredBox(
-                              color: colorScheme.surfaceContainerHighest,
-                              child: Icon(
-                                Icons.image_not_supported_outlined,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            )
-                          : CachedNetworkImage(
-                              imageUrl: imageUrl,
-                              fit: BoxFit.cover,
-                            ),
+                  SizedBox(
+                    width: 128,
+                    child: _CoverImage(
+                      imageUrl: imageUrl,
+                      heroTag: heroTag,
+                      colorScheme: colorScheme,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -114,6 +106,40 @@ class MediaSummaryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _CoverImage extends StatelessWidget {
+  const _CoverImage({
+    required this.imageUrl,
+    required this.heroTag,
+    required this.colorScheme,
+  });
+
+  final String imageUrl;
+  final Object? heroTag;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) {
+      return ColoredBox(
+        color: colorScheme.surfaceContainerHighest,
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    final image = ClipRRect(
+      borderRadius: BorderRadius.all(Constants.radius),
+      child: CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        useOldImageOnUrlChange: true,
+      ),
+    );
+    return heroTag == null ? image : Hero(tag: heroTag!, child: image);
   }
 }
 

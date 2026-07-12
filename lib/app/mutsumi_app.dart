@@ -10,9 +10,9 @@ import 'startup_page.dart';
 class MutsumiApp extends StatelessWidget {
   const MutsumiApp({super.key});
 
-  ThemeData _theme(Brightness brightness) {
+  ThemeData _theme(Brightness brightness, Color seedColor) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF6750A4),
+      seedColor: seedColor,
       brightness: brightness,
     );
     final outline = colorScheme.outlineVariant.withValues(alpha: 0.56);
@@ -59,8 +59,14 @@ class MutsumiApp extends StatelessWidget {
     return Obx(
       () => GetMaterialApp(
         title: 'Mutsumi',
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
+        theme: _theme(
+          Brightness.light,
+          AppearanceController.instance.themeSeedColor.value,
+        ),
+        darkTheme: _theme(
+          Brightness.dark,
+          AppearanceController.instance.themeSeedColor.value,
+        ),
         themeMode: switch (AppearanceController.instance.themeMode.value) {
           AppThemeMode.system => ThemeMode.system,
           AppThemeMode.light => ThemeMode.light,

@@ -7,6 +7,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
 
@@ -88,7 +89,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           body: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  Constants.topPadding,
+                  20,
+                  120,
+                ),
                 sliver: SliverToBoxAdapter(child: _DetailCard(anime: anime)),
               ),
               if (snapshot.connectionState != ConnectionState.done)
@@ -174,7 +180,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
       if (mounted) {
         _deleting.value = false;
       }
-      Get.snackbar('删除失败', error.toString());
+      await showErrorDialog(title: '删除失败', message: error.toString());
     }
   }
 }
@@ -190,7 +196,7 @@ class _DetailBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const AppGlassBackground(),
+        const AppGlassBackground(showCustomImage: false),
         if (anime.imageUrl.isNotEmpty)
           Align(
             alignment: Alignment.topCenter,
@@ -198,6 +204,7 @@ class _DetailBackground extends StatelessWidget {
               child: ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
                 child: CachedNetworkImage(
+                  useOldImageOnUrlChange: true,
                   imageUrl: anime.imageUrl,
                   fit: BoxFit.fitHeight,
                   alignment: Alignment.topCenter,
@@ -349,21 +356,28 @@ class _CoverImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.all(Constants.radius),
-      child: SizedBox(
-        width: 180,
-        height: 252,
-        child: anime.imageUrl.isEmpty
-            ? ColoredBox(
-                color: colorScheme.surfaceContainerHighest,
-                child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: colorScheme.onSurfaceVariant,
+    return SizedBox(
+      width: 180,
+      height: 252,
+      child: anime.imageUrl.isEmpty
+          ? ColoredBox(
+              color: colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.image_not_supported_outlined,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            )
+          : Hero(
+              tag: 'anime-cover-${anime.id}',
+              child: ClipRRect(
+                borderRadius: BorderRadius.all(Constants.radius),
+                child: CachedNetworkImage(
+                  useOldImageOnUrlChange: true,
+                  imageUrl: anime.imageUrl,
+                  fit: BoxFit.cover,
                 ),
-              )
-            : CachedNetworkImage(imageUrl: anime.imageUrl, fit: BoxFit.cover),
-      ),
+              ),
+            ),
     );
   }
 }

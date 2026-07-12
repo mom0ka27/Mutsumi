@@ -155,6 +155,7 @@ class _SubjectCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return MediaSummaryCard(
       imageUrl: subject.imageUrl,
+      heroTag: 'bangumi-cover-${subject.id}',
       title: subject.displayName,
       subtitle: subject.originalName,
       summary: subject.summary,

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../../../player/controller.dart';
 import '../../../player/model/video.dart';
 import '../../../player/player.dart';
@@ -33,6 +34,7 @@ class _AnimePlayPageState extends State<AnimePlayPage> {
   Timer? _progressTimer;
   StreamSubscription<String>? _errorSubscription;
   bool _disposed = false;
+  bool _showingError = false;
 
   AnimeEpisodeRead get _episode => widget.episodes[currentIndex.value];
 
@@ -96,17 +98,13 @@ class _AnimePlayPageState extends State<AnimePlayPage> {
     }
   }
 
-  void _showPlayerError(String message) {
-    if (_disposed || message.trim().isEmpty) {
+  Future<void> _showPlayerError(String message) async {
+    if (_disposed || _showingError || message.trim().isEmpty) {
       return;
     }
-
-    Get.snackbar(
-      '播放出错',
-      message,
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 5),
-    );
+    _showingError = true;
+    await showErrorDialog(title: '播放出错', message: message);
+    _showingError = false;
   }
 
   Future<void> _saveProgress() async {
