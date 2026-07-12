@@ -1,0 +1,16 @@
+.git
+.gitignore
+.dockerignore
+.venv
+__pycache__
+.pycache
+*.py[oc]
+data
+logs
+*.db
+config.yaml
+*.crt
+*.key
+*.csr
+README.md
+start.sh

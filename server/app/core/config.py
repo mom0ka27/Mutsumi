@@ -11,6 +11,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "name": "Mutsumi Server",
         "host": "0.0.0.0",
         "port": 12091,
+        "reload": False,
         "ssl": {
             "enabled": False,
             "certfile": None,

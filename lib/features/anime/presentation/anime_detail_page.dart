@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/appearance/app_image_cache.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
@@ -203,21 +204,29 @@ class _DetailBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cacheWidth = AppImageCache.backgroundWidth(context);
+    final cacheHeight = AppImageCache.backgroundHeight(context);
     return Stack(
       fit: StackFit.expand,
       children: [
-        const AppGlassBackground(showCustomImage: false),
         if (anime.imageUrl.isNotEmpty)
-          Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-                child: CachedNetworkImage(
-                  useOldImageOnUrlChange: true,
-                  imageUrl: anime.imageUrl,
-                  fit: BoxFit.fitHeight,
-                  alignment: Alignment.topCenter,
+          Positioned.fill(
+            child: ClipRect(
+              child: Transform.scale(
+                scale: 1.2,
+                alignment: Alignment.topCenter,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: CachedNetworkImage(
+                    useOldImageOnUrlChange: true,
+                    imageUrl: anime.imageUrl,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    memCacheWidth: cacheWidth,
+                    memCacheHeight: cacheHeight,
+                    maxWidthDiskCache: cacheWidth,
+                    maxHeightDiskCache: cacheHeight,
+                  ),
                 ),
               ),
             ),
@@ -366,6 +375,8 @@ class _CoverImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cacheWidth = AppImageCache.dimension(context, 180);
+    final cacheHeight = AppImageCache.dimension(context, 252);
     return SizedBox(
       width: 180,
       height: 252,
@@ -385,6 +396,10 @@ class _CoverImage extends StatelessWidget {
                   useOldImageOnUrlChange: true,
                   imageUrl: anime.imageUrl,
                   fit: BoxFit.cover,
+                  memCacheWidth: cacheWidth,
+                  memCacheHeight: cacheHeight,
+                  maxWidthDiskCache: cacheWidth,
+                  maxHeightDiskCache: cacheHeight,
                 ),
               ),
             ),

@@ -44,7 +44,11 @@ class BangumiSearchView extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 20),
             sliver: SliverList.separated(
               itemBuilder: (context, index) {
-                return _SubjectCard(subject: controller.results[index]);
+                final subject = controller.results[index];
+                return _SubjectCard(
+                  key: ValueKey('bangumi-subject-${subject.id}'),
+                  subject: subject,
+                );
               },
               separatorBuilder: (_, _) => const SizedBox(height: 14),
               itemCount: controller.results.length,
@@ -141,7 +145,7 @@ class _SearchHeader extends StatelessWidget {
 }
 
 class _SubjectCard extends StatelessWidget {
-  const _SubjectCard({required this.subject});
+  const _SubjectCard({super.key, required this.subject});
 
   final BangumiSubject subject;
 

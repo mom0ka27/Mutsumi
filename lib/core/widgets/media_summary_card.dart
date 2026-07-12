@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../appearance/app_image_cache.dart';
 import 'app_glass_settings.dart';
 
 class MediaSummaryCard extends StatelessWidget {
@@ -127,12 +128,18 @@ class _CoverImage extends StatelessWidget {
         ),
       );
     }
+    final cacheWidth = AppImageCache.dimension(context, 128);
+    final cacheHeight = AppImageCache.dimension(context, 192);
     final image = ClipRRect(
       borderRadius: BorderRadius.all(Constants.radius),
       child: CachedNetworkImage(
         imageUrl: imageUrl,
         fit: BoxFit.cover,
         useOldImageOnUrlChange: true,
+        memCacheWidth: cacheWidth,
+        memCacheHeight: cacheHeight,
+        maxWidthDiskCache: cacheWidth,
+        maxHeightDiskCache: cacheHeight,
       ),
     );
     return heroTag == null ? image : Hero(tag: heroTag!, child: image);

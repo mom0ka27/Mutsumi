@@ -62,10 +62,10 @@ class IndexPlayerController {
 
   bool get disposed => _disposed;
   StreamSubscription<Duration>? _positionSubscription;
-  StreamSubscription<Duration>? _danmakuSubscription;
   double _currentRate = 1.0;
   int? _lastDanmakuSecond;
   Future<Directory>? _subtitleFontDirectory;
+  var _videoGeneration = 0;
 
   IndexPlayerController({this.options = const IndexPlayerOptions()}) {
     // (_player.platform as NativePlayer)
@@ -76,12 +76,10 @@ class IndexPlayerController {
       if (!_disposed && !seeking && wantSeeking.isFalse) {
         sliderPostion.value = position;
       }
-    });
-
-    _danmakuSubscription = stream.position.listen((position) {
       final danmakuController = _danmakuController;
       final second = position.inSeconds;
       if (_disposed ||
+          !enableDanmaku.value ||
           danmakuController == null ||
           _lastDanmakuSecond == second) {
         return;
@@ -100,7 +98,9 @@ class IndexPlayerController {
     }
 
     this.video.value = video;
+    final videoGeneration = ++_videoGeneration;
     _lastDanmakuSecond = null;
+    _danmakuList = null;
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
     await _setNativeProperty('sub-font-provider', 'auto');
@@ -140,7 +140,7 @@ class IndexPlayerController {
     }
     _danmakuController?.clear();
     video.danmakuProvider?.getDanmakuList().then((l) {
-      if (!_disposed) {
+      if (!_disposed && videoGeneration == _videoGeneration) {
         _danmakuList = l;
       }
     });
@@ -158,6 +158,14 @@ class IndexPlayerController {
     if (identical(_danmakuController, controller)) {
       _danmakuController = null;
       _lastDanmakuSecond = null;
+    }
+  }
+
+  void toggleDanmaku() {
+    enableDanmaku.toggle();
+    _lastDanmakuSecond = null;
+    if (!enableDanmaku.value) {
+      _danmakuController?.clear();
     }
   }
 
@@ -371,9 +379,7 @@ class IndexPlayerController {
 
     _disposed = true;
     _positionSubscription?.cancel();
-    _danmakuSubscription?.cancel();
     _positionSubscription = null;
-    _danmakuSubscription = null;
     _player.dispose();
     _danmakuController?.clear();
     _danmakuController = null;

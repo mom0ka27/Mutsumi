@@ -2,6 +2,7 @@ server:
   name: Mutsumi Server
   host: "::"
   port: 12091
+  reload: false
   ssl:
     enabled: false
     certfile: ./server.crt

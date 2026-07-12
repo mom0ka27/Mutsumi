@@ -111,7 +111,7 @@ class _BottomBarState extends State<BottomBar> {
                   button: true,
                   selected: widget.controller.enableDanmaku.value,
                   child: InkWell(
-                    onTap: () => widget.controller.enableDanmaku.toggle(),
+                    onTap: widget.controller.toggleDanmaku,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
                       padding: const EdgeInsets.symmetric(

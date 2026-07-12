@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/appearance/app_image_cache.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
 import '../data/bangumi_repository.dart';
@@ -40,8 +41,6 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
         final detail = snapshot.data;
 
         return GlassScaffold(
-          enableBackgroundSampling: true,
-          extendBody: true,
           background: _DetailBackground(subject: subject),
           appBar: GlassAppBar(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -112,22 +111,30 @@ class _DetailBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cacheWidth = AppImageCache.backgroundWidth(context);
+    final cacheHeight = AppImageCache.backgroundHeight(context);
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        const AppGlassBackground(showCustomImage: false),
         if (subject.imageUrl.isNotEmpty)
-          Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-                child: CachedNetworkImage(
-                  useOldImageOnUrlChange: true,
-                  imageUrl: subject.imageUrl,
-                  fit: BoxFit.fitHeight,
-                  alignment: Alignment.topCenter,
+          Positioned.fill(
+            child: ClipRect(
+              child: Transform.scale(
+                scale: 1.2,
+                alignment: Alignment.topCenter,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: CachedNetworkImage(
+                    useOldImageOnUrlChange: true,
+                    imageUrl: subject.imageUrl,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    memCacheWidth: cacheWidth,
+                    memCacheHeight: cacheHeight,
+                    maxWidthDiskCache: cacheWidth,
+                    maxHeightDiskCache: cacheHeight,
+                  ),
                 ),
               ),
             ),
@@ -287,6 +294,8 @@ class _CoverImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cacheWidth = AppImageCache.dimension(context, 180);
+    final cacheHeight = AppImageCache.dimension(context, 252);
 
     return SizedBox(
       width: 180,
@@ -307,6 +316,10 @@ class _CoverImage extends StatelessWidget {
                   useOldImageOnUrlChange: true,
                   imageUrl: subject.imageUrl,
                   fit: BoxFit.cover,
+                  memCacheWidth: cacheWidth,
+                  memCacheHeight: cacheHeight,
+                  maxWidthDiskCache: cacheWidth,
+                  maxHeightDiskCache: cacheHeight,
                 ),
               ),
             ),

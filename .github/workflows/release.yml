@@ -53,6 +53,28 @@ jobs:
             zip -qry ../ipa/Runner.ipa Payload
           )
           rm -rf build/ios/payload
+      - name: Package server
+        run: |
+          mkdir -p build/server
+          zip -qry build/server/mutsumi-server.zip server -x 'server/config.yaml'
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutsumi-android-apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutsumi-ios-ipa
+          path: build/ios/ipa/Runner.ipa
+          if-no-files-found: error
+      - name: Upload server package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutsumi-server
+          path: build/server/mutsumi-server.zip
+          if-no-files-found: error
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -61,4 +83,5 @@ jobs:
             --draft \
             --title "$GITHUB_REF_NAME" \
             build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-            build/ios/ipa/Runner.ipa
+            build/ios/ipa/Runner.ipa \
+            build/server/mutsumi-server.zip

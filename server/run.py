@@ -81,7 +81,7 @@ if __name__ == "__main__":
         "app.main:app",
         host=server_config["host"],
         port=server_config["port"],
-        reload=True,
+        reload=server_config.get("reload", False),
         # log_config=None,
         workers=1,
         **ssl_options,
