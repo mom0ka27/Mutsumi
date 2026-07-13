@@ -1,8 +1,6 @@
 import 'package:hive_ce/hive.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../features/settings/data/settings_repository.dart';
-
 class LocalStorage {
   static const settingsBoxName = 'settings';
   static const dandanPlayBoxName = 'dandanplay';
@@ -14,7 +12,5 @@ class LocalStorage {
     Hive.init(directory.path);
     await Hive.openBox(settingsBoxName);
     await Hive.openBox(dandanPlayBoxName);
-    await SettingsRepository.migrate();
-    await SettingsRepository.migrateBackgroundImagePath(directory.path);
   }
 }

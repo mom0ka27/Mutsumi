@@ -99,7 +99,7 @@ class IndexPlayerController {
 
     this.video.value = video;
     final videoGeneration = ++_videoGeneration;
-    _lastDanmakuSecond = null;
+    _resetDanmakuSecond();
     _danmakuList = null;
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
@@ -151,19 +151,19 @@ class IndexPlayerController {
       return;
     }
     _danmakuController = controller;
-    _lastDanmakuSecond = null;
+    _resetDanmakuSecond();
   }
 
   void clearDanmakuController(DanmakuController controller) {
     if (identical(_danmakuController, controller)) {
       _danmakuController = null;
-      _lastDanmakuSecond = null;
+      _resetDanmakuSecond();
     }
   }
 
   void toggleDanmaku() {
     enableDanmaku.toggle();
-    _lastDanmakuSecond = null;
+    _resetDanmakuSecond();
     if (!enableDanmaku.value) {
       _danmakuController?.clear();
     }
@@ -185,6 +185,32 @@ class IndexPlayerController {
     _danmakuController?.resume();
   }
 
+  Future<void> togglePlayback() => state.playing ? pause() : play();
+
+  void beginSeeking() {
+    if (!_disposed) {
+      wantSeeking.value = true;
+    }
+  }
+
+  void updateSeekingPosition(Duration position) {
+    if (_disposed) {
+      return;
+    }
+    sliderPostion.value = position < Duration.zero
+        ? Duration.zero
+        : position > state.duration
+        ? state.duration
+        : position;
+  }
+
+  Future<void> endSeeking([Duration? position]) {
+    if (position != null) {
+      updateSeekingPosition(position);
+    }
+    return seek(sliderPostion.value);
+  }
+
   Future<void> seek(Duration d) async {
     if (_disposed) {
       return;
@@ -194,7 +220,7 @@ class IndexPlayerController {
 
     _seeking = true;
     sliderPostion.value = d;
-    _lastDanmakuSecond = null;
+    _resetDanmakuSecond();
 
     _player.pause();
     _danmakuController?.pause();
@@ -356,6 +382,10 @@ class IndexPlayerController {
     } catch (_) {}
   }
 
+  void _resetDanmakuSecond() {
+    _lastDanmakuSecond = null;
+  }
+
   Future<Directory> _prepareSubtitleFont() async {
     final supportDirectory = await getApplicationSupportDirectory();
     final fontDirectory = Directory('${supportDirectory.path}/subtitle_fonts');
@@ -384,7 +414,7 @@ class IndexPlayerController {
     _danmakuController?.clear();
     _danmakuController = null;
     _danmakuList = null;
-    _lastDanmakuSecond = null;
+    _resetDanmakuSecond();
   }
 
   PlayerStream get stream => _player.stream;

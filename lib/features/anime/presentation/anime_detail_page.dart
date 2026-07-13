@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'dart:ui';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
-import '../../../core/appearance/app_image_cache.dart';
-import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/formatters/duration_formatter.dart';
+import '../../../core/widgets/media_detail_overview.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
 
@@ -58,9 +56,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
         }
 
         return GlassScaffold(
-          enableBackgroundSampling: true,
-          extendBody: true,
-          background: _DetailBackground(anime: anime),
+          background: MediaDetailBackground(
+            imageUrl: anime.imageUrl,
+            blurSigma: 24,
+            showGradientWithoutImage: true,
+          ),
+          statusBarStyle: GlassStatusBarStyle.light,
+          edgeToEdge: true,
           appBar: GlassAppBar(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             leading: GlassButton(
@@ -71,7 +73,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
               label: '返回',
               onTap: Get.back,
             ),
-            centerTitle: false,
             actions: [
               Obx(
                 () => _deleting.value
@@ -102,7 +103,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
                   20,
                   120,
                 ),
-                sliver: SliverToBoxAdapter(child: _DetailCard(anime: anime)),
+                sliver: SliverToBoxAdapter(
+                  child: MediaDetailOverview(
+                    data: _overviewData(anime),
+                    heroTag: 'anime-cover-${anime.id}',
+                    beforeSummary: _watchProgress(anime),
+                  ),
+                ),
               ),
               if (snapshot.connectionState != ConnectionState.done)
                 const SliverToBoxAdapter(
@@ -151,6 +158,72 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
     return 0;
   }
 
+  MediaDetailOverviewData _overviewData(AnimeRead anime) {
+    return MediaDetailOverviewData(
+      title: anime.displayName,
+      originalTitle: anime.originalName,
+      imageUrl: anime.imageUrl,
+      metadata: [
+        if (anime.score > 0)
+          MediaDetailMetadata(
+            icon: Icons.star_rounded,
+            label: anime.score.toStringAsFixed(1),
+          ),
+        if (anime.rank > 0)
+          MediaDetailMetadata(
+            icon: Icons.emoji_events_outlined,
+            label: '#${anime.rank}',
+          ),
+        if (anime.episodes.isNotEmpty)
+          MediaDetailMetadata(
+            icon: Icons.movie_filter_outlined,
+            label: '${anime.episodes.length} 集',
+          ),
+        if (anime.airDate.isNotEmpty)
+          MediaDetailMetadata(
+            icon: Icons.calendar_month_outlined,
+            label: anime.airDate,
+          ),
+        if (anime.platform.isNotEmpty)
+          MediaDetailMetadata(icon: Icons.tv_outlined, label: anime.platform),
+      ],
+      summary: anime.summary,
+      tags: anime.tags,
+      infoItems: anime.infobox
+          .map(
+            (item) => MediaDetailInfoItem(label: item.key, value: item.value),
+          )
+          .toList(),
+    );
+  }
+
+  Widget? _watchProgress(AnimeRead anime) {
+    final episodeId = anime.watchProgress?.episodeId;
+    final progress = anime.watchProgress;
+    if (episodeId == null || progress == null) {
+      return null;
+    }
+    final episode = anime.episodes.firstWhereOrNull(
+      (episode) => episode.id == episodeId,
+    );
+    if (episode == null) {
+      return null;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('上次观看', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          '第 ${episode.index} 集 · ${episode.displayName} · ${formatDuration(progress.position)}',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _deleteAnime(AnimeRead anime) async {
     final colorScheme = Theme.of(context).colorScheme;
     final confirmed = await showAppDialog<bool>(
@@ -194,311 +267,4 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
       await showErrorDialog(title: '删除失败', message: error.toString());
     }
   }
-}
-
-class _DetailBackground extends StatelessWidget {
-  const _DetailBackground({required this.anime});
-
-  final AnimeRead anime;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final cacheWidth = AppImageCache.backgroundWidth(context);
-    final cacheHeight = AppImageCache.backgroundHeight(context);
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (anime.imageUrl.isNotEmpty)
-          Positioned.fill(
-            child: ClipRect(
-              child: Transform.scale(
-                scale: 1.2,
-                alignment: Alignment.topCenter,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                  child: CachedNetworkImage(
-                    useOldImageOnUrlChange: true,
-                    imageUrl: anime.imageUrl,
-                    fit: BoxFit.cover,
-                    alignment: Alignment.topCenter,
-                    memCacheWidth: cacheWidth,
-                    memCacheHeight: cacheHeight,
-                    maxWidthDiskCache: cacheWidth,
-                    maxHeightDiskCache: cacheHeight,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: const [0, 0.46, 0.82, 1],
-              colors: [
-                Colors.black.withValues(alpha: 0.08),
-                colorScheme.surface.withValues(alpha: 0.18),
-                colorScheme.surface.withValues(alpha: 0.78),
-                colorScheme.surface,
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DetailCard extends StatelessWidget {
-  const _DetailCard({required this.anime});
-
-  final AnimeRead anime;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final progress = anime.watchProgress;
-    final progressEpisode = _progressEpisode(anime);
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 860),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxWidth < 560;
-                final cover = _CoverImage(anime: anime);
-                final content = _TitleAndMeta(anime: anime);
-                return compact
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [cover, const SizedBox(height: 16), content],
-                      )
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          cover,
-                          const SizedBox(width: 20),
-                          Expanded(child: content),
-                        ],
-                      );
-              },
-            ),
-            if (progressEpisode != null && progress != null) ...[
-              const SizedBox(height: 22),
-              Text('上次观看', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(
-                '第 ${progressEpisode.index} 集 · ${progressEpisode.displayName} · ${_formatDuration(progress.position)}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            if (anime.summary.isNotEmpty) ...[
-              const SizedBox(height: 22),
-              Text('简介', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(
-                anime.summary,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  height: 1.5,
-                ),
-              ),
-            ],
-            if (anime.tags.isNotEmpty) ...[
-              const SizedBox(height: 22),
-              Text('标签', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: anime.tags.take(16).map((tag) {
-                  return _InfoChip(icon: Icons.sell_outlined, label: tag);
-                }).toList(),
-              ),
-            ],
-            if (anime.infobox.isNotEmpty) ...[
-              const SizedBox(height: 22),
-              Text('信息', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ...anime.infobox.map((item) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 88,
-                        child: Text(
-                          item.key,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: colorScheme.onSurfaceVariant),
-                        ),
-                      ),
-                      Expanded(child: Text(item.value)),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  AnimeEpisodeRead? _progressEpisode(AnimeRead anime) {
-    final episodeId = anime.watchProgress?.episodeId;
-    if (episodeId == null) {
-      return null;
-    }
-    for (final episode in anime.episodes) {
-      if (episode.id == episodeId) {
-        return episode;
-      }
-    }
-    return null;
-  }
-}
-
-class _CoverImage extends StatelessWidget {
-  const _CoverImage({required this.anime});
-
-  final AnimeRead anime;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final cacheWidth = AppImageCache.dimension(context, 180);
-    final cacheHeight = AppImageCache.dimension(context, 252);
-    return SizedBox(
-      width: 180,
-      height: 252,
-      child: anime.imageUrl.isEmpty
-          ? ColoredBox(
-              color: colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.image_not_supported_outlined,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            )
-          : Hero(
-              tag: 'anime-cover-${anime.id}',
-              child: ClipRRect(
-                borderRadius: BorderRadius.all(Constants.radius),
-                child: CachedNetworkImage(
-                  useOldImageOnUrlChange: true,
-                  imageUrl: anime.imageUrl,
-                  fit: BoxFit.cover,
-                  memCacheWidth: cacheWidth,
-                  memCacheHeight: cacheHeight,
-                  maxWidthDiskCache: cacheWidth,
-                  maxHeightDiskCache: cacheHeight,
-                ),
-              ),
-            ),
-    );
-  }
-}
-
-class _TitleAndMeta extends StatelessWidget {
-  const _TitleAndMeta({required this.anime});
-
-  final AnimeRead anime;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          anime.displayName,
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        if (anime.originalName.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            anime.originalName,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (anime.score > 0)
-              _InfoChip(
-                icon: Icons.star_rounded,
-                label: anime.score.toStringAsFixed(1),
-              ),
-            if (anime.rank > 0)
-              _InfoChip(
-                icon: Icons.emoji_events_outlined,
-                label: '#${anime.rank}',
-              ),
-            if (anime.episodes.isNotEmpty)
-              _InfoChip(
-                icon: Icons.movie_filter_outlined,
-                label: '${anime.episodes.length} 集',
-              ),
-            if (anime.airDate.isNotEmpty)
-              _InfoChip(
-                icon: Icons.calendar_month_outlined,
-                label: anime.airDate,
-              ),
-            if (anime.platform.isNotEmpty)
-              _InfoChip(icon: Icons.tv_outlined, label: anime.platform),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.all(Constants.radius),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: colorScheme.primary),
-            const SizedBox(width: 4),
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _formatDuration(Duration duration) {
-  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-  if (duration.inHours > 0) {
-    return '${duration.inHours}:$minutes:$seconds';
-  }
-  return '$minutes:$seconds';
 }

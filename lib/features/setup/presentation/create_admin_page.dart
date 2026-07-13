@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/widgets/app_form_widgets.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../home/presentation/home_page.dart';
-import '../../settings/data/settings_repository.dart';
 import '../data/setup_service.dart';
-import '../../auth/presentation/current_user_controller.dart';
+import '../../auth/presentation/auth_session.dart';
 
 class CreateAdminPage extends StatefulWidget {
   const CreateAdminPage({
@@ -28,7 +28,6 @@ class CreateAdminPage extends StatefulWidget {
 }
 
 class _CreateAdminPageState extends State<CreateAdminPage> {
-  final _settingsRepository = SettingsRepository();
   late final TextEditingController _serverNameController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
@@ -82,16 +81,14 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
       if (result == null) {
         throw StateError('服务器未返回登录信息');
       }
-      await _settingsRepository.saveLogin(
+      await AuthSession.establish(
         serverUrl: widget.serverUrl,
         username: username,
         password: password,
-        accessToken: result.accessToken,
-        permissionGroup: result.permissionGroup,
+        result: result,
         certificateFingerprint: widget.certificateSha256,
         serverName: serverName,
       );
-      CurrentUserController.instance.setPermissionGroup(result.permissionGroup);
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
@@ -146,60 +143,26 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 24),
-              TextField(
-                controller: _serverNameController,
-                decoration: const InputDecoration(
-                  labelText: '服务器名称',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              AppTextField(controller: _serverNameController, label: '服务器名称'),
               const SizedBox(height: 12),
-              TextField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: '管理员账号',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              AppTextField(controller: _usernameController, label: '管理员账号'),
               const SizedBox(height: 12),
-              TextField(
+              AppTextField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '管理员密码',
-                  border: OutlineInputBorder(),
-                ),
+                label: '管理员密码',
               ),
               const SizedBox(height: 12),
               Obx(
-                () => FilledButton.icon(
-                  onPressed: _initializing.value ? null : _initializeServer,
-                  icon: _initializing.value
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.admin_panel_settings),
-                  label: Text(_initializing.value ? '正在初始化...' : '初始化服务器'),
+                () => AsyncFilledButton(
+                  busy: _initializing.value,
+                  onPressed: _initializeServer,
+                  icon: Icons.admin_panel_settings,
+                  label: '初始化服务器',
+                  busyLabel: '正在初始化...',
                 ),
               ),
-              Obx(() {
-                final message = _message.value;
-                if (message == null) {
-                  return const SizedBox.shrink();
-                }
-                return Column(
-                  children: [
-                    const SizedBox(height: 24),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(message),
-                      ),
-                    ),
-                  ],
-                );
-              }),
+              Obx(() => FormStatusMessage(message: _message.value)),
             ],
           ),
         ),

@@ -36,8 +36,11 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   final currentIndex = 0.obs;
   Timer? _progressTimer;
   StreamSubscription<String>? _errorSubscription;
+  late final _WatchProgressSyncer _progressSyncer;
   bool _disposed = false;
   bool _showingError = false;
+  AnimeEpisodeRead? _activeEpisode;
+  var _episodeLoadGeneration = 0;
 
   AnimeEpisodeRead get _episode => widget.episodes[currentIndex.value];
 
@@ -51,6 +54,13 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       ),
     );
     WidgetsBinding.instance.addObserver(this);
+    _progressSyncer = _WatchProgressSyncer(
+      onSync: (snapshot) => _animeService.updateWatchProgress(
+        animeId: widget.anime.id,
+        episodeId: snapshot.episodeId,
+        position: snapshot.position,
+      ),
+    );
     currentIndex.value = widget.initialEpisode.clamp(
       0,
       widget.episodes.length - 1,
@@ -69,7 +79,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     _disposed = true;
     _progressTimer?.cancel();
     _errorSubscription?.cancel();
-    _saveProgress();
+    unawaited(_saveProgress());
     controller.pause();
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -87,6 +97,11 @@ class _AnimePlayPageState extends State<AnimePlayPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_saveProgress());
+    }
     if (state == AppLifecycleState.resumed &&
         controller.isFullScreen.value &&
         !controller.disposed) {
@@ -99,6 +114,8 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       return;
     }
 
+    final loadGeneration = ++_episodeLoadGeneration;
+    _activeEpisode = null;
     final episode = _episode;
     final shouldResume =
         initial && widget.anime.watchProgress?.episodeId == episode.id;
@@ -122,9 +139,12 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       _showPlayerError(error.toString());
       return;
     }
-    if (_disposed || controller.disposed) {
+    if (_disposed ||
+        controller.disposed ||
+        loadGeneration != _episodeLoadGeneration) {
       return;
     }
+    _activeEpisode = episode;
     try {
       await controller.play();
     } catch (error) {
@@ -142,7 +162,8 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   }
 
   Future<void> _saveProgress() async {
-    if (controller.disposed) {
+    final episode = _activeEpisode;
+    if (controller.disposed || episode == null) {
       return;
     }
 
@@ -150,13 +171,9 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     if (position == Duration.zero) {
       return;
     }
-    try {
-      await _animeService.updateWatchProgress(
-        animeId: widget.anime.id,
-        episodeId: _episode.id,
-        position: position,
-      );
-    } catch (_) {}
+    await _progressSyncer.enqueue(
+      _WatchProgressSnapshot(episodeId: episode.id, position: position),
+    );
   }
 
   @override
@@ -243,6 +260,60 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         ),
       );
     });
+  }
+}
+
+class _WatchProgressSnapshot {
+  const _WatchProgressSnapshot({
+    required this.episodeId,
+    required this.position,
+  });
+
+  final int episodeId;
+  final Duration position;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _WatchProgressSnapshot &&
+        episodeId == other.episodeId &&
+        position.inSeconds == other.position.inSeconds;
+  }
+
+  @override
+  int get hashCode => Object.hash(episodeId, position.inSeconds);
+}
+
+class _WatchProgressSyncer {
+  _WatchProgressSyncer({required this.onSync});
+
+  final Future<void> Function(_WatchProgressSnapshot snapshot) onSync;
+  _WatchProgressSnapshot? _pending;
+  _WatchProgressSnapshot? _lastSynced;
+  Future<void>? _draining;
+
+  Future<void> enqueue(_WatchProgressSnapshot snapshot) {
+    if (snapshot.position == Duration.zero ||
+        snapshot == _pending ||
+        snapshot == _lastSynced) {
+      return _draining ?? Future.value();
+    }
+    _pending = snapshot;
+    return _draining ??= _drain();
+  }
+
+  Future<void> _drain() async {
+    try {
+      while (_pending != null) {
+        final snapshot = _pending!;
+        _pending = null;
+        try {
+          await onSync(snapshot);
+          _lastSynced = snapshot;
+        } catch (_) {}
+      }
+    } finally {
+      _draining = null;
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../features/auth/data/auth_service.dart';
-import '../features/auth/presentation/current_user_controller.dart';
+import '../features/auth/presentation/auth_session.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/setup/presentation/connect_server_page.dart';
@@ -53,19 +53,16 @@ class _StartupPageState extends State<StartupPage> {
       if (result == null) {
         throw StateError('服务器未返回登录信息');
       }
-      await _settingsRepository.saveLogin(
+      await AuthSession.establish(
         serverUrl: serverUrl,
         username: credential.username,
         password: credential.password,
-        accessToken: result.accessToken,
-        permissionGroup: result.permissionGroup,
+        result: result,
         certificateFingerprint: _settingsRepository.getCertificateFingerprint(
           serverUrl,
         ),
         serverName: _settingsRepository.getServerName(serverUrl),
       );
-      CurrentUserController.instance.setPermissionGroup(result.permissionGroup);
-
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }

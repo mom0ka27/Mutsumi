@@ -15,9 +15,11 @@ class BangumiSearchController extends GetxController {
   final loading = false.obs;
   final message = RxnString();
   Timer? _debounce;
+  var _searchGeneration = 0;
 
   @override
   void onClose() {
+    _searchGeneration++;
     _debounce?.cancel();
     queryController.dispose();
     super.onClose();
@@ -25,8 +27,10 @@ class BangumiSearchController extends GetxController {
 
   Future<void> search([String? value]) async {
     final keyword = (value ?? queryController.text).trim();
+    final generation = ++_searchGeneration;
     if (keyword.isEmpty) {
       results.clear();
+      loading.value = false;
       message.value = null;
       return;
     }
@@ -35,14 +39,22 @@ class BangumiSearchController extends GetxController {
     message.value = null;
     try {
       final subjects = await _repository.searchAnime(keyword);
+      if (generation != _searchGeneration || isClosed) {
+        return;
+      }
       results.assignAll(subjects);
       if (subjects.isEmpty) {
         message.value = '没有找到相关番剧';
       }
     } catch (error) {
+      if (generation != _searchGeneration || isClosed) {
+        return;
+      }
       message.value = '搜索失败\n${error.toString()}';
     } finally {
-      loading.value = false;
+      if (generation == _searchGeneration && !isClosed) {
+        loading.value = false;
+      }
     }
   }
 }

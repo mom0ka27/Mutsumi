@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/formatters/duration_formatter.dart';
 import '../../../core/widgets/media_summary_card.dart';
 import '../data/anime_service.dart';
 import 'anime_detail_page.dart';
@@ -41,23 +42,28 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
-              return ListView(
-                padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 0),
-                children: [
-                  Center(child: Text('加载 Anime 失败\n${snapshot.error}')),
-                ],
-              );
+              return Center(child: Text('加载 Anime 失败\n${snapshot.error}'));
             }
 
             final animes = snapshot.data ?? const <AnimeRead>[];
             if (animes.isEmpty) {
               return ListView(
-                padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 0),
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  Constants.topPadding,
+                  24,
+                  Constants.bottomPadding,
+                ),
               );
             }
 
             return ListView.separated(
-              padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                Constants.topPadding,
+                20,
+                Constants.bottomPadding,
+              ),
               itemBuilder: (context, index) =>
                   _AnimeCard(anime: animes[index], onDeleted: _refresh),
               separatorBuilder: (_, _) => const SizedBox(height: 14),
@@ -106,7 +112,7 @@ class _AnimeCard extends StatelessWidget {
           MediaInfoChip(
             icon: Icons.history_rounded,
             label:
-                '上次 ${lastEpisode.index} · ${_formatDuration(progress!.position)}',
+                '上次 ${lastEpisode.index} · ${formatDuration(progress!.position)}',
           ),
       ],
       onTap: () async {
@@ -119,13 +125,4 @@ class _AnimeCard extends StatelessWidget {
       },
     );
   }
-}
-
-String _formatDuration(Duration duration) {
-  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-  if (duration.inHours > 0) {
-    return '${duration.inHours}:$minutes:$seconds';
-  }
-  return '$minutes:$seconds';
 }

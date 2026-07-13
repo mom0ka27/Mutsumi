@@ -6,19 +6,14 @@ import 'package:get/get.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 import 'package:media_kit/media_kit.dart';
 
-class BottomBar extends StatefulWidget {
+class BottomBar extends StatelessWidget {
   final IndexPlayerController controller;
 
   const BottomBar({super.key, required this.controller});
 
   @override
-  State<BottomBar> createState() => _BottomBarState();
-}
-
-class _BottomBarState extends State<BottomBar> {
-  @override
   Widget build(BuildContext context) {
-    var playerState = widget.controller.state;
+    final playerState = controller.state;
     final accentColor = Theme.of(context).colorScheme.primaryFixed;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 32, 8, 6),
@@ -36,7 +31,7 @@ class _BottomBarState extends State<BottomBar> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Obx(
               () => ProgressBar(
-                progress: widget.controller.sliderPostion.value,
+                progress: controller.sliderPostion.value,
                 total: playerState.duration,
                 buffered: playerState.buffer,
                 baseBarColor: Colors.white.withValues(alpha: 0.2),
@@ -47,13 +42,13 @@ class _BottomBarState extends State<BottomBar> {
                 barHeight: 3.0,
                 thumbRadius: 6.5,
                 onDragStart: (d) {
-                  widget.controller.wantSeeking.value = true;
+                  controller.beginSeeking();
                 },
                 onDragUpdate: (d) {
-                  widget.controller.sliderPostion.value = d.timeStamp;
+                  controller.updateSeekingPosition(d.timeStamp);
                 },
                 onSeek: (d) {
-                  widget.controller.seek(d);
+                  controller.endSeeking(d);
                 },
               ),
             ),
@@ -61,8 +56,8 @@ class _BottomBarState extends State<BottomBar> {
           Row(
             children: [
               StreamBuilder(
-                stream: widget.controller.stream.playing,
-                builder: (c, v) => widget.controller.seeking
+                stream: controller.stream.playing,
+                builder: (c, v) => controller.seeking
                     ? Padding(
                         padding: EdgeInsets.symmetric(horizontal: 15),
                         child: SizedBox(
@@ -75,20 +70,14 @@ class _BottomBarState extends State<BottomBar> {
                         ),
                       )
                     : IconButton(
-                        onPressed: () {
-                          if (widget.controller.state.playing) {
-                            widget.controller.pause();
-                          } else {
-                            widget.controller.play();
-                          }
-                        },
+                        onPressed: controller.togglePlayback,
                         icon: Icon(
                           v.data == false ? Icons.play_arrow : Icons.pause,
                           color: Colors.white,
                         ),
                       ),
               ),
-              widget.controller.isFullScreen.value
+              controller.isFullScreen.value
                   ? IconButton(
                       icon: Icon(Icons.skip_next, color: Colors.white),
                       onPressed: () {},
@@ -97,7 +86,7 @@ class _BottomBarState extends State<BottomBar> {
               const SizedBox(width: 10),
               Obx(
                 () => Text(
-                  "${widget.controller.sliderPostion.value.str} / ${playerState.duration.str}",
+                  "${controller.sliderPostion.value.str} / ${playerState.duration.str}",
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Colors.white,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -109,9 +98,9 @@ class _BottomBarState extends State<BottomBar> {
                 () => Semantics(
                   label: '弹幕',
                   button: true,
-                  selected: widget.controller.enableDanmaku.value,
+                  selected: controller.enableDanmaku.value,
                   child: InkWell(
-                    onTap: widget.controller.toggleDanmaku,
+                    onTap: controller.toggleDanmaku,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
                       padding: const EdgeInsets.symmetric(
@@ -119,7 +108,7 @@ class _BottomBarState extends State<BottomBar> {
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: widget.controller.enableDanmaku.value
+                        color: controller.enableDanmaku.value
                             ? Colors.white
                             : Colors.white.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(18),
@@ -127,7 +116,7 @@ class _BottomBarState extends State<BottomBar> {
                       child: Text(
                         '弹',
                         style: TextStyle(
-                          color: widget.controller.enableDanmaku.value
+                          color: controller.enableDanmaku.value
                               ? Colors.black
                               : Colors.white,
                           fontWeight: FontWeight.w700,
@@ -139,11 +128,11 @@ class _BottomBarState extends State<BottomBar> {
               ),
               SizedBox(width: 8),
               StreamBuilder<Tracks>(
-                stream: widget.controller.stream.tracks,
-                initialData: widget.controller.state.tracks,
+                stream: controller.stream.tracks,
+                initialData: controller.state.tracks,
                 builder: (context, tracksSnapshot) => StreamBuilder<Track>(
-                  stream: widget.controller.stream.track,
-                  initialData: widget.controller.state.track,
+                  stream: controller.stream.track,
+                  initialData: controller.state.track,
                   builder: (context, trackSnapshot) {
                     final tracks = (tracksSnapshot.data?.subtitle ?? const [])
                         .where((track) => track.id != 'auto')
@@ -154,7 +143,7 @@ class _BottomBarState extends State<BottomBar> {
                       enabled: tracks.isNotEmpty,
                       color: Colors.black.withValues(alpha: 0.9),
                       position: PopupMenuPosition.over,
-                      onSelected: widget.controller.setSubtitleTrack,
+                      onSelected: controller.setSubtitleTrack,
                       itemBuilder: (context) => tracks
                           .map(
                             (track) => PopupMenuItem(
@@ -200,17 +189,17 @@ class _BottomBarState extends State<BottomBar> {
               IconButton(
                 icon: Obx(
                   () => Icon(
-                    widget.controller.isFullScreen.value
+                    controller.isFullScreen.value
                         ? Icons.fullscreen_exit
                         : Icons.fullscreen,
                     color: Colors.white,
                   ),
                 ),
                 onPressed: () async {
-                  if (widget.controller.isFullScreen.value) {
-                    widget.controller.exitFullscreen();
+                  if (controller.isFullScreen.value) {
+                    controller.exitFullscreen();
                   } else {
-                    widget.controller.enterFullscreen();
+                    controller.enterFullscreen();
                   }
                 },
               ),

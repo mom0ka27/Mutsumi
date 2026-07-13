@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/widgets/app_form_widgets.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import 'connect_server_controller.dart';
@@ -101,68 +102,42 @@ class ConnectServerPage extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextField(
+                    AppTextField(
                       controller: controller.hostController,
-                      decoration: const InputDecoration(
-                        labelText: 'IP 地址或域名',
-                        prefixIcon: Icon(Icons.dns_outlined),
-                        border: OutlineInputBorder(),
-                      ),
+                      label: 'IP 地址或域名',
+                      prefixIcon: const Icon(Icons.dns_outlined),
                       keyboardType: TextInputType.url,
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+                    AppTextField(
                       controller: controller.portController,
-                      decoration: const InputDecoration(
-                        labelText: '端口',
-                        hintText: '例如：12091',
-                        prefixIcon: Icon(Icons.tag),
-                        border: OutlineInputBorder(),
-                      ),
+                      label: '端口',
+                      hintText: '例如：12091',
+                      prefixIcon: const Icon(Icons.tag),
                       keyboardType: TextInputType.number,
                     ),
                     if (controller.scheme.value == 'https') ...[
                       const SizedBox(height: 12),
-                      TextField(
+                      AppTextField(
                         controller: controller.certificateFingerprintController,
-                        decoration: const InputDecoration(
-                          labelText: '证书 SHA-256 指纹（可选）',
-                          prefixIcon: Icon(Icons.fingerprint),
-                          border: OutlineInputBorder(),
-                        ),
+                        label: '证书 SHA-256 指纹（可选）',
+                        prefixIcon: const Icon(Icons.fingerprint),
                         keyboardType: TextInputType.text,
                       ),
                     ],
                     const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: controller.checking.value
-                          ? null
-                          : controller.checkSetupStatus,
-                      icon: controller.checking.value
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.arrow_forward_rounded),
-                      label: Text(
-                        controller.checking.value ? '正在连接...' : '连接并检查',
-                      ),
+                    AsyncFilledButton(
+                      busy: controller.checking.value,
+                      onPressed: controller.checkSetupStatus,
+                      icon: Icons.arrow_forward_rounded,
+                      label: '连接并检查',
+                      busyLabel: '正在连接...',
                     ),
-                    if (controller.message.value != null) ...[
-                      const SizedBox(height: 16),
-                      Card.filled(
-                        color: colorScheme.errorContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            controller.message.value!,
-                            style: TextStyle(
-                              color: colorScheme.onErrorContainer,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    FormStatusMessage(
+                      message: controller.message.value,
+                      isError: true,
+                      topSpacing: 16,
+                    ),
                   ],
                 ),
               ),

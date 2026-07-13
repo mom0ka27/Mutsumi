@@ -41,7 +41,7 @@ class BangumiSearchView extends StatelessWidget {
           }
 
           return SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
+            padding: EdgeInsets.fromLTRB(20, 0, 20, Constants.bottomPadding),
             sliver: SliverList.separated(
               itemBuilder: (context, index) {
                 final subject = controller.results[index];

@@ -120,10 +120,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       if (_error.value != null && _tasks.isEmpty) {
         return RefreshIndicator(
           onRefresh: _refresh,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 0),
-            children: [Center(child: Text('加载下载任务失败\n${_error.value}'))],
-          ),
+          child: Center(child: Text('加载下载任务失败\n${_error.value}')),
         );
       }
       final tasks = _tasks
@@ -137,7 +134,12 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       return RefreshIndicator(
         onRefresh: _refresh,
         child: ListView.separated(
-          padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            Constants.topPadding,
+            20,
+            Constants.bottomPadding,
+          ),
           itemCount: tasks.length + 1,
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {

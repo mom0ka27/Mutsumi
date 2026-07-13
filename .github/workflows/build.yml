@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+    env:
+      FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+      ARTIFACT_NAME: Mutsumi-${{ github.sha }}
     permissions:
       contents: read
     steps:
@@ -19,23 +22,32 @@ jobs:
           git checkout --detach FETCH_HEAD
       - name: Install Flutter
         run: |
-          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = releases["current_release"]["stable"]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))')"
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
           echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
-      - name: Restore dependency caches
+      - name: Restore Pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
+      - name: Restore Gradle cache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.pub-cache
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-flutter-${{ hashFiles('.metadata') }}-deps-${{ hashFiles('pubspec.lock', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-${{ hashFiles('.metadata') }}-deps-
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
+      - name: Restore CocoaPods cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ios/Pods
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pods-${{ hashFiles('pubspec.lock', 'ios/Podfile.lock') }}
       - name: Get dependencies
         run: |
-          flutter pub get
+          flutter pub get --enforce-lockfile
       - name: Build Android ARM64 APK
         env:
           DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
@@ -58,21 +70,12 @@ jobs:
         run: |
           mkdir -p build/server
           zip -qry build/server/mutsumi-server.zip server -x 'server/config.yaml'
-      - name: Upload Android APK
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mutsumi-android-apk
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          if-no-files-found: error
-      - name: Upload iOS IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: mutsumi-ios-ipa
-          path: build/ios/ipa/Runner.ipa
-          if-no-files-found: error
-      - name: Upload server package
-        uses: actions/upload-artifact@v4
-        with:
-          name: mutsumi-server
-          path: build/server/mutsumi-server.zip
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/ios/ipa/Runner.ipa
+            build/server/mutsumi-server.zip
           if-no-files-found: error

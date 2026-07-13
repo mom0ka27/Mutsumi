@@ -53,6 +53,7 @@ class _HomePageState extends State<HomePage> {
             const SettingsHomeView(),
           ],
         ),
+        statusBarStyle: GlassStatusBarStyle.auto,
         background: const AppGlassBackground(),
         bottomBar: GlassTabBar.bottom(
           selectedIndex: selectedIndex,

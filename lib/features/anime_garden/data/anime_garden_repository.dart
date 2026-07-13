@@ -1,21 +1,11 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 
 import '../../../core/logging/app_logger.dart';
+import '../../../core/network/external_api_dio.dart';
 
 class AnimeGardenRepository {
-  AnimeGardenRepository()
-    : _dio = Dio(
-        BaseOptions(
-          baseUrl: 'https://api.animes.garden',
-          headers: {
-            'accept': 'application/json',
-            'content-type': 'application/json',
-            'user-agent': "mom0ka27/Mutsumi/1.0.0(${Platform.operatingSystem})",
-          },
-        ),
-      );
+  AnimeGardenRepository({Dio? dio})
+    : _dio = dio ?? createExternalApiDio('https://api.animes.garden');
 
   final Dio _dio;
 
@@ -109,7 +99,7 @@ class AnimeGardenResourceFile {
 }
 
 class AnimeGardenResource {
-  const AnimeGardenResource({
+  AnimeGardenResource({
     required this.id,
     required this.provider,
     required this.providerId,
@@ -121,7 +111,7 @@ class AnimeGardenResource {
     required this.fansubName,
     required this.publisherName,
     required this.createdAt,
-  });
+  }) : normalizedTitle = title.toLowerCase();
 
   factory AnimeGardenResource.fromJson(Map<String, dynamic> json) {
     final fansub = json['fansub'];
@@ -157,6 +147,8 @@ class AnimeGardenResource {
   final String fansubName;
   final String publisherName;
   final DateTime? createdAt;
+
+  final String normalizedTitle;
 
   String get displaySize {
     if (size <= 0) {

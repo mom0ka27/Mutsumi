@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../data/anime_garden_download_coordinator.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_episode_match_page.dart';
 
@@ -11,21 +12,20 @@ class AnimeGardenDownloadController extends GetxController {
   AnimeGardenDownloadController({
     required this.subject,
     AnimeGardenRepository? repository,
-    AnimeService? animeService,
-    BangumiRepository? bangumiRepository,
+    AnimeGardenDownloadCoordinator? downloadCoordinator,
   }) : _repository = repository ?? AnimeGardenRepository(),
-       _animeService = animeService ?? AnimeService(),
-       _bangumiRepository = bangumiRepository ?? BangumiRepository() {
+       _downloadCoordinator =
+           downloadCoordinator ?? AnimeGardenDownloadCoordinator() {
     keywordController.text = subject.name;
   }
 
   final BangumiSubject subject;
   final AnimeGardenRepository _repository;
-  final AnimeService _animeService;
-  final BangumiRepository _bangumiRepository;
+  final AnimeGardenDownloadCoordinator _downloadCoordinator;
   final keywordController = TextEditingController();
   final scrollController = ScrollController();
   final results = <AnimeGardenResource>[].obs;
+  final filteredResults = <AnimeGardenResource>[].obs;
   final loading = false.obs;
   final loadingMore = false.obs;
   final hasMore = true.obs;
@@ -35,16 +35,9 @@ class AnimeGardenDownloadController extends GetxController {
   final addingResourceIds = <int>{}.obs;
   final message = RxnString();
   int _page = 1;
+  var _searchGeneration = 0;
 
   bool get addingAnime => addingResourceIds.isNotEmpty;
-
-  List<AnimeGardenResource> get filteredResults {
-    return results.where((resource) {
-      return _matchesSize(resource) &&
-          _matchesResolution(resource) &&
-          _matchesCodec(resource);
-    }).toList();
-  }
 
   @override
   void onInit() {
@@ -55,6 +48,7 @@ class AnimeGardenDownloadController extends GetxController {
 
   @override
   void onClose() {
+    _searchGeneration++;
     scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -64,29 +58,42 @@ class AnimeGardenDownloadController extends GetxController {
 
   Future<void> search() async {
     final keyword = keywordController.text.trim();
+    final generation = ++_searchGeneration;
     if (keyword.isEmpty) {
       results.clear();
+      filteredResults.clear();
       hasMore.value = false;
+      loading.value = false;
       message.value = '请输入动漫名';
       return;
     }
 
     _page = 1;
     results.clear();
+    filteredResults.clear();
     hasMore.value = true;
     loading.value = true;
     message.value = null;
     try {
       final result = await _repository.searchResources(keyword, page: _page);
+      if (generation != _searchGeneration || isClosed) {
+        return;
+      }
       results.assignAll(result.resources);
+      _updateFilteredResults();
       hasMore.value = !result.complete;
       if (result.resources.isEmpty) {
         message.value = '没有找到下载资源';
       }
     } catch (error) {
+      if (generation != _searchGeneration || isClosed) {
+        return;
+      }
       message.value = '检索失败\n${error.toString()}';
     } finally {
-      loading.value = false;
+      if (generation == _searchGeneration && !isClosed) {
+        loading.value = false;
+      }
     }
   }
 
@@ -101,16 +108,26 @@ class AnimeGardenDownloadController extends GetxController {
     }
 
     loadingMore.value = true;
+    final generation = _searchGeneration;
     try {
       final nextPage = _page + 1;
       final result = await _repository.searchResources(keyword, page: nextPage);
+      if (generation != _searchGeneration || isClosed) {
+        return;
+      }
       _page = nextPage;
       results.addAll(result.resources);
+      _updateFilteredResults();
       hasMore.value = !result.complete;
     } catch (error) {
+      if (generation != _searchGeneration || isClosed) {
+        return;
+      }
       await showErrorDialog(title: '加载失败', message: error.toString());
     } finally {
-      loadingMore.value = false;
+      if (generation == _searchGeneration && !isClosed) {
+        loadingMore.value = false;
+      }
     }
   }
 
@@ -121,18 +138,16 @@ class AnimeGardenDownloadController extends GetxController {
 
     addingResourceIds.add(resource.id);
     try {
-      final files = await _animeService.pollTorrentFiles(resource.downloadLink);
-      if (files.isEmpty) {
-        throw StateError('qBittorrent 暂未返回文件列表');
-      }
-
-      final bangumiEpisodes = await _bangumiRepository.getEpisodes(subject.id);
+      final context = await _downloadCoordinator.prepareEpisodeMatching(
+        subject: subject,
+        resource: resource,
+      );
       await Get.to(
         () => AnimeGardenEpisodeMatchPage(
           subject: subject,
           resource: resource,
-          files: files,
-          bangumiEpisodes: bangumiEpisodes,
+          files: context.files,
+          bangumiEpisodes: context.bangumiEpisodes,
         ),
       );
     } catch (error) {
@@ -147,18 +162,32 @@ class AnimeGardenDownloadController extends GetxController {
 
   void setSizeRange(RangeValues value) {
     sizeRange.value = value;
+    _updateFilteredResults();
   }
 
   void toggleResolution(String value) {
     if (!selectedResolutions.remove(value)) {
       selectedResolutions.add(value);
     }
+    _updateFilteredResults();
   }
 
   void toggleCodec(String value) {
     if (!selectedCodecs.remove(value)) {
       selectedCodecs.add(value);
     }
+    _updateFilteredResults();
+  }
+
+  void _updateFilteredResults() {
+    filteredResults.assignAll(
+      results.where(
+        (resource) =>
+            _matchesSize(resource) &&
+            _matchesResolution(resource) &&
+            _matchesCodec(resource),
+      ),
+    );
   }
 
   bool _matchesSize(AnimeGardenResource resource) {
@@ -174,7 +203,7 @@ class AnimeGardenDownloadController extends GetxController {
     if (selectedResolutions.isEmpty) {
       return true;
     }
-    final title = resource.title.toLowerCase();
+    final title = resource.normalizedTitle;
     return selectedResolutions.any((resolution) {
       return switch (resolution) {
         '1080p' => title.contains('1080p') || title.contains('1920x1080'),
@@ -195,7 +224,7 @@ class AnimeGardenDownloadController extends GetxController {
     if (selectedCodecs.isEmpty) {
       return true;
     }
-    final title = resource.title.toLowerCase();
+    final title = resource.normalizedTitle;
     return selectedCodecs.any((codec) {
       return switch (codec) {
         'H.264/AVC' =>

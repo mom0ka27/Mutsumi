@@ -3,9 +3,11 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app/mutsumi_app.dart';
+import 'core/appearance/appearance_settings_repository.dart';
 import 'core/logging/app_logger.dart';
 import 'core/storage/local_storage.dart';
 import 'core/widgets/app_glass_background.dart';
+import 'features/settings/data/settings_repository.dart';
 import 'player/player.dart';
 
 late final PackageInfo packageInfo;
@@ -15,6 +17,10 @@ Future<void> main() async {
   IndexPlayer.init();
   packageInfo = await PackageInfo.fromPlatform();
   await LocalStorage.init();
+  await SettingsRepository.migrate();
+  await AppearanceSettingsRepository.migrateBackgroundImagePath(
+    LocalStorage.applicationSupportPath,
+  );
   AppearanceController.instance;
   await LiquidGlassWidgets.initialize();
   AppLogger.info(

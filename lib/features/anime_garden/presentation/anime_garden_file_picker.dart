@@ -46,6 +46,8 @@ class AnimeGardenFileField extends StatelessWidget {
           style: value.isEmpty
               ? textTheme.bodyMedium?.copyWith(color: colorScheme.outline)
               : textTheme.bodyMedium,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

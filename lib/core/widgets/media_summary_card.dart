@@ -128,8 +128,9 @@ class _CoverImage extends StatelessWidget {
         ),
       );
     }
-    final cacheWidth = AppImageCache.dimension(context, 128);
-    final cacheHeight = AppImageCache.dimension(context, 192);
+    final cacheWidth = AppImageCache.dimension(context, 180);
+    final cacheHeight = AppImageCache.dimension(context, 252);
+
     final image = ClipRRect(
       borderRadius: BorderRadius.all(Constants.radius),
       child: CachedNetworkImage(

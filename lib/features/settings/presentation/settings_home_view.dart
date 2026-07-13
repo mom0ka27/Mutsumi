@@ -133,7 +133,12 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
     final colors = Theme.of(context).colorScheme;
     final glassSettings = AppGlassSettings.standard(context);
     return ListView(
-      padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 0),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        Constants.topPadding,
+        20,
+        Constants.bottomPadding,
+      ),
       children: [
         GlassCard(
           useOwnLayer: true,

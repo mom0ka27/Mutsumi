@@ -5,6 +5,7 @@ import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../data/anime_garden_download_coordinator.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_file_picker.dart';
 
@@ -39,15 +40,16 @@ class AnimeGardenEpisodeMatchController extends GetxController {
     required this.resource,
     required List<QBittorrentFile> files,
     required List<BangumiEpisode> bangumiEpisodes,
-    AnimeService? animeService,
-  }) : _animeService = animeService ?? AnimeService() {
+    AnimeGardenDownloadCoordinator? downloadCoordinator,
+  }) : _downloadCoordinator =
+           downloadCoordinator ?? AnimeGardenDownloadCoordinator() {
     _files.addAll(files);
     _bangumiEpisodes.addAll(bangumiEpisodes);
   }
 
   final BangumiSubject subject;
   final AnimeGardenResource resource;
-  final AnimeService _animeService;
+  final AnimeGardenDownloadCoordinator _downloadCoordinator;
   final _files = <QBittorrentFile>[];
   final _bangumiEpisodes = <BangumiEpisode>[];
   final matches = <EpisodeFileMatch>[].obs;
@@ -145,16 +147,13 @@ class AnimeGardenEpisodeMatchController extends GetxController {
 
     saving.value = true;
     try {
-      final hash = await _animeService.downloadTorrentFiles(
-        source: resource.downloadLink,
-        filenames: episodes.map((episode) => episode.filename).toSet().toList(),
-      );
-      await _animeService.createAnime(
+      await _downloadCoordinator.submitEpisodeSelection(
         subject: subject,
-        downloadHash: hash,
+        resource: resource,
         episodes: episodes,
       );
       Get
+        ..back()
         ..back()
         ..snackbar('已添加', 'Anime、BT 任务和 Episode 已保存到服务器');
     } catch (error) {
@@ -216,41 +215,27 @@ class AnimeGardenEpisodeMatchController extends GetxController {
   }
 
   void _buildDefaultMatches() {
-    final sortedFiles =
-        videoFiles
-            .where((file) => file.size > 1024 * 1024 * 10)
-            .toList() // 过滤掉小于 10MB 的文件
-          ..sort((a, b) => a.name.compareTo(b.name));
+    final sortedFiles = videoFiles
+        .where((file) => file.size > 1024 * 1024 * 10)
+        .toList();
     final defaultMatches = <EpisodeFileMatch>[];
-    for (var i = 0; i < _bangumiEpisodes.length; i++) {
-      final episode = _bangumiEpisodes[i];
-      // final fallbackIndex = i + 1;
-      // final index = episode.index == 0 ? fallbackIndex : episode.index;
-      // defaultMatches.add(
-      //   EpisodeFileMatch(
-      //     index: index,
-      //     name: episode.displayName,
-      //     filename: i < sortedFiles.length ? sortedFiles[i].name : '',
-      //     bangumiEpisode: episode,
-      //   ),
-      // );
-      String filename = '';
-      if (episode.index != 0) {
-        final targetFiles = sortedFiles.where(
-          (file) => beautifyFilename(
-            file.name,
-          ).contains(episode.index.toString().padLeft(2, '0')),
-        );
-        if (targetFiles.length == 1) {
-          filename = targetFiles.first.name;
-        }
-      }
+    for (final episode in _bangumiEpisodes) {
+      final targetFiles = episode.index == 0
+          ? const <QBittorrentFile>[]
+          : sortedFiles
+                .where(
+                  (file) => _matchesEpisodeIndex(
+                    file.name.split('/').last,
+                    episode.index,
+                  ),
+                )
+                .toList();
 
       defaultMatches.add(
         EpisodeFileMatch(
           index: episode.index,
           name: episode.displayName,
-          filename: filename,
+          filename: targetFiles.length == 1 ? targetFiles.single.name : '',
           bangumiEpisode: episode,
         ),
       );
@@ -271,25 +256,20 @@ class AnimeGardenEpisodeMatchController extends GetxController {
     matches.assignAll(defaultMatches);
   }
 
-  String beautifyFilename(String filename) {
-    final blacklist = [
-      "1080p",
-      "720p",
-      "4k",
-      "2k",
-      "2160p",
-      "1080i",
-      "480p",
-      "360p",
-      "h264",
-      "x264",
-      "h265",
-      "x265",
-    ];
-    for (final b in blacklist) {
-      filename = filename.replaceAll(b, '');
+  bool _matchesEpisodeIndex(String filename, int index) {
+    if (RegExp(
+      r'\b(?:tokuten|pv|ncop|nced)\b',
+      caseSensitive: false,
+    ).hasMatch(filename)) {
+      return false;
     }
-    return filename;
+    final number = index.toString();
+    final paddedNumber = number.padLeft(2, '0');
+    final numbers = number == paddedNumber ? number : '$number|$paddedNumber';
+    return RegExp(
+      '\\[(?:$numbers)\\]|E(?:$numbers)(?![A-Za-z0-9])|\\s(?:$numbers)\\s',
+      caseSensitive: false,
+    ).hasMatch(filename);
   }
 
   int _nextEpisodeIndex() {

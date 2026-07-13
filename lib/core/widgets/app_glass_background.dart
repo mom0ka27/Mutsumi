@@ -7,8 +7,8 @@ import 'package:palette_generator/palette_generator.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../appearance/app_background_preset.dart';
+import '../appearance/appearance_settings_repository.dart';
 import '../storage/local_storage.dart';
-import '../../features/settings/data/settings_repository.dart';
 
 class AppearanceController extends GetxService {
   static AppearanceController get instance {
@@ -18,7 +18,7 @@ class AppearanceController extends GetxService {
     return Get.put(AppearanceController(), permanent: true);
   }
 
-  final _settings = SettingsRepository();
+  final _settings = AppearanceSettingsRepository();
   late final themeMode = _settings.getThemeMode().obs;
   late final backgroundImagePath = RxnString(
     _resolveBackgroundImagePath(_settings.getBackgroundImagePath()),

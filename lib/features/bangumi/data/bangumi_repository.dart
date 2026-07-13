@@ -1,21 +1,11 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 
 import '../../../core/logging/app_logger.dart';
+import '../../../core/network/external_api_dio.dart';
 
 class BangumiRepository {
-  BangumiRepository()
-    : _dio = Dio(
-        BaseOptions(
-          baseUrl: 'https://api.bgm.tv',
-          headers: {
-            'accept': 'application/json',
-            'content-type': 'application/json',
-            'user-agent': "mom0ka27/Mutsumi/1.0.0(${Platform.operatingSystem})",
-          },
-        ),
-      );
+  BangumiRepository({Dio? dio})
+    : _dio = dio ?? createExternalApiDio('https://api.bgm.tv');
 
   final Dio _dio;
 
@@ -25,14 +15,7 @@ class BangumiRepository {
       '/v0/episodes',
       queryParameters: {'subject_id': subjectId, 'limit': 100, 'offset': 0},
     );
-    final data = response.data?['data'];
-    if (data is! List) {
-      return [];
-    }
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(BangumiEpisode.fromJson)
-        .toList();
+    return _parseDataList(response.data, BangumiEpisode.fromJson);
   }
 
   Future<BangumiSubjectDetail> getSubjectDetail(int id) async {
@@ -64,17 +47,20 @@ class BangumiRepository {
       queryParameters: const {'limit': 20, 'offset': 0},
     );
 
-    final data = response.data?['data'];
+    final results = _parseDataList(response.data, BangumiSubject.fromJson);
+    AppLogger.info('搜索完成 count=${results.length}', tag: 'Bangumi');
+    return results;
+  }
+
+  List<T> _parseDataList<T>(
+    Map<String, dynamic>? body,
+    T Function(Map<String, dynamic> json) fromJson,
+  ) {
+    final data = body?['data'];
     if (data is! List) {
       return [];
     }
-
-    final results = data
-        .whereType<Map<String, dynamic>>()
-        .map(BangumiSubject.fromJson)
-        .toList();
-    AppLogger.info('搜索完成 count=${results.length}', tag: 'Bangumi');
-    return results;
+    return data.whereType<Map<String, dynamic>>().map(fromJson).toList();
   }
 }
 
