@@ -9,6 +9,7 @@ from app.schemas.anime import (
 )
 from app.schemas.auth import Token
 from app.schemas.config import QBittorrentConfigRead, QBittorrentConfigUpdate
+from app.schemas.storage import AnimeStorageRead, StorageStatusRead
 from app.schemas.qbittorrent import (
     QBittorrentFileRead,
     QBittorrentTorrentAdd,
@@ -34,6 +35,8 @@ __all__ = [
     "QBittorrentTorrentRead",
     "SetupCreate",
     "SetupStatus",
+    "AnimeStorageRead",
+    "StorageStatusRead",
     "Token",
     "WatchProgressRead",
     "WatchProgressUpdate",

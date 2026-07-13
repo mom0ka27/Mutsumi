@@ -8,7 +8,7 @@ services:
     environment:
       DATABASE_URL: sqlite+aiosqlite:////app/state/mutsumi.db
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      - ./config.yaml:/app/config.yaml
       - server-state:/app/state
       - server-data:/app/data
       - server-logs:/app/logs
