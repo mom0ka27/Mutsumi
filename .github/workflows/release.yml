@@ -27,19 +27,19 @@ jobs:
           unzip -q flutter.zip
           echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
       - name: Restore Pub cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.pub-cache
           key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
       - name: Restore Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
       - name: Restore CocoaPods cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/Library/Caches/CocoaPods
@@ -69,14 +69,23 @@ jobs:
         run: |
           mkdir -p build/server
           zip -qry build/server/mutsumi-server.zip server -x 'server/config.yaml'
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/ios/ipa/Runner.ipa
-            build/server/mutsumi-server.zip
+          name: ${{ env.ARTIFACT_NAME }}-android
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-ios
+          path: build/ios/ipa/Runner.ipa
+          if-no-files-found: error
+      - name: Upload server package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-server
+          path: build/server/mutsumi-server.zip
           if-no-files-found: error
       - name: Create draft release
         env:

@@ -484,10 +484,10 @@ packages:
     dependency: "direct main"
     description:
       name: liquid_glass_widgets
-      sha256: b7ec4f1fa70530a6bd4c948800da4c499afce0eed7cad4ee3382633dd6194cf1
+      sha256: "0641f378af6e69455fe5c57717c8640792ae5ce1201a6e1fbb9733cb40901c22"
       url: "https://pub.dev"
     source: hosted
-    version: "0.19.6"
+    version: "0.21.3"
   logging:
     dependency: transitive
     description:
