@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 from pathlib import Path
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
@@ -15,7 +16,7 @@ from app.schemas import AnimeCreate, AnimeRead, EpisodeRead, WatchProgressRead, 
 from app.api.routes.qbittorrent import delete_torrent
 
 router = APIRouter(prefix="/anime", tags=["anime"])
-
+logger = logging.getLogger(__name__)
 
 @router.get("", response_model=list[AnimeRead])
 async def list_anime(
@@ -189,6 +190,7 @@ async def stream_episode_video(
         raise HTTPException(status_code=404, detail="Episode not found")
 
     file_path = _episode_file_path(anime, episode)
+    logger.info(f"Streaming video from {file_path}")
     if not file_path or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Video file not found")
     return FileResponse(file_path)
@@ -225,7 +227,7 @@ async def _with_watch_progress(
 
 
 def _episode_file_path(anime: Anime, episode: Episode) -> Path | None:
-    download_path = str(config["qbittorrent"].get("download_path") or "").strip()
+    download_path = str(config["storage"].get("data_path") or "").strip()
     if not download_path or not anime.download_hash or not episode.filename:
         return None
 

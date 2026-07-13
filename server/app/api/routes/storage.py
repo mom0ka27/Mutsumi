@@ -25,7 +25,7 @@ async def get_storage_status(session: AsyncSession = Depends(get_session)):
 
 
 def _storage_status(anime: list[Anime]) -> StorageStatusRead:
-    data_path = Path(config["qbittorrent"].get("download_path") or "./data")
+    data_path = Path(config["storage"].get("data_path") or "./data")
     data_path = data_path.expanduser().resolve()
     data_path.mkdir(parents=True, exist_ok=True)
     stat = os.statvfs(data_path)

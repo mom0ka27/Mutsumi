@@ -11,13 +11,15 @@ logging:
   level: DEBUG
   directory: logs
   retention_days: 7
+storage:
+  data_path: ./data
 auth:
   secret_key: NjQ4Dce1GJAtG_XTLVMYqxvaX3QW7bHhKDkZiCBtFwKeVdjgv3CsZAK1_2D_IPgc
   algorithm: HS256
   access_token_expire_minutes: 1440
 qbittorrent:
-  url: http://localhost:1234
+  url: http://localhost:8085
   username: ''
   password: ''
-  download_path: ./data
+  download_path: /volume2/Mutsumi
   share_ratio_limit: 3.0

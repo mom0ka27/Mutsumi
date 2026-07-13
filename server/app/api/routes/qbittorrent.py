@@ -74,6 +74,7 @@ async def download_torrent_files(
             "ratioLimit": str(
                 config["qbittorrent"].get("share_ratio_limit", 3.0)
             ),
+            "firstLastPiecePrio": "true",
         }
         if save_path:
             add_data["savepath"] = save_path
@@ -102,11 +103,29 @@ async def pause_torrent(
     try:
         response = await _qbittorrent_post(
             client,
-            "/api/v2/torrents/pause",
+            "/api/v2/torrents/stop",
             data={"hashes": torrent_hash},
         )
         if response.status_code >= 400 or response.text.strip() == "Fails.":
             raise QBittorrentError(21007, "暂停下载任务失败")
+    finally:
+        await client.aclose()
+
+
+@router.post("/torrents/{torrent_hash}/resume", status_code=204)
+async def resume_torrent(
+    torrent_hash: str,
+    _: User = Depends(require_download_permission),
+):
+    client = await _qbittorrent_client()
+    try:
+        response = await _qbittorrent_post(
+            client,
+            "/api/v2/torrents/start",
+            data={"hashes": torrent_hash},
+        )
+        if response.status_code >= 400 or response.text.strip() == "Fails.":
+            raise QBittorrentError(21011, "继续下载任务失败")
     finally:
         await client.aclose()
 

@@ -26,6 +26,10 @@ class DownloadRepository {
     await _dio().dio.post<void>('$qbittorrentApiPath/torrents/$hash/pause');
   }
 
+  Future<void> resumeTask(String hash) async {
+    await _dio().dio.post<void>('$qbittorrentApiPath/torrents/$hash/resume');
+  }
+
   DioClient _dio() {
     final serverUrl = _settingsRepository.getServerUrl();
     final token = _settingsRepository.getAccessToken(serverUrl);

@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:mutsumi/core/network/dio_client.dart';
+import 'package:mutsumi/features/anime/data/anime_service.dart';
+
 import 'model/danmaku.dart';
 import 'model/option.dart';
 import 'model/video.dart' as models;
@@ -77,6 +80,8 @@ class IndexPlayerController {
         sliderPostion.value = position;
       }
       final danmakuController = _danmakuController;
+      stream.log.listen((log) => print(log));
+      print(AnimeService().authHeaders()['Authorization']);
       final second = position.inSeconds;
       if (_disposed ||
           !enableDanmaku.value ||

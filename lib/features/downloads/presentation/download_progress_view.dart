@@ -31,7 +31,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
   bool _showingError = false;
   bool _appIsResumed = true;
   final _filter = _DownloadFilter.downloading.obs;
-  final _pausing = <String>{}.obs;
+  final _changingTaskState = <String>{}.obs;
 
   @override
   void initState() {
@@ -164,10 +164,15 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
             final task = tasks[index - 1];
             return _DownloadCard(
               task: task,
-              pausing: _pausing.contains(task.hash),
-              onPause: _isPaused(task) || _isCompleted(task)
+              changingTaskState: _changingTaskState.contains(task.hash),
+              onTaskAction: _isCompleted(task)
                   ? null
+                  : _isPaused(task)
+                  ? () => _resume(task)
                   : () => _pause(task),
+              taskAction: _isPaused(task)
+                  ? _DownloadTaskAction.resume
+                  : _DownloadTaskAction.pause,
             );
           },
         ),
@@ -188,29 +193,44 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
   bool _isPaused(DownloadTask task) => task.state == 'pausedDL';
 
   Future<void> _pause(DownloadTask task) async {
-    _pausing.add(task.hash);
+    await _changeTaskState(task, _repository.pauseTask);
+  }
+
+  Future<void> _resume(DownloadTask task) async {
+    await _changeTaskState(task, _repository.resumeTask);
+  }
+
+  Future<void> _changeTaskState(
+    DownloadTask task,
+    Future<void> Function(String hash) action,
+  ) async {
+    _changingTaskState.add(task.hash);
     try {
-      await _repository.pauseTask(task.hash);
+      await action(task.hash);
       await _refresh();
     } catch (error) {
       await _showErrorDialog(error);
     } finally {
-      if (mounted) _pausing.remove(task.hash);
+      if (mounted) _changingTaskState.remove(task.hash);
     }
   }
 }
 
 enum _DownloadFilter { downloading, completed }
 
+enum _DownloadTaskAction { pause, resume }
+
 class _DownloadCard extends StatelessWidget {
   const _DownloadCard({
     required this.task,
-    required this.pausing,
-    required this.onPause,
+    required this.changingTaskState,
+    required this.onTaskAction,
+    required this.taskAction,
   });
   final DownloadTask task;
-  final bool pausing;
-  final VoidCallback? onPause;
+  final bool changingTaskState;
+  final VoidCallback? onTaskAction;
+  final _DownloadTaskAction taskAction;
 
   @override
   Widget build(BuildContext context) {
@@ -246,17 +266,23 @@ class _DownloadCard extends StatelessWidget {
                 '${_bytes(task.downloadSpeed)}/s',
                 style: TextStyle(color: colors.primary),
               ),
-              if (onPause != null) ...[
+              if (onTaskAction != null) ...[
                 const SizedBox(width: 4),
                 IconButton(
-                  tooltip: '暂停',
-                  onPressed: pausing ? null : onPause,
-                  icon: pausing
+                  tooltip: taskAction == _DownloadTaskAction.pause
+                      ? '暂停'
+                      : '继续下载',
+                  onPressed: changingTaskState ? null : onTaskAction,
+                  icon: changingTaskState
                       ? const SizedBox.square(
                           dimension: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.pause_rounded),
+                      : Icon(
+                          taskAction == _DownloadTaskAction.pause
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                        ),
                 ),
               ],
             ],

@@ -83,15 +83,6 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     controller.pause();
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    final brightness = Theme.of(context).brightness;
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarIconBrightness: brightness == Brightness.dark
-            ? Brightness.light
-            : Brightness.dark,
-        statusBarBrightness: brightness,
-      ),
-    );
     super.dispose();
   }
 

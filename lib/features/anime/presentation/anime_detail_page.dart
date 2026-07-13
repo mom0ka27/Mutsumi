@@ -119,27 +119,16 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           ),
           floatingActionButton: anime.episodes.isEmpty
               ? null
-              : GlassButton.custom(
-                  onTap: () => Get.to(
+              : FloatingActionButton.extended(
+                  onPressed: () => Get.to(
                     () => AnimePlayPage(
                       anime: anime,
                       episodes: anime.episodes,
                       initialEpisode: _initialEpisode(anime),
                     ),
                   ),
-                  width: 100,
-                  shape: LiquidRoundedRectangle(
-                    borderRadius: Constants.radius.x,
-                  ),
-                  label: '播放',
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.play_arrow, size: 28),
-                      SizedBox(width: 12),
-                      Text('播放'),
-                    ],
-                  ),
+                  label: Text("播放"),
+                  icon: const Icon(Icons.play_arrow),
                 ),
         );
       },

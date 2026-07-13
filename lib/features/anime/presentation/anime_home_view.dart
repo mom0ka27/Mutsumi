@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/formatters/duration_formatter.dart';
+import '../../../core/network/dio_client.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/media_summary_card.dart';
 import '../data/anime_service.dart';
 import 'anime_detail_page.dart';
@@ -17,17 +21,40 @@ class AnimeHomeView extends StatefulWidget {
 class _AnimeHomeViewState extends State<AnimeHomeView> {
   final _animeService = AnimeService();
   late final Rx<Future<List<AnimeRead>>> _future;
+  var _animes = const <AnimeRead>[];
+  var _showingError = false;
 
   @override
   void initState() {
     super.initState();
-    _future = _animeService.listAnimes().obs;
+    _future = _loadAnimes().obs;
   }
 
   Future<void> _refresh() async {
-    final future = _animeService.listAnimes();
+    final future = _loadAnimes();
     _future.value = future;
     await future;
+  }
+
+  Future<List<AnimeRead>> _loadAnimes() async {
+    try {
+      _animes = await _animeService.listAnimes();
+    } catch (error) {
+      unawaited(_showErrorDialog(error));
+    }
+    return _animes;
+  }
+
+  Future<void> _showErrorDialog(Object error) async {
+    if (_showingError || !mounted) {
+      return;
+    }
+    _showingError = true;
+    final message = error is ApiBusinessException
+        ? error.message
+        : error.toString();
+    await showErrorDialog(title: '加载 Anime 失败', message: message);
+    _showingError = false;
   }
 
   @override
@@ -41,10 +68,6 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (snapshot.hasError) {
-              return Center(child: Text('加载 Anime 失败\n${snapshot.error}'));
-            }
-
             final animes = snapshot.data ?? const <AnimeRead>[];
             if (animes.isEmpty) {
               return ListView(

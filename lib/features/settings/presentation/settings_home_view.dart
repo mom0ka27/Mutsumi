@@ -13,6 +13,7 @@ import '../../setup/presentation/connect_server_page.dart';
 import '../../users/presentation/users_management_page.dart';
 import '../data/settings_repository.dart';
 import 'qbittorrent_settings_view.dart';
+import 'storage_status_page.dart';
 import 'appearance_settings_page.dart';
 import 'saved_servers_page.dart';
 
@@ -272,6 +273,14 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
                   subtitle: const Text('新增、编辑和删除用户'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Get.to(() => const UsersManagementPage()),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.storage_rounded),
+                  title: const Text('存储空间'),
+                  subtitle: const Text('查看 data 文件夹和服务器磁盘容量'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Get.to(() => const StorageStatusPage()),
                 ),
               ],
             ),

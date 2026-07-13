@@ -111,7 +111,6 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        title: Text('创建管理员账户', style: Theme.of(context).textTheme.titleLarge),
         leading: GlassButton(
           width: 40,
           height: 40,
@@ -120,27 +119,21 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
           label: '返回',
           onTap: Get.back,
         ),
-        centerTitle: false,
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 '创建管理员账户',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Text(
-                '服务器未初始化，请设置服务器名称并创建第一个管理员账户。',
+                '服务器未初始化\n请设置服务器名称并创建第一个管理员账户。',
                 style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '服务器地址：${widget.serverUrl}',
-                style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 24),
               AppTextField(controller: _serverNameController, label: '服务器名称'),

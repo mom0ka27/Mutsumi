@@ -23,6 +23,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "directory": "logs",
         "retention_days": 7,
     },
+    "storage": {
+        "data_path": "./data",
+    },
     "auth": {
         "secret_key": None,
         "algorithm": "HS256",

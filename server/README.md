@@ -10,6 +10,8 @@
 
 2. 编辑 `config.yaml`，至少将 `auth.secret_key` 替换为安全的随机值；若 qBittorrent 在宿主机运行，macOS 和 Windows 可将 `qbittorrent.url` 设为 `http://host.docker.internal:1234`。
 
+   `storage.data_path` 是 Mutsumi Server 容器内用于统计动画文件夹大小的路径，Docker 默认使用 `./data`（即 `/app/data`）；`qbittorrent.download_path` 是传给 qBittorrent 的保存路径，两者可因独立部署或挂载路径不同而分别配置。
+
 3. 构建并在后台启动：
 
    ```bash

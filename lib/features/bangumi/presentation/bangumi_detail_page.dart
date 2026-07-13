@@ -82,24 +82,16 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
                       ),
                   ],
                 ),
-          floatingActionButton: GlassButton.custom(
-            onTap: () => Get.to(
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => Get.to(
               () => AnimeGardenDownloadPage(
                 subject: subject,
                 backgroundImageUrl: subject.imageUrl,
               ),
             ),
-            width: 100,
             shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
-            label: '下载',
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.download_rounded, size: 24),
-                SizedBox(width: 12),
-                Text('下载'),
-              ],
-            ),
+            label: Text("下载"),
+            icon: const Icon(Icons.download_rounded),
           ),
         );
       },
