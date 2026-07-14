@@ -39,7 +39,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   late final _WatchProgressSyncer _progressSyncer;
   bool _disposed = false;
   bool _showingError = false;
-  AnimeEpisodeRead? _activeEpisode;
+  // AnimeEpisodeRead? _activeEpisode;
   var _episodeLoadGeneration = 0;
 
   AnimeEpisodeRead get _episode => widget.episodes[currentIndex.value];
@@ -61,12 +61,12 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         position: snapshot.position,
       ),
     );
-    currentIndex.value = widget.initialEpisode.clamp(
-      0,
-      widget.episodes.length - 1,
+    unawaited(
+      _setCurrentEpisode(
+        widget.initialEpisode.clamp(0, widget.episodes.length - 1),
+        initial: true,
+      ),
     );
-    currentIndex.listen((_) => _setCurrentEpisode());
-    _setCurrentEpisode(initial: true);
     _errorSubscription = controller.stream.error.listen(_showPlayerError);
     _progressTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -100,19 +100,24 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     }
   }
 
-  Future<void> _setCurrentEpisode({bool initial = false}) async {
+  Future<void> _setCurrentEpisode(int index, {bool initial = false}) async {
     if (_disposed || controller.disposed) {
       return;
     }
-
+    currentIndex.value = index;
     final loadGeneration = ++_episodeLoadGeneration;
-    _activeEpisode = null;
     final episode = _episode;
     final shouldResume =
         initial && widget.anime.watchProgress?.episodeId == episode.id;
+    String? fileHash;
+    fileHash = await _animeService.fetchEpisodeFileHash(
+      widget.anime.id,
+      episode.id,
+    );
     try {
       await controller.setVideo(
         NetworkVideo(
+          index: episode.index,
           uri: _animeService.episodeVideoUrl(
             animeId: widget.anime.id,
             episodeId: episode.id,
@@ -120,7 +125,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
           title: episode.displayName,
           httpHeaders: _animeService.authHeaders(),
           danmakuProvider: DandanPlayDanmakuProvider(
-            fileHash: episode.fileHash,
+            fileHash: fileHash,
             fileName: episode.filename,
             airDate: widget.anime.airDate,
           ),
@@ -136,7 +141,6 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         loadGeneration != _episodeLoadGeneration) {
       return;
     }
-    _activeEpisode = episode;
     try {
       await controller.play();
     } catch (error) {
@@ -154,10 +158,10 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   }
 
   Future<void> _saveProgress() async {
-    final episode = _activeEpisode;
-    if (controller.disposed || episode == null) {
+    if (controller.disposed) {
       return;
     }
+    final episode = widget.anime.episodes[currentIndex.value];
 
     final position = controller.state.position;
     if (position == Duration.zero) {
@@ -165,6 +169,10 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     }
     await _progressSyncer.enqueue(
       _WatchProgressSnapshot(episodeId: episode.id, position: position),
+    );
+    widget.anime.watchProgress = WatchProgressRead(
+      episodeId: episode.id,
+      position: position,
     );
   }
 
@@ -236,7 +244,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
                                     ? null
                                     : () async {
                                         await _saveProgress();
-                                        currentIndex.value = index;
+                                        _setCurrentEpisode(index);
                                       },
                               ),
                             );

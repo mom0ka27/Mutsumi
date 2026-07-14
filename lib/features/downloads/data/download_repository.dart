@@ -7,6 +7,10 @@ class DownloadRepository {
     : _settingsRepository = settingsRepository ?? SettingsRepository();
 
   final SettingsRepository _settingsRepository;
+  DioClient? _cachedClient;
+  String? _cachedUrl;
+  String? _cachedToken;
+  String? _cachedFingerprint;
 
   Future<List<DownloadTask>> listTasks() async {
     final response = await _dio().dio.get<dynamic>(
@@ -36,13 +40,23 @@ class DownloadRepository {
     if (serverUrl.isEmpty || token == null || token.isEmpty) {
       throw StateError('请先连接并登录服务器');
     }
-    return DioClient(
+    final fingerprint = _settingsRepository.getCertificateFingerprint(
       serverUrl,
-      certificateSha256: _settingsRepository.getCertificateFingerprint(
-        serverUrl,
-      ),
-      accessToken: token,
     );
+    if (_cachedClient == null ||
+        _cachedUrl != serverUrl ||
+        _cachedToken != token ||
+        _cachedFingerprint != fingerprint) {
+      _cachedClient = DioClient(
+        serverUrl,
+        certificateSha256: fingerprint,
+        accessToken: token,
+      );
+      _cachedUrl = serverUrl;
+      _cachedToken = token;
+      _cachedFingerprint = fingerprint;
+    }
+    return _cachedClient!;
   }
 }
 

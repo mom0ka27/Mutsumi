@@ -7,6 +7,10 @@ class UsersRepository {
     : _settings = settingsRepository ?? SettingsRepository();
 
   final SettingsRepository _settings;
+  DioClient? _cachedClient;
+  String? _cachedUrl;
+  String? _cachedToken;
+  String? _cachedFingerprint;
 
   Future<List<ManagedUser>> listUsers() async {
     final response = await _client().dio.get<List<dynamic>>(usersApiPath);
@@ -52,11 +56,22 @@ class UsersRepository {
 
   DioClient _client() {
     final url = _settings.getServerUrl();
-    return DioClient(
-      url,
-      certificateSha256: _settings.getCertificateFingerprint(url),
-      accessToken: _settings.getAccessToken(url),
-    );
+    final token = _settings.getAccessToken(url);
+    final fingerprint = _settings.getCertificateFingerprint(url);
+    if (_cachedClient == null ||
+        _cachedUrl != url ||
+        _cachedToken != token ||
+        _cachedFingerprint != fingerprint) {
+      _cachedClient = DioClient(
+        url,
+        certificateSha256: fingerprint,
+        accessToken: token,
+      );
+      _cachedUrl = url;
+      _cachedToken = token;
+      _cachedFingerprint = fingerprint;
+    }
+    return _cachedClient!;
   }
 }
 

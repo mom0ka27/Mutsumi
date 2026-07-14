@@ -188,15 +188,10 @@ class _PlayerControlsOverlay extends StatelessWidget {
     return Align(
       alignment: alignment,
       child: Obx(
-        () => Padding(
-          padding: controller.isFullScreen.value
-              ? const EdgeInsets.symmetric(horizontal: 40)
-              : EdgeInsets.zero,
-          child: AnimatedOpacity(
-            opacity: visible.value ? 1 : 0,
-            duration: const Duration(milliseconds: 150),
-            child: IgnorePointer(ignoring: !visible.value, child: child),
-          ),
+        () => AnimatedOpacity(
+          opacity: visible.value ? 1 : 0,
+          duration: const Duration(milliseconds: 150),
+          child: IgnorePointer(ignoring: !visible.value, child: child),
         ),
       ),
     );

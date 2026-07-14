@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,16 +41,23 @@ async def change_password(
 ):
     if not payload.new_password:
         raise HTTPException(status_code=422, detail="New password cannot be empty")
-    if not verify_password(payload.current_password, current_user.password_hash):
+    if not await verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
-    current_user.password_hash = get_password_hash(payload.new_password)
+    current_user.password_hash = await get_password_hash(payload.new_password)
+    current_user.token_version += 1
     await session.commit()
 
 
 @router.get("", response_model=list[UserRead], dependencies=[Depends(require_admin)])
-async def list_users(session: AsyncSession = Depends(get_session)):
-    result = await session.scalars(select(User).order_by(User.id))
+async def list_users(
+    session: AsyncSession = Depends(get_session),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
+):
+    result = await session.scalars(
+        select(User).order_by(User.id).offset(skip).limit(limit)
+    )
     return list(result)
 
 
@@ -70,7 +77,7 @@ async def create_user(
 
     user = User(
         username=payload.username,
-        password_hash=get_password_hash(payload.password),
+        password_hash=await get_password_hash(payload.password),
         permission_group=payload.permission_group,
     )
     session.add(user)
@@ -106,7 +113,7 @@ async def update_user(
         user.username = payload.username
 
     if payload.password is not None:
-        user.password_hash = get_password_hash(payload.password)
+        user.password_hash = await get_password_hash(payload.password)
 
     if payload.permission_group is not None:
         user.permission_group = payload.permission_group

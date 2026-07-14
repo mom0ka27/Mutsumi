@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mutsumi/constants.dart';
 
-import '../../../core/formatters/duration_formatter.dart';
+import '../../../player/extension/duration.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/media_summary_card.dart';
@@ -20,29 +20,25 @@ class AnimeHomeView extends StatefulWidget {
 
 class _AnimeHomeViewState extends State<AnimeHomeView> {
   final _animeService = AnimeService();
-  late final Rx<Future<List<AnimeRead>>> _future;
-  var _animes = const <AnimeRead>[];
+  final _animes = <AnimeRead>[].obs;
+  final _isLoading = true.obs;
   var _showingError = false;
 
   @override
   void initState() {
     super.initState();
-    _future = _loadAnimes().obs;
+    _refresh();
   }
 
   Future<void> _refresh() async {
-    final future = _loadAnimes();
-    _future.value = future;
-    await future;
-  }
-
-  Future<List<AnimeRead>> _loadAnimes() async {
+    _isLoading.value = true;
     try {
-      _animes = await _animeService.listAnimes();
+      _animes.value = await _animeService.listAnimes();
     } catch (error) {
       unawaited(_showErrorDialog(error));
+    } finally {
+      _isLoading.value = false;
     }
-    return _animes;
   }
 
   Future<void> _showErrorDialog(Object error) async {
@@ -59,51 +55,43 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => RefreshIndicator(
+    return Obx(() {
+      if (_isLoading.value) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return RefreshIndicator(
         onRefresh: _refresh,
-        child: FutureBuilder<List<AnimeRead>>(
-          future: _future.value,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final animes = snapshot.data ?? const <AnimeRead>[];
-            if (animes.isEmpty) {
-              return ListView(
+        child: _animes.isEmpty
+            ? ListView(
                 padding: EdgeInsets.fromLTRB(
                   24,
                   Constants.topPadding,
                   24,
                   Constants.bottomPadding,
                 ),
-              );
-            }
-
-            return ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                Constants.topPadding,
-                20,
-                Constants.bottomPadding,
+              )
+            : ListView.separated(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  Constants.topPadding,
+                  20,
+                  Constants.bottomPadding,
+                ),
+                itemBuilder: (context, index) =>
+                    _AnimeCard(anime: _animes[index], refresh: _refresh),
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                itemCount: _animes.length,
               ),
-              itemBuilder: (context, index) =>
-                  _AnimeCard(anime: animes[index], onDeleted: _refresh),
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemCount: animes.length,
-            );
-          },
-        ),
-      ),
-    );
+      );
+    });
   }
 }
 
 class _AnimeCard extends StatelessWidget {
-  const _AnimeCard({required this.anime, required this.onDeleted});
+  const _AnimeCard({required this.anime, required this.refresh});
 
   final AnimeRead anime;
-  final Future<void> Function() onDeleted;
+  final Future<void> Function() refresh;
 
   @override
   Widget build(BuildContext context) {
@@ -134,8 +122,7 @@ class _AnimeCard extends StatelessWidget {
         if (lastEpisode != null)
           MediaInfoChip(
             icon: Icons.history_rounded,
-            label:
-                '上次 ${lastEpisode.index} · ${formatDuration(progress!.position)}',
+            label: '上次 ${lastEpisode.index} · ${progress!.position.str}',
           ),
       ],
       onTap: () async {
@@ -143,7 +130,7 @@ class _AnimeCard extends StatelessWidget {
           () => AnimeDetailPage(animeId: anime.id, initialAnime: anime),
         );
         if (deleted == true) {
-          await onDeleted();
+          await refresh();
         }
       },
     );

@@ -1,3 +1,6 @@
+import asyncio
+import os
+import stat
 from pathlib import Path
 from secrets import token_urlsafe
 from typing import Any
@@ -52,14 +55,30 @@ def load_config() -> dict[str, Any]:
 
     if not config["auth"].get("secret_key"):
         config["auth"]["secret_key"] = token_urlsafe(48)
-        save_config(config)
+        _save_config_sync(config)
+    else:
+        _ensure_permissions()
 
     return config
 
 
-def save_config(config: dict[str, Any]) -> None:
+async def save_config(config: dict[str, Any]) -> None:
+    await asyncio.to_thread(_save_config_sync, config)
+
+
+def _save_config_sync(config: dict[str, Any]) -> None:
     with CONFIG_PATH.open("w", encoding="utf-8") as file:
         yaml.safe_dump(config, file, sort_keys=False)
+    _ensure_permissions()
+
+
+def _ensure_permissions() -> None:
+    try:
+        current = os.stat(CONFIG_PATH).st_mode
+        if current & stat.S_IRWXG or current & stat.S_IRWXO:
+            os.chmod(CONFIG_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
 
 
 def merge_config(default: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:

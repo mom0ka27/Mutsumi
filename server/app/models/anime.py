@@ -1,5 +1,3 @@
-from operator import index
-
 from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,5 +36,6 @@ class Episode(Base):
     index: Mapped[int] = mapped_column(Integer)
     name: Mapped[str] = mapped_column(String(255), default="")
     filename: Mapped[str] = mapped_column(String(1024), default="")
+    file_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     anime: Mapped[Anime] = relationship(back_populates="episodes")

@@ -3,7 +3,7 @@ import hashlib
 from pathlib import Path
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,9 +22,15 @@ logger = logging.getLogger(__name__)
 async def list_anime(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
 ):
     result = await session.scalars(
-        select(Anime).options(selectinload(Anime.episodes)).order_by(Anime.id)
+        select(Anime)
+        .options(selectinload(Anime.episodes))
+        .order_by(Anime.id)
+        .offset(skip)
+        .limit(limit)
     )
     return await _with_watch_progress(list(result), current_user.id, session)
 
@@ -86,12 +92,6 @@ async def get_anime(
     if not anime:
         raise HTTPException(status_code=404, detail="Anime not found")
     read = (await _with_watch_progress([anime], current_user.id, session))[0]
-    await asyncio.gather(
-        *[
-            _set_episode_file_hash(anime, episode, episode_read)
-            for episode, episode_read in zip(anime.episodes, read.episodes)
-        ]
-    )
     return read
 
 
@@ -106,7 +106,6 @@ async def delete_anime(
 ):
     anime = await session.scalar(
         select(Anime)
-        .options(selectinload(Anime.episodes))
         .where(Anime.id == anime_id)
     )
     if not anime:
@@ -196,6 +195,37 @@ async def stream_episode_video(
     return FileResponse(file_path)
 
 
+@router.get("/{anime_id}/episodes/{episode_id}/file-hash")
+async def get_episode_file_hash(
+    anime_id: int,
+    episode_id: int,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    anime = await session.scalar(select(Anime).where(Anime.id == anime_id))
+    if not anime:
+        raise HTTPException(status_code=404, detail="Anime not found")
+    episode = await session.scalar(
+        select(Episode).where(Episode.id == episode_id, Episode.anime_id == anime_id)
+    )
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    if episode.file_hash:
+        return {"file_hash": episode.file_hash}
+
+    file_path = _episode_file_path(anime, episode)
+    if not file_path or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    file_hash = await asyncio.to_thread(_first_16mb_md5, file_path)
+    if not file_hash:
+        raise HTTPException(status_code=500, detail="Failed to compute file hash")
+    episode.file_hash = file_hash
+    await session.commit()
+    return {"file_hash": file_hash}
+
+
 async def _with_watch_progress(
     animes: list[Anime],
     user_id: int,
@@ -238,17 +268,8 @@ def _episode_file_path(anime: Anime, episode: Episode) -> Path | None:
     return path
 
 
-async def _set_episode_file_hash(
-    anime: Anime,
-    episode: Episode,
-    episode_read: EpisodeRead,
-) -> None:
-    file_path = _episode_file_path(anime, episode)
-    if not file_path or not file_path.is_file():
-        return
-    episode_read.file_hash = await asyncio.to_thread(_first_16mb_md5, file_path)
-
-
-def _first_16mb_md5(file_path: Path) -> str:
+def _first_16mb_md5(file_path: Path) -> str | None:
     with file_path.open("rb") as file:
+        if file_path.stat().st_size < 16 * 1024 * 1024:
+            return None
         return hashlib.md5(file.read(16 * 1024 * 1024)).hexdigest()

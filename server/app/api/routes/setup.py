@@ -30,17 +30,17 @@ async def initialize_server(
 
     if payload.server_name is not None and payload.server_name.strip():
         config["server"]["name"] = payload.server_name.strip()
-        save_config(config)
+        await save_config(config)
 
     user = User(
         username=payload.username,
-        password_hash=get_password_hash(payload.password),
+        password_hash=await get_password_hash(payload.password),
         permission_group=PermissionGroup.ADMIN,
     )
     session.add(user)
     await session.commit()
 
     return Token(
-        access_token=create_access_token(user.username),
+        access_token=create_access_token(user.username, user.token_version),
         permission_group=user.permission_group,
     )

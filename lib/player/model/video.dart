@@ -3,12 +3,14 @@ import 'dart:io';
 import 'danmaku.dart';
 
 class Video {
+  int index;
   String title;
   DanmakuProvider? danmakuProvider;
   String uri;
   String? subtitleUri;
 
   Video({
+    required this.index,
     required this.uri,
     this.subtitleUri,
     required this.title,
@@ -20,6 +22,7 @@ class NetworkVideo extends Video {
   Map<String, String>? httpHeaders;
 
   NetworkVideo({
+    required super.index,
     required super.uri,
     super.subtitleUri,
     required super.title,
@@ -29,6 +32,10 @@ class NetworkVideo extends Video {
 }
 
 class LocalVideo extends Video {
-  LocalVideo({required File file, required super.title, super.danmakuProvider})
-    : super(uri: file.uri.toString());
+  LocalVideo({
+    required super.index,
+    required File file,
+    required super.title,
+    super.danmakuProvider,
+  }) : super(uri: file.uri.toString());
 }

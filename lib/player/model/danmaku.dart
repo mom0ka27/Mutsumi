@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:mutsumi/core/logging/app_logger.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
 
@@ -54,7 +55,7 @@ class DandanPlayDanmakuProvider extends DanmakuProvider {
     }
     AppLogger.info('Loading danmaku for $fileName($hash)');
     try {
-      final result = await DandanPlayRepository.instance.commentsForFile(
+      final result = await Get.find<DandanPlayRepository>().commentsForFile(
         fileHash: hash,
         fileName: fileName,
         airDate: airDate,

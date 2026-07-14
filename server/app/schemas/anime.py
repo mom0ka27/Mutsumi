@@ -19,7 +19,6 @@ class EpisodeRead(BaseModel):
     index: int
     name: str
     filename: str
-    file_hash: str | None = None
 
 
 class WatchProgressUpdate(BaseModel):

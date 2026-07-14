@@ -12,7 +12,6 @@ from app.schemas.config import QBittorrentConfigRead, QBittorrentConfigUpdate
 from app.schemas.storage import AnimeStorageRead, StorageStatusRead
 from app.schemas.qbittorrent import (
     QBittorrentFileRead,
-    QBittorrentTorrentAdd,
     QBittorrentTorrentAddResult,
     QBittorrentTorrentDownload,
     QBittorrentTorrentRead,
@@ -29,7 +28,6 @@ __all__ = [
     "QBittorrentConfigRead",
     "QBittorrentConfigUpdate",
     "QBittorrentFileRead",
-    "QBittorrentTorrentAdd",
     "QBittorrentTorrentAddResult",
     "QBittorrentTorrentDownload",
     "QBittorrentTorrentRead",

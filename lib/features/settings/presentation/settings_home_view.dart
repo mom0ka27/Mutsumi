@@ -26,7 +26,7 @@ class SettingsHomeView extends StatefulWidget {
 
 class _SettingsHomeViewState extends State<SettingsHomeView> {
   final _settings = SettingsRepository();
-  final _currentUser = CurrentUserController.instance;
+  final _currentUser = Get.find<CurrentUserController>();
 
   Future<void> _addAccount() async {
     final account = _settings.getCurrentAccount();

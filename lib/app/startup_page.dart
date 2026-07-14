@@ -36,7 +36,7 @@ class _StartupPageState extends State<StartupPage> {
       return;
     }
 
-    final credential = _settingsRepository.getServerCredential(serverUrl);
+    final credential = await _settingsRepository.getServerCredential(serverUrl);
     if (credential == null) {
       _goToConnectServer();
       return;

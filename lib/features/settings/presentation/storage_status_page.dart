@@ -304,7 +304,7 @@ class _EmptyCard extends StatelessWidget {
     padding: const EdgeInsets.all(24),
     shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
     settings: AppGlassSettings.standard(context),
-    child: const Center(child: Text('data 文件夹为空')),
+    child: const Center(child: Text('无 Anime')),
   );
 }
 

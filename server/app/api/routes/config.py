@@ -34,7 +34,7 @@ async def update_qbittorrent_config(payload: QBittorrentConfigUpdate):
         "download_path": payload.download_path.strip(),
         "share_ratio_limit": payload.share_ratio_limit,
     }
-    save_config(config)
+    await save_config(config)
 
     return QBittorrentConfigRead(
         url=config["qbittorrent"]["url"],

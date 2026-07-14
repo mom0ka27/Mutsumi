@@ -1,3 +1,5 @@
+import 'package:get/get.dart';
+
 import '../../settings/data/settings_repository.dart';
 import '../data/auth_service.dart';
 import 'current_user_controller.dart';
@@ -22,6 +24,6 @@ class AuthSession {
       certificateFingerprint: certificateFingerprint,
       serverName: serverName,
     );
-    CurrentUserController.instance.setPermissionGroup(result.permissionGroup);
+    Get.find<CurrentUserController>().setPermissionGroup(result.permissionGroup);
   }
 }

@@ -88,13 +88,13 @@ class MutsumiApp extends StatelessWidget {
         title: 'Mutsumi',
         theme: _theme(
           Brightness.light,
-          AppearanceController.instance.themeSeedColor.value,
+          Get.find<AppearanceController>().themeSeedColor.value,
         ),
         darkTheme: _theme(
           Brightness.dark,
-          AppearanceController.instance.themeSeedColor.value,
+          Get.find<AppearanceController>().themeSeedColor.value,
         ),
-        themeMode: switch (AppearanceController.instance.themeMode.value) {
+        themeMode: switch (Get.find<AppearanceController>().themeMode.value) {
           AppThemeMode.system => ThemeMode.system,
           AppThemeMode.light => ThemeMode.light,
           AppThemeMode.dark => ThemeMode.dark,

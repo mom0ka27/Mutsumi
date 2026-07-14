@@ -18,7 +18,7 @@ class AppearanceSettingsPage extends StatelessWidget {
 
   Future<void> _selectBackgroundImage(BuildContext context) async {
     try {
-      final selected = await AppearanceController.instance
+      final selected = await Get.find<AppearanceController>()
           .selectBackgroundImage();
       if (!selected || !context.mounted) return;
     } catch (e) {
@@ -33,7 +33,7 @@ class AppearanceSettingsPage extends StatelessWidget {
 
   Future<void> _useWallpaperThemeColor(BuildContext context) async {
     try {
-      final updated = await AppearanceController.instance
+      final updated = await Get.find<AppearanceController>()
           .useWallpaperThemeColor();
       if (!updated && context.mounted) {
         await showErrorDialog(title: '无法取色', message: '请先选择可用的背景图片');
@@ -47,7 +47,7 @@ class AppearanceSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = AppearanceController.instance;
+    final controller = Get.find<AppearanceController>();
     return GlassScaffold(
       enableBackgroundSampling: true,
       extendBody: true,

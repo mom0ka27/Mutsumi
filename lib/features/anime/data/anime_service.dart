@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/dio_client.dart';
-import '../../../player/model/dandanplay_repository.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../settings/data/settings_repository.dart';
 
@@ -12,6 +11,9 @@ class AnimeService {
     : _settingsRepository = settingsRepository ?? SettingsRepository();
 
   final SettingsRepository _settingsRepository;
+  Dio? _cachedDio;
+  String? _cachedUrl;
+  String? _cachedToken;
 
   Future<List<AnimeRead>> listAnimes() async {
     final dio = _serverDio();
@@ -30,18 +32,6 @@ class AnimeService {
       throw StateError('服务器返回了空 Anime');
     }
     return AnimeRead.fromJson(data);
-  }
-
-  Future<void> matchDandanPlayEpisodes(List<AnimeEpisodeRead> episodes) async {
-    await DandanPlayRepository.instance.matchFiles(
-      episodes
-          .where((episode) => episode.fileHash?.isNotEmpty == true)
-          .map(
-            (episode) =>
-                DandanPlayFile(hash: episode.fileHash!, name: episode.filename),
-          )
-          .toList(),
-    );
   }
 
   Future<void> deleteAnime(int id) async {
@@ -76,6 +66,14 @@ class AnimeService {
       return const {};
     }
     return {'Authorization': 'Bearer $accessToken'};
+  }
+
+  Future<String?> fetchEpisodeFileHash(int animeId, int episodeId) async {
+    final dio = _serverDio();
+    final response = await dio.get<Map<String, dynamic>>(
+      '$animeApiPath/$animeId/episodes/$episodeId/file-hash',
+    );
+    return response.data?['file_hash'] as String?;
   }
 
   Future<String> addTorrent(String url) async {
@@ -153,14 +151,20 @@ class AnimeService {
     if (serverUrl.isEmpty || accessToken == null || accessToken.isEmpty) {
       throw StateError('请先连接并登录服务器');
     }
-
-    return DioClient(
-      serverUrl,
-      certificateSha256: _settingsRepository.getCertificateFingerprint(
+    if (_cachedDio == null ||
+        _cachedUrl != serverUrl ||
+        _cachedToken != accessToken) {
+      _cachedDio = DioClient(
         serverUrl,
-      ),
-      accessToken: accessToken,
-    ).dio;
+        certificateSha256: _settingsRepository.getCertificateFingerprint(
+          serverUrl,
+        ),
+        accessToken: accessToken,
+      ).dio;
+      _cachedUrl = serverUrl;
+      _cachedToken = accessToken;
+    }
+    return _cachedDio!;
   }
 }
 
@@ -184,7 +188,6 @@ class AnimeEpisodeRead {
     required this.index,
     required this.name,
     required this.filename,
-    required this.fileHash,
   });
 
   factory AnimeEpisodeRead.fromJson(Map<String, dynamic> json) {
@@ -193,7 +196,6 @@ class AnimeEpisodeRead {
       index: json['index'] as int? ?? 0,
       name: json['name'] as String? ?? '',
       filename: json['filename'] as String? ?? '',
-      fileHash: json['file_hash'] as String?,
     );
   }
 
@@ -201,13 +203,12 @@ class AnimeEpisodeRead {
   final int index;
   final String name;
   final String filename;
-  final String? fileHash;
 
   String get displayName => name.isEmpty ? 'Episode $index' : name;
 }
 
 class AnimeRead {
-  const AnimeRead({
+  AnimeRead({
     required this.id,
     required this.bangumiId,
     required this.name,
@@ -277,7 +278,7 @@ class AnimeRead {
   final List<BangumiInfoItem> infobox;
   final String? downloadHash;
   final List<AnimeEpisodeRead> episodes;
-  final WatchProgressRead? watchProgress;
+  WatchProgressRead? watchProgress;
 
   String get displayName => nameCn.isEmpty ? name : nameCn;
 

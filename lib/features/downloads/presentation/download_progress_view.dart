@@ -185,12 +185,12 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       const {
         'uploading',
         'stalledUP',
-        'pausedUP',
+        'stoppedUP',
         'queuedUP',
         'checkingUP',
       }.contains(task.state);
 
-  bool _isPaused(DownloadTask task) => task.state == 'pausedDL';
+  bool _isPaused(DownloadTask task) => task.state == 'stoppedDL';
 
   Future<void> _pause(DownloadTask task) async {
     await _changeTaskState(task, _repository.pauseTask);

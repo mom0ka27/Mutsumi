@@ -21,3 +21,4 @@ class User(Base):
     permission_group: Mapped[PermissionGroup] = mapped_column(
         Enum(PermissionGroup), default=PermissionGroup.USER
     )
+    token_version: Mapped[int] = mapped_column(default=0)

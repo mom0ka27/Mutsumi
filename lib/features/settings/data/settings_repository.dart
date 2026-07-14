@@ -1,9 +1,12 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../../core/storage/local_storage.dart';
 
 class SettingsRepository {
   SettingsRepository() : _box = Hive.box(LocalStorage.settingsBoxName);
+
+  static const _secureStorage = FlutterSecureStorage();
 
   static const _storageKey = 'settings_v2';
   static const _serverUrlKey = 'server_url';
@@ -33,10 +36,14 @@ class SettingsRepository {
       if (username == null || password == null) {
         continue;
       }
+      final normalized = SettingsRepository._normalizeUrl(entry.key);
+      await _secureStorage.write(
+        key: _secureKey(normalized, username),
+        value: password,
+      );
       accounts[repository._accountKey(entry.key, username)] = {
-        'server_url': repository._normalizeUrl(entry.key),
+        'server_url': SettingsRepository._normalizeUrl(entry.key),
         'username': username,
-        'password': password,
         'access_token': tokens[entry.key] ?? '',
       };
     }
@@ -110,13 +117,15 @@ class SettingsRepository {
         normalized;
   }
 
-  ServerCredential? getServerCredential(String serverUrl) {
+  Future<ServerCredential?> getServerCredential(String serverUrl) async {
     final current = getCurrentAccount();
     if (current != null && current.serverUrl == _normalizeUrl(serverUrl)) {
-      return ServerCredential(
-        username: current.username,
-        password: current.password,
-      );
+      final password =
+          await _secureStorage.read(
+            key: _secureKey(current.serverUrl, current.username),
+          ) ??
+          '';
+      return ServerCredential(username: current.username, password: password);
     }
     return null;
   }
@@ -171,10 +180,13 @@ class SettingsRepository {
     }
     final accounts = _mutableMap(data['accounts']);
     final key = _accountKey(normalized, username);
+    await _secureStorage.write(
+      key: _secureKey(normalized, username),
+      value: password,
+    );
     accounts[key] = {
       'server_url': normalized,
       'username': username,
-      'password': password,
       'access_token': accessToken,
       'permission_group': permissionGroup,
     };
@@ -231,6 +243,7 @@ class SettingsRepository {
     final accounts = _mutableMap(data['accounts']);
     accounts.remove(_accountKey(serverUrl, username));
     data['accounts'] = accounts;
+    await _secureStorage.delete(key: _secureKey(serverUrl, username));
     final normalized = _normalizeUrl(serverUrl);
     final hasAccounts = accounts.values.any(
       (value) => value is Map && value['server_url'] == normalized,
@@ -258,10 +271,15 @@ class SettingsRepository {
     if (current == null || current.serverUrl != _normalizeUrl(serverUrl)) {
       return;
     }
+    final password =
+        await _secureStorage.read(
+          key: _secureKey(current.serverUrl, current.username),
+        ) ??
+        '';
     await saveLogin(
       serverUrl: current.serverUrl,
       username: current.username,
-      password: current.password,
+      password: password,
       accessToken: accessToken,
       permissionGroup: current.permissionGroup ?? '',
       certificateFingerprint: getCertificateFingerprint(current.serverUrl),
@@ -296,7 +314,7 @@ class SettingsRepository {
     return ServerAccount(
       serverUrl: serverUrl,
       username: username,
-      password: value['password']?.toString() ?? '',
+      password: '',
       accessToken: value['access_token']?.toString() ?? '',
       permissionGroup: value['permission_group']?.toString(),
     );
@@ -356,7 +374,9 @@ class SettingsRepository {
 
   String _accountKey(String serverUrl, String username) =>
       '${_normalizeUrl(serverUrl)}\n${username.trim()}';
-  String _normalizeUrl(String value) =>
+  static String _secureKey(String serverUrl, String username) =>
+      'password:${_normalizeUrl(serverUrl)}:${username.trim()}';
+  static String _normalizeUrl(String value) =>
       value.trim().replaceFirst(RegExp(r'/+$'), '');
   String _normalizeFingerprint(String value) =>
       value.replaceAll(RegExp(r'[^a-fA-F0-9]'), '').toLowerCase();

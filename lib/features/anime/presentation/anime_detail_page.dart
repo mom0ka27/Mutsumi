@@ -1,13 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import 'package:mutsumi/player/extension/duration.dart';
 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
-import '../../../core/formatters/duration_formatter.dart';
 import '../../../core/widgets/media_detail_overview.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
@@ -31,14 +29,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
   void initState() {
     super.initState();
     _future = _animeService.getAnime(widget.animeId);
-    unawaited(_matchDandanPlayEpisodes());
-  }
-
-  Future<void> _matchDandanPlayEpisodes() async {
-    try {
-      final anime = await _future;
-      await _animeService.matchDandanPlayEpisodes(anime.episodes);
-    } catch (_) {}
   }
 
   @override
@@ -120,13 +110,16 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           floatingActionButton: anime.episodes.isEmpty
               ? null
               : FloatingActionButton.extended(
-                  onPressed: () => Get.to(
-                    () => AnimePlayPage(
-                      anime: anime,
-                      episodes: anime.episodes,
-                      initialEpisode: _initialEpisode(anime),
-                    ),
-                  ),
+                  onPressed: () async {
+                    await Get.to(
+                      () => AnimePlayPage(
+                        anime: anime,
+                        episodes: anime.episodes,
+                        initialEpisode: _initialEpisode(anime),
+                      ),
+                    );
+                    setState(() {});
+                  },
                   label: Text("播放"),
                   icon: const Icon(Icons.play_arrow),
                 ),
@@ -204,7 +197,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
         Text('上次观看', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Text(
-          '第 ${episode.index} 集 · ${episode.displayName} · ${formatDuration(progress.position)}',
+          '第 ${episode.index} 集 · ${episode.displayName} · ${progress.position.str}',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),

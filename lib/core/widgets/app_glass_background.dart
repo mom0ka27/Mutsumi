@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mutsumi/core/appearance/app_image_cache.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -11,13 +12,6 @@ import '../appearance/appearance_settings_repository.dart';
 import '../storage/local_storage.dart';
 
 class AppearanceController extends GetxService {
-  static AppearanceController get instance {
-    if (Get.isRegistered<AppearanceController>()) {
-      return Get.find<AppearanceController>();
-    }
-    return Get.put(AppearanceController(), permanent: true);
-  }
-
   final _settings = AppearanceSettingsRepository();
   late final themeMode = _settings.getThemeMode().obs;
   late final backgroundImagePath = RxnString(
@@ -175,10 +169,12 @@ class AppGlassBackground extends StatelessWidget {
       return ColoredBox(color: colors.surface);
     }
 
+    final size = MediaQuery.of(context).size;
+
     return Obx(() {
-      final path = AppearanceController.instance.backgroundImagePath.value;
+      final path = Get.find<AppearanceController>().backgroundImagePath.value;
       final overlayOpacity =
-          AppearanceController.instance.backgroundOverlayOpacity.value;
+          Get.find<AppearanceController>().backgroundOverlayOpacity.value;
       if (path == null) {
         return ColoredBox(color: colors.surface);
       }
@@ -190,6 +186,8 @@ class AppGlassBackground extends StatelessWidget {
             child: Image.file(
               File(path),
               gaplessPlayback: true,
+              cacheWidth: AppImageCache.dimension(context, size.width),
+              cacheHeight: AppImageCache.dimension(context, size.height),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const SizedBox.expand(),
             ),

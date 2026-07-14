@@ -15,9 +15,11 @@ class BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accentColor = Theme.of(context).colorScheme.primaryFixed;
-    final dandanPlayConfigured = DandanPlayRepository.instance.isConfigured;
+    final dandanPlayConfigured = Get.find<DandanPlayRepository>().isConfigured;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 32, 8, 6),
+      padding: controller.isFullScreen.value
+          ? EdgeInsets.symmetric(horizontal: 40, vertical: 8)
+          : EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,

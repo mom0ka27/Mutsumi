@@ -17,15 +17,10 @@ import 'package:ns_danmaku/ns_danmaku.dart';
 import 'package:path_provider/path_provider.dart';
 
 class IndexPlayerController {
-  final _player = Player(
-    configuration: PlayerConfiguration(libass: true),
-  ); //configuration: PlayerConfiguration(vo: "gpu")
+  final _player = Player(configuration: PlayerConfiguration(libass: true));
   late final VideoController _controller = VideoController(
     _player,
-    configuration: const VideoControllerConfiguration(
-      // hwdec: "mediacodec",
-      // vo: "gpu",
-    ),
+    configuration: const VideoControllerConfiguration(),
   );
 
   final IndexPlayerOptions options;
@@ -111,7 +106,7 @@ class IndexPlayerController {
         _prepareSubtitleFont());
     await _setNativeProperty('sub-font-provider', 'auto');
     await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
-    await _setNativeProperty('sub-font', 'Resource Han Rounded CN');
+    await _setNativeProperty('sub-font', 'FZZhunYuan-M02S');
 
     if (video is models.NetworkVideo) {
       await _setNativeProperty('cache', 'yes');
@@ -175,6 +170,23 @@ class IndexPlayerController {
     _resetDanmakuSecond();
     if (!enableDanmaku.value) {
       _danmakuController?.clear();
+    }
+  }
+
+  Future<void> refreshDanmaku() async {
+    if (_disposed) return;
+    final provider = _video.value?.danmakuProvider;
+    if (provider == null) return;
+    _danmakuController?.clear();
+    danmakuCount.value = -1;
+    danmakuEpisodeId.value = null;
+    _danmakuList = null;
+    _resetDanmakuSecond();
+    final result = await provider.getDanmakuList();
+    if (!_disposed) {
+      _danmakuList = result.list;
+      danmakuCount.value = result.count;
+      danmakuEpisodeId.value = result.episodeId;
     }
   }
 
@@ -391,6 +403,37 @@ class IndexPlayerController {
     } catch (_) {}
   }
 
+  Future<String?> _getNativeProperty(String name) async {
+    try {
+      if (_disposed) return null;
+      final value = await (_player.platform as dynamic).getProperty(name);
+      return value?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<MpvInfo> getMpvInfo() async {
+    final widthStr = await _getNativeProperty('video-params/w');
+    final heightStr = await _getNativeProperty('video-params/h');
+    final fpsStr = await _getNativeProperty('estimated-vf-fps');
+    return MpvInfo(
+      videoCodec: await _getNativeProperty('video-codec') ?? '-',
+      videoBitrateKbps:
+          int.tryParse(await _getNativeProperty('video-bitrate') ?? '') ?? 0,
+      audioCodec: await _getNativeProperty('audio-codec') ?? '-',
+      audioBitrateKbps:
+          int.tryParse(await _getNativeProperty('audio-bitrate') ?? '') ?? 0,
+      width: int.tryParse(widthStr ?? '') ?? 0,
+      height: int.tryParse(heightStr ?? '') ?? 0,
+      fps: double.tryParse(fpsStr ?? '') ?? 0,
+      hwDecoder: await _getNativeProperty('hwdec-current') ?? '-',
+      demuxer: await _getNativeProperty('current-demuxer') ?? '-',
+      pixelFormat: await _getNativeProperty('video-params/pixelformat') ?? '-',
+      videoFormat: await _getNativeProperty('video-format') ?? '-',
+    );
+  }
+
   void _resetDanmakuSecond() {
     _lastDanmakuSecond = null;
   }
@@ -399,12 +442,12 @@ class IndexPlayerController {
     final supportDirectory = await getApplicationSupportDirectory();
     final fontDirectory = Directory('${supportDirectory.path}/subtitle_fonts');
     final fontFile = File(
-      '${fontDirectory.path}/ResourceHanRoundedCN-Regular.ttf',
+      '${fontDirectory.path}/FangZhengZhunYuanJianTi-1.ttf',
     );
     if (!await fontFile.exists()) {
       await fontDirectory.create(recursive: true);
       final data = await rootBundle.load(
-        'assets/fonts/ResourceHanRoundedCN-Regular.ttf',
+        'assets/fonts/FangZhengZhunYuanJianTi-1.ttf',
       );
       await fontFile.writeAsBytes(data.buffer.asUint8List(), flush: true);
     }
@@ -427,4 +470,39 @@ class IndexPlayerController {
   }
 
   PlayerStream get stream => _player.stream;
+}
+
+class MpvInfo {
+  const MpvInfo({
+    required this.videoCodec,
+    required this.videoBitrateKbps,
+    required this.audioCodec,
+    required this.audioBitrateKbps,
+    required this.width,
+    required this.height,
+    required this.fps,
+    required this.hwDecoder,
+    required this.demuxer,
+    required this.pixelFormat,
+    required this.videoFormat,
+  });
+
+  final String videoCodec;
+  final int videoBitrateKbps;
+  final String audioCodec;
+  final int audioBitrateKbps;
+  final int width;
+  final int height;
+  final double fps;
+  final String hwDecoder;
+  final String demuxer;
+  final String pixelFormat;
+  final String videoFormat;
+
+  String get resolution => width > 0 && height > 0 ? '${width}x$height' : '-';
+  String get videoBitrate =>
+      videoBitrateKbps > 0 ? '$videoBitrateKbps kbps' : '-';
+  String get audioBitrate =>
+      audioBitrateKbps > 0 ? '$audioBitrateKbps kbps' : '-';
+  String get frameRate => fps > 0 ? '${fps.toStringAsFixed(1)} fps' : '-';
 }

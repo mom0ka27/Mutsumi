@@ -20,11 +20,11 @@ router = APIRouter(
 
 @router.get("", response_model=StorageStatusRead)
 async def get_storage_status(session: AsyncSession = Depends(get_session)):
-    anime = (await session.scalars(select(Anime).order_by(Anime.name_cn, Anime.name))).all()
+    anime = (await session.scalars(select(Anime.id, Anime.name, Anime.name_cn, Anime.download_hash).order_by(Anime.name_cn, Anime.name))).all()
     return await asyncio.to_thread(_storage_status, anime)
 
 
-def _storage_status(anime: list[Anime]) -> StorageStatusRead:
+def _storage_status(anime: list[tuple[int, str, str, str]]) -> StorageStatusRead:
     data_path = Path(config["storage"].get("data_path") or "./data")
     data_path = data_path.expanduser().resolve()
     data_path.mkdir(parents=True, exist_ok=True)
@@ -49,8 +49,8 @@ def _storage_status(anime: list[Anime]) -> StorageStatusRead:
     )
 
 
-def _anime_storage(anime: Anime, data_path: Path) -> AnimeStorageRead:
-    download_hash = anime.download_hash
+def _anime_storage(anime: tuple[int, str, str, str], data_path: Path) -> AnimeStorageRead:
+    download_hash = anime[3]
     folder_path = data_path / download_hash if download_hash else None
     size_bytes, file_count = (
         _directory_size(folder_path)
@@ -58,8 +58,8 @@ def _anime_storage(anime: Anime, data_path: Path) -> AnimeStorageRead:
         else (0, 0)
     )
     return AnimeStorageRead(
-        anime_id=anime.id,
-        name=anime.name_cn or anime.name,
+        anime_id=anime[0],
+        name=anime[2] or anime[1],
         size_bytes=size_bytes,
         file_count=file_count,
         download_hash=download_hash,

@@ -21,6 +21,6 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return Token(
-        access_token=create_access_token(user.username),
+        access_token=create_access_token(user.username, user.token_version),
         permission_group=user.permission_group,
     )

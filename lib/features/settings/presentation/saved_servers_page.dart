@@ -209,7 +209,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
                           Get.offAllNamed(StartupPage.routeName);
                           return;
                         }
-                        CurrentUserController.instance.setPermissionGroup(
+                        Get.find<CurrentUserController>().setPermissionGroup(
                           permissionGroup,
                         );
                         Get.offAllNamed(HomePage.routeName);

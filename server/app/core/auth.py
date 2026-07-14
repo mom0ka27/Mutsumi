@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
@@ -29,17 +30,17 @@ async def get_session():
         yield session
 
 
-def verify_password(plain_password: str, password_hash: str) -> bool:
-    return pwd_context.verify(plain_password, password_hash)
+async def verify_password(plain_password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(pwd_context.verify, plain_password, password_hash)
 
 
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+async def get_password_hash(password: str) -> str:
+    return await asyncio.to_thread(pwd_context.hash, password)
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, token_version: int = 0) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": subject, "exp": expire}
+    payload = {"sub": subject, "exp": expire, "ver": token_version}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -49,7 +50,7 @@ async def authenticate_user(
     session: AsyncSession,
 ) -> User | None:
     user = await session.scalar(select(User).where(User.username == username))
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not await verify_password(password, user.password_hash):
         return None
     return user
 
@@ -81,11 +82,12 @@ async def get_user_from_token(token: str, session: AsyncSession) -> User:
         username = payload.get("sub")
         if username is None:
             raise credentials_exception
+        token_version = payload.get("ver", 0)
     except JWTError as exc:
         raise credentials_exception from exc
 
     user = await session.scalar(select(User).where(User.username == username))
-    if user is None:
+    if user is None or user.token_version != token_version:
         raise credentials_exception
     return user
 

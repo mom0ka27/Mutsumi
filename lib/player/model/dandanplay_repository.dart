@@ -122,6 +122,9 @@ class DandanPlayRepository {
       queryParameters: {'withRelated': true, 'chConvert': 1},
     );
     final comments = response['comments'];
+    for (final comment in comments) {
+      comment['cid'] = comment['cid']?.toString() ?? '';
+    }
     if (comments is! List) {
       return DandanPlayCommentsResult(
         episodeId: episodeId,
@@ -255,6 +258,38 @@ class DandanPlayRepository {
     return Duration(hours: (ageYears + 1) * 12);
   }
 
+  DanmakuCacheInfo? getCacheInfo(int episodeId) {
+    final value = _readCache('comments_v$_cacheVersion:$episodeId');
+    if (value == null) return null;
+    final cachedAtHours = value['cachedAtHours'];
+    final expiresAtHours = value['expiresAtHours'];
+    final commentCount = (value['comments'] as List?)?.length ?? 0;
+    if (cachedAtHours is! int || expiresAtHours is! int) return null;
+    return DanmakuCacheInfo(
+      episodeId: episodeId,
+      cachedAt: DateTime.fromMillisecondsSinceEpoch(
+        cachedAtHours * Duration.millisecondsPerHour,
+        isUtc: true,
+      ).toLocal(),
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(
+        expiresAtHours * Duration.millisecondsPerHour,
+        isUtc: true,
+      ).toLocal(),
+      commentCount: commentCount,
+    );
+  }
+
+  Future<void> clearEpisodeCache(int episodeId) async {
+    await _box.delete('comments_v$_cacheVersion:$episodeId');
+    for (final key in _box.keys.whereType<String>()) {
+      if (!key.startsWith('match_v$_cacheVersion:')) continue;
+      final value = _box.get(key);
+      if (value is Map && value['episodeId'] == episodeId) {
+        await _box.delete(key);
+      }
+    }
+  }
+
   String _fileNameWithoutExtension(String value) {
     final name = value.split('/').last;
     final extensionIndex = name.lastIndexOf('.');
@@ -277,4 +312,18 @@ class DandanPlayCommentsResult {
   final int? episodeId;
   final List<Map<String, dynamic>> comments;
   final bool fromCache;
+}
+
+class DanmakuCacheInfo {
+  const DanmakuCacheInfo({
+    required this.episodeId,
+    required this.cachedAt,
+    required this.expiresAt,
+    required this.commentCount,
+  });
+
+  final int episodeId;
+  final DateTime cachedAt;
+  final DateTime expiresAt;
+  final int commentCount;
 }
