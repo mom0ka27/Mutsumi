@@ -96,7 +96,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
                 sliver: SliverToBoxAdapter(
                   child: MediaDetailOverview(
                     data: _overviewData(anime),
-                    heroTag: 'cover-${anime.id}',
+                    heroTag: 'cover-${anime.bangumiId}',
                     beforeSummary: _watchProgress(anime),
                   ),
                 ),

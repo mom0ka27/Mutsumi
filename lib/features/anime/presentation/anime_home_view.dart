@@ -98,7 +98,7 @@ class _AnimeCard extends StatelessWidget {
 
     return MediaSummaryCard(
       imageUrl: anime.imageUrl,
-      heroTag: 'cover-${anime.id}',
+      heroTag: 'cover-${anime.bangumiId}',
       title: anime.displayName,
       subtitle: anime.originalName,
       summary: anime.summary,

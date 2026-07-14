@@ -74,10 +74,22 @@ class _HomePageState extends State<HomePage> {
           controller: _pageController,
           onPageChanged: _onPageChanged,
           children: [
-            AnimeHomeView(store: _animeListStore),
-            BangumiSearchView(store: _animeListStore),
-            DownloadProgressView(isActive: selectedIndex == 2),
-            const SettingsHomeView(),
+            HeroMode(
+              enabled: selectedIndex == 0,
+              child: AnimeHomeView(store: _animeListStore),
+            ),
+            HeroMode(
+              enabled: selectedIndex == 1,
+              child: BangumiSearchView(store: _animeListStore),
+            ),
+            HeroMode(
+              enabled: selectedIndex == 2,
+              child: DownloadProgressView(isActive: selectedIndex == 2),
+            ),
+            HeroMode(
+              enabled: selectedIndex == 3,
+              child: const SettingsHomeView(),
+            ),
           ],
         ),
         statusBarStyle: GlassStatusBarStyle.auto,
