@@ -6,7 +6,36 @@ on:
       - '**'
 
 jobs:
-  build:
+  analyze:
+    runs-on: macos-latest
+    env:
+      FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+      - name: Install Flutter
+        run: |
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
+          curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
+          unzip -q flutter.zip
+          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Restore Pub cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Analyze
+        run: flutter analyze
+
+  build-android:
     runs-on: macos-latest
     env:
       FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
@@ -38,6 +67,45 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build Android ARM64 APK
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
+        run: ./scripts/build_android_arm64_apk.sh
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-android
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+
+  build-ios:
+    runs-on: macos-latest
+    env:
+      FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+      ARTIFACT_NAME: Mutsumi-${{ github.sha }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+      - name: Install Flutter
+        run: |
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
+          curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
+          unzip -q flutter.zip
+          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Restore Pub cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
       - name: Restore CocoaPods cache
         uses: actions/cache@v6
         with:
@@ -46,13 +114,7 @@ jobs:
             ios/Pods
           key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pods-${{ hashFiles('pubspec.lock', 'ios/Podfile.lock') }}
       - name: Get dependencies
-        run: |
-          flutter pub get --enforce-lockfile
-      - name: Build Android ARM64 APK
-        env:
-          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
-          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
-        run: ./scripts/build_android_arm64_apk.sh
+        run: flutter pub get --enforce-lockfile
       - name: Build unsigned iOS IPA
         env:
           DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
@@ -66,25 +128,29 @@ jobs:
             zip -qry ../ipa/Runner.ipa Payload
           )
           rm -rf build/ios/payload
-      - name: Package server
-        run: |
-          mkdir -p build/server
-          zip -qry build/server/mutsumi-server.zip server -x 'server/config.yaml'
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ env.ARTIFACT_NAME }}-android
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          if-no-files-found: error
       - name: Upload iOS IPA
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-ios
           path: build/ios/ipa/Runner.ipa
           if-no-files-found: error
+
+  package-server:
+    runs-on: macos-latest
+    env:
+      ARTIFACT_NAME: Mutsumi-${{ github.sha }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
       - name: Upload server package
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-server
-          path: build/server/mutsumi-server.zip
+          path: server
           if-no-files-found: error
