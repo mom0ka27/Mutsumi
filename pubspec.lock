@@ -149,10 +149,10 @@ packages:
     dependency: transitive
     description:
       name: dbus
-      sha256: "0ce9b0a839e6dee59a37a623d2fc26a35bbbe6404213e419b0d6411023d62645"
+      sha256: "792974a4007974fbc5c1b5433eb2330a9db3e368c3f906253af4c007d0f49a91"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.14"
+    version: "0.7.13"
   dio:
     dependency: "direct main"
     description:
@@ -173,10 +173,10 @@ packages:
     dependency: transitive
     description:
       name: equatable
-      sha256: "3e0141505477fd8ad55d6eb4e7776d3fe8430be8e497ccb1521370c3f21a3e2b"
+      sha256: "3bce007a596ff8b3119c45d68aaef631272537c03d30e5d4534dd24bf4c5eaa2"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.8"
+    version: "2.1.0"
   fake_async:
     dependency: transitive
     description:
@@ -396,10 +396,10 @@ packages:
     dependency: transitive
     description:
       name: image
-      sha256: f9881ff4998044947ec38d098bc7c8316ae1186fa786eddffdb867b9bc94dfce
+      sha256: "6300175e00616bbc832e2fc91bfa4d776af5402c81c7151bee6905bb08473c52"
       url: "https://pub.dev"
     source: hosted
-    version: "4.8.0"
+    version: "4.9.1"
   image_picker:
     dependency: "direct main"
     description:
@@ -532,10 +532,10 @@ packages:
     dependency: "direct main"
     description:
       name: liquid_glass_widgets
-      sha256: "0641f378af6e69455fe5c57717c8640792ae5ce1201a6e1fbb9733cb40901c22"
+      sha256: "9ae65a70edc4487ca18efc5b8921ea9f027ec297ded20344f645c13924d0423f"
       url: "https://pub.dev"
     source: hosted
-    version: "0.21.3"
+    version: "0.21.5"
   logging:
     dependency: transitive
     description:
@@ -565,7 +565,7 @@ packages:
     description:
       path: media_kit
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
+      resolved-ref: b29d407a4e3990dde2b35b152920383a11076b03
       url: "https://github.com/media-kit/media-kit.git"
     source: git
     version: "1.2.6"
@@ -574,7 +574,7 @@ packages:
     description:
       path: "libs/android/media_kit_libs_android_video"
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
+      resolved-ref: b29d407a4e3990dde2b35b152920383a11076b03
       url: "https://github.com/media-kit/media-kit.git"
     source: git
     version: "1.3.8"
@@ -583,8 +583,8 @@ packages:
     description:
       path: "libs/ios/media_kit_libs_ios_video"
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
-      url: "https://github.com/media-kit/media-kit.git"
+      resolved-ref: "173668b81c0bad95ed27b9daefe4c343ed7fb115"
+      url: "https://github.com/mom0ka27/media-kit.git"
     source: git
     version: "1.1.5"
   media_kit_libs_linux:
@@ -592,7 +592,7 @@ packages:
     description:
       path: "libs/linux/media_kit_libs_linux"
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
+      resolved-ref: b29d407a4e3990dde2b35b152920383a11076b03
       url: "https://github.com/media-kit/media-kit.git"
     source: git
     version: "1.2.1"
@@ -601,7 +601,7 @@ packages:
     description:
       path: "libs/macos/media_kit_libs_macos_video"
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
+      resolved-ref: b29d407a4e3990dde2b35b152920383a11076b03
       url: "https://github.com/media-kit/media-kit.git"
     source: git
     version: "1.1.5"
@@ -610,8 +610,8 @@ packages:
     description:
       path: "libs/universal/media_kit_libs_video"
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
-      url: "https://github.com/media-kit/media-kit.git"
+      resolved-ref: "173668b81c0bad95ed27b9daefe4c343ed7fb115"
+      url: "https://github.com/mom0ka27/media-kit.git"
     source: git
     version: "1.0.8"
   media_kit_libs_windows_video:
@@ -619,7 +619,7 @@ packages:
     description:
       path: "libs/windows/media_kit_libs_windows_video"
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
+      resolved-ref: b29d407a4e3990dde2b35b152920383a11076b03
       url: "https://github.com/media-kit/media-kit.git"
     source: git
     version: "1.0.12"
@@ -628,7 +628,7 @@ packages:
     description:
       path: media_kit_video
       ref: main
-      resolved-ref: "2e35dbde9fd10bde0a63efa83868c07f5898ffb5"
+      resolved-ref: b29d407a4e3990dde2b35b152920383a11076b03
       url: "https://github.com/media-kit/media-kit.git"
     source: git
     version: "2.0.1"
@@ -1018,10 +1018,10 @@ packages:
     dependency: transitive
     description:
       name: xml
-      sha256: "971043b3a0d3da28727e40ed3e0b5d18b742fa5a68665cca88e74b7876d5e025"
+      sha256: "67f0aff7be013d107995e9b75bf4e7f2c3ef2dfdb2c8e68024bba0a7fd5756a4"
       url: "https://pub.dev"
     source: hosted
-    version: "6.6.1"
+    version: "7.0.1"
   yaml:
     dependency: transitive
     description:

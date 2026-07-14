@@ -104,15 +104,10 @@ class IndexPlayerController {
     danmakuEpisodeId.value = null;
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
-    await _setNativeProperty('sub-font-provider', 'auto');
-    await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
-    await _setNativeProperty('sub-font', 'FZZhunYuan-M02S');
 
-    if (video is models.NetworkVideo) {
-      await _setNativeProperty('cache', 'yes');
-      await _setNativeProperty('demuxer-readahead-secs', '30');
-      await _setNativeProperty('demuxer-max-bytes', '128MiB');
-    }
+    stream.log.listen((event) => print(event));
+    // await _setNativeProperty('sub-font-provider', 'auto');
+    await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
     if (_disposed) {
       return;
     }
