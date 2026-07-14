@@ -122,6 +122,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
           danmakuProvider: DandanPlayDanmakuProvider(
             fileHash: episode.fileHash,
             fileName: episode.filename,
+            airDate: widget.anime.airDate,
           ),
         ),
         start: shouldResume ? widget.anime.watchProgress?.position : null,

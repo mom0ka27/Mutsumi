@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mutsumi/core/logging/app_logger.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
 
 import '../exception/illegal_data.dart';
@@ -19,34 +20,61 @@ class DanmakuList {
 }
 
 abstract class DanmakuProvider {
-  Future<DanmakuList> getDanmakuList();
+  Future<DanmakuLoadResult> getDanmakuList();
+}
+
+class DanmakuLoadResult {
+  const DanmakuLoadResult({
+    required this.list,
+    required this.count,
+    this.episodeId,
+  });
+
+  final DanmakuList list;
+  final int count;
+  final int? episodeId;
 }
 
 class DandanPlayDanmakuProvider extends DanmakuProvider {
-  DandanPlayDanmakuProvider({required this.fileHash, required this.fileName});
+  DandanPlayDanmakuProvider({
+    required this.fileHash,
+    required this.fileName,
+    this.airDate,
+  });
 
   final String? fileHash;
   final String fileName;
+  final String? airDate;
 
   @override
-  Future<DanmakuList> getDanmakuList() async {
+  Future<DanmakuLoadResult> getDanmakuList() async {
     final hash = fileHash;
     if (hash == null || hash.isEmpty) {
-      return DanmakuList();
+      return DanmakuLoadResult(list: DanmakuList(), count: 0);
     }
+    AppLogger.info('Loading danmaku for $fileName($hash)');
     try {
-      final comments = await DandanPlayRepository.instance.commentsForFile(
+      final result = await DandanPlayRepository.instance.commentsForFile(
         fileHash: hash,
         fileName: fileName,
+        airDate: airDate,
       );
-      final result = DanmakuList();
-      for (final comment in comments) {
-        final danmaku = fromJson(comment);
-        result.addDanmaku(danmaku.time, danmaku);
+      final list = DanmakuList();
+      var count = 0;
+      for (final comment in result.comments) {
+        try {
+          final danmaku = fromJson(comment);
+          list.addDanmaku(danmaku.time, danmaku);
+          count++;
+        } catch (_) {}
       }
-      return result;
+      return DanmakuLoadResult(
+        list: list,
+        count: count,
+        episodeId: result.episodeId,
+      );
     } catch (_) {
-      return DanmakuList();
+      return DanmakuLoadResult(list: DanmakuList(), count: 0);
     }
   }
 

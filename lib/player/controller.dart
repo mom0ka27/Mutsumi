@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:mutsumi/core/network/dio_client.dart';
-import 'package:mutsumi/features/anime/data/anime_service.dart';
+import 'package:mutsumi/core/logging/app_logger.dart';
 
 import 'model/danmaku.dart';
 import 'model/option.dart';
@@ -36,6 +35,8 @@ class IndexPlayerController {
   DanmakuController? _danmakuController;
   final Rx<bool> enableDanmaku = true.obs;
   DanmakuList? _danmakuList;
+  final danmakuCount = (-1).obs;
+  final danmakuEpisodeId = RxnInt();
 
   VideoController get videoController => _controller;
 
@@ -80,8 +81,6 @@ class IndexPlayerController {
         sliderPostion.value = position;
       }
       final danmakuController = _danmakuController;
-      stream.log.listen((log) => print(log));
-      print(AnimeService().authHeaders()['Authorization']);
       final second = position.inSeconds;
       if (_disposed ||
           !enableDanmaku.value ||
@@ -106,6 +105,8 @@ class IndexPlayerController {
     final videoGeneration = ++_videoGeneration;
     _resetDanmakuSecond();
     _danmakuList = null;
+    danmakuCount.value = -1;
+    danmakuEpisodeId.value = null;
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
     await _setNativeProperty('sub-font-provider', 'auto');
@@ -144,9 +145,12 @@ class IndexPlayerController {
       await _selectSimplifiedChineseSubtitle();
     }
     _danmakuController?.clear();
-    video.danmakuProvider?.getDanmakuList().then((l) {
+    video.danmakuProvider?.getDanmakuList().then((result) {
+      AppLogger.info('Loaded danmaku: ${result.count}');
       if (!_disposed && videoGeneration == _videoGeneration) {
-        _danmakuList = l;
+        _danmakuList = result.list;
+        danmakuCount.value = result.count;
+        danmakuEpisodeId.value = result.episodeId;
       }
     });
   }

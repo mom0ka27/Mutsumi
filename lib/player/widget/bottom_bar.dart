@@ -1,5 +1,6 @@
 import '../extension/duration.dart';
 import '../controller.dart';
+import '../model/dandanplay_repository.dart';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -13,8 +14,8 @@ class BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playerState = controller.state;
     final accentColor = Theme.of(context).colorScheme.primaryFixed;
+    final dandanPlayConfigured = DandanPlayRepository.instance.isConfigured;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 32, 8, 6),
       decoration: BoxDecoration(
@@ -32,8 +33,8 @@ class BottomBar extends StatelessWidget {
             child: Obx(
               () => ProgressBar(
                 progress: controller.sliderPostion.value,
-                total: playerState.duration,
-                buffered: playerState.buffer,
+                total: controller.state.duration,
+                buffered: controller.state.buffer,
                 baseBarColor: Colors.white.withValues(alpha: 0.2),
                 bufferedBarColor: Colors.white.withValues(alpha: 0.35),
                 progressBarColor: accentColor,
@@ -86,7 +87,7 @@ class BottomBar extends StatelessWidget {
               const SizedBox(width: 10),
               Obx(
                 () => Text(
-                  "${controller.sliderPostion.value.str} / ${playerState.duration.str}",
+                  "${controller.sliderPostion.value.str} / ${controller.state.duration.str}",
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Colors.white,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -98,9 +99,13 @@ class BottomBar extends StatelessWidget {
                 () => Semantics(
                   label: '弹幕',
                   button: true,
-                  selected: controller.enableDanmaku.value,
+                  enabled: dandanPlayConfigured,
+                  selected:
+                      dandanPlayConfigured && controller.enableDanmaku.value,
                   child: InkWell(
-                    onTap: controller.toggleDanmaku,
+                    onTap: dandanPlayConfigured
+                        ? controller.toggleDanmaku
+                        : null,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
                       padding: const EdgeInsets.symmetric(
@@ -108,20 +113,36 @@ class BottomBar extends StatelessWidget {
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: controller.enableDanmaku.value
+                        color:
+                            dandanPlayConfigured &&
+                                controller.enableDanmaku.value
                             ? Colors.white
                             : Colors.white.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Text(
-                        '弹',
-                        style: TextStyle(
-                          color: controller.enableDanmaku.value
-                              ? Colors.black
-                              : Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      child: controller.danmakuCount.value == -1
+                          ? const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : Text(
+                              dandanPlayConfigured
+                                  ? '弹 ${controller.danmakuCount.value}'
+                                  : '弹',
+                              style: TextStyle(
+                                color:
+                                    dandanPlayConfigured &&
+                                        controller.enableDanmaku.value
+                                    ? Colors.black
+                                    : Colors.white.withValues(
+                                        alpha: dandanPlayConfigured ? 1 : 0.4,
+                                      ),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
                   ),
                 ),

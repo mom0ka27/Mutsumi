@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:mutsumi/core/logging/app_logger.dart';
 
 import '../../core/storage/local_storage.dart';
 
@@ -20,7 +21,7 @@ class DandanPlayRepository {
   static const _baseUrl = 'https://api.dandanplay.net';
   static const _appId = String.fromEnvironment('DANDANPLAY_APP_ID');
   static const _appSecret = String.fromEnvironment('DANDANPLAY_APP_SECRET');
-  static const _matchCacheKey = 'matches_v1';
+  static const _cacheVersion = 4;
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -33,18 +34,21 @@ class DandanPlayRepository {
 
   bool get isConfigured => _appId.isNotEmpty && _appSecret.isNotEmpty;
 
-  Future<Map<String, int>> matchFiles(List<DandanPlayFile> files) async {
+  Future<Map<String, int>> matchFiles(
+    List<DandanPlayFile> files, {
+    String? airDate,
+  }) async {
     if (!isConfigured || files.isEmpty) {
       return const {};
     }
 
-    final cache = _matchCache();
     final matched = <String, int>{};
     final pending = <DandanPlayFile>[];
     for (final file in files) {
-      final cached = cache[file.hash];
-      if (cached is int && cached > 0) {
-        matched[file.hash] = cached;
+      final hash = _normalizedHash(file.hash);
+      final cached = _readCachedEpisodeId(hash);
+      if (cached != null) {
+        matched[hash] = cached;
       } else {
         pending.add(file);
       }
@@ -82,35 +86,35 @@ class DandanPlayRepository {
           continue;
         }
         final value = episodeId.toInt();
-        cache[hash] = value;
+        await _cacheEpisodeId(hash, value, airDate);
         matched[hash] = value;
       }
     }
-    await _box.put(_matchCacheKey, cache);
     return matched;
   }
 
-  Future<List<Map<String, dynamic>>> commentsForFile({
+  Future<DandanPlayCommentsResult> commentsForFile({
     required String fileHash,
     required String fileName,
+    String? airDate,
   }) async {
     if (!isConfigured || fileHash.isEmpty) {
-      return const [];
+      return const DandanPlayCommentsResult.empty();
     }
     final matches = await matchFiles([
       DandanPlayFile(hash: fileHash, name: fileName),
-    ]);
-    final episodeId = matches[fileHash.toLowerCase()];
+    ], airDate: airDate);
+    final episodeId = matches[_normalizedHash(fileHash)];
     if (episodeId == null) {
-      return const [];
+      return const DandanPlayCommentsResult.empty();
     }
-    final cacheKey = 'comments_v1_$episodeId';
-    final cached = _box.get(cacheKey);
-    if (cached is List) {
-      return cached
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList();
+    final cached = _readCachedComments(episodeId);
+    if (cached != null) {
+      return DandanPlayCommentsResult(
+        episodeId: episodeId,
+        comments: cached,
+        fromCache: true,
+      );
     }
     final response = await _request<Map<String, dynamic>>(
       'GET',
@@ -119,14 +123,22 @@ class DandanPlayRepository {
     );
     final comments = response['comments'];
     if (comments is! List) {
-      return const [];
+      return DandanPlayCommentsResult(
+        episodeId: episodeId,
+        comments: const [],
+        fromCache: false,
+      );
     }
     final result = comments
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
-    await _box.put(cacheKey, result);
-    return result;
+    await _cacheComments(episodeId, result, airDate);
+    return DandanPlayCommentsResult(
+      episodeId: episodeId,
+      comments: result,
+      fromCache: false,
+    );
   }
 
   Future<T> _request<T>(
@@ -139,6 +151,7 @@ class DandanPlayRepository {
     final signature = base64Encode(
       sha256.convert(utf8.encode('$_appId$timestamp$path$_appSecret')).bytes,
     );
+    AppLogger.info("${method.toUpperCase()} $path", tag: "DandanPlay");
     final response = await _dio.request<T>(
       path,
       data: data,
@@ -161,9 +174,85 @@ class DandanPlayRepository {
 
   Box get _box => Hive.box(LocalStorage.dandanPlayBoxName);
 
-  Map<String, dynamic> _matchCache() {
-    final value = _box.get(_matchCacheKey);
-    return value is Map ? Map<String, dynamic>.from(value) : {};
+  String _normalizedHash(String value) => value.trim().toLowerCase();
+
+  int? _readCachedEpisodeId(String hash) {
+    final value = _readCache('match_v$_cacheVersion:$hash');
+    final episodeId = value?['episodeId'];
+    return episodeId is int && episodeId > 0 ? episodeId : null;
+  }
+
+  List<Map<String, dynamic>>? _readCachedComments(int episodeId) {
+    final value = _readCache('comments_v$_cacheVersion:$episodeId');
+    final comments = value?['comments'];
+    if (comments is! List) {
+      return null;
+    }
+    return comments
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Map<String, dynamic>? _readCache(String key) {
+    final value = _box.get(key);
+    if (value is! Map) {
+      return null;
+    }
+    final cache = Map<String, dynamic>.from(value);
+    final expiresAtHours = cache['expiresAtHours'];
+    final cachedAtHours = cache['cachedAtHours'];
+    final nowHours =
+        DateTime.now().toUtc().millisecondsSinceEpoch ~/
+        Duration.millisecondsPerHour;
+    if (cache['version'] != _cacheVersion ||
+        expiresAtHours is! int ||
+        cachedAtHours is! int ||
+        cachedAtHours > nowHours ||
+        expiresAtHours <= nowHours) {
+      _box.delete(key);
+      return null;
+    }
+    return cache;
+  }
+
+  Future<void> _cacheEpisodeId(String hash, int episodeId, String? airDate) =>
+      _writeCache('match_v$_cacheVersion:$hash', {
+        'episodeId': episodeId,
+      }, airDate);
+
+  Future<void> _cacheComments(
+    int episodeId,
+    List<Map<String, dynamic>> comments,
+    String? airDate,
+  ) => _writeCache('comments_v$_cacheVersion:$episodeId', {
+    'comments': comments,
+  }, airDate);
+
+  Future<void> _writeCache(
+    String key,
+    Map<String, dynamic> data,
+    String? airDate,
+  ) {
+    final now = DateTime.now().toUtc();
+    return _box.put(key, {
+      'version': _cacheVersion,
+      'cachedAtHours':
+          now.millisecondsSinceEpoch ~/ Duration.millisecondsPerHour,
+      'expiresAtHours':
+          now.add(_cacheTtl(airDate)).millisecondsSinceEpoch ~/
+          Duration.millisecondsPerHour,
+      ...data,
+    });
+  }
+
+  Duration _cacheTtl(String? airDate) {
+    final year = DateTime.tryParse(airDate ?? '2000-01-01')?.year;
+    final currentYear = DateTime.now().toUtc().year;
+    final ageYears = year == null || year > currentYear
+        ? 0
+        : currentYear - year;
+    return Duration(hours: (ageYears + 1) * 12);
   }
 
   String _fileNameWithoutExtension(String value) {
@@ -171,4 +260,21 @@ class DandanPlayRepository {
     final extensionIndex = name.lastIndexOf('.');
     return extensionIndex > 0 ? name.substring(0, extensionIndex) : name;
   }
+}
+
+class DandanPlayCommentsResult {
+  const DandanPlayCommentsResult({
+    required this.episodeId,
+    required this.comments,
+    required this.fromCache,
+  });
+
+  const DandanPlayCommentsResult.empty()
+    : episodeId = null,
+      comments = const [],
+      fromCache = false;
+
+  final int? episodeId;
+  final List<Map<String, dynamic>> comments;
+  final bool fromCache;
 }

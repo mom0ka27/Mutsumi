@@ -92,7 +92,7 @@ class _IndexPlayerState extends State<IndexPlayer> {
                     _danmakuController = c;
                     widget.controller.setDanmakuController(c);
                   },
-                  option: DanmakuOption(strokeWidth: 1, duration: 6),
+                  option: DanmakuOption(strokeWidth: 0.8, duration: 6),
                 ),
               ),
             ),

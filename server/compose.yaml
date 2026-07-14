@@ -6,20 +6,16 @@ services:
     ports:
       - "12091:12091"
     environment:
-      DATABASE_URL: sqlite+aiosqlite:////app/state/mutsumi.db
+      DATABASE_URL: sqlite+aiosqlite:////app/mutsumi.db
     volumes:
       - ./config.yaml:/app/config.yaml
-      - server-state:/app/state
-      - server-data:/app/data
-      - server-logs:/app/logs
+      - ./server.key:/app/server.key
+      - ./server.crt:/app/server.crt
+      - ./mutsumi.db:/app/mutsumi.db
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:12091/api/v1/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-
-volumes:
-  server-state:
-  server-data:
-  server-logs:
