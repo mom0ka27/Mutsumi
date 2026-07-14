@@ -96,7 +96,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
                 sliver: SliverToBoxAdapter(
                   child: MediaDetailOverview(
                     data: _overviewData(anime),
-                    heroTag: 'anime-cover-${anime.id}',
+                    heroTag: 'cover-${anime.id}',
                     beforeSummary: _watchProgress(anime),
                   ),
                 ),
@@ -208,30 +208,55 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
 
   Future<void> _deleteAnime(AnimeRead anime) async {
     final colorScheme = Theme.of(context).colorScheme;
+    var deleteFiles = true;
+
     final confirmed = await showAppDialog<bool>(
-      AlertDialog(
-        title: const Text('删除番剧'),
-        content: Text(
-          '确定删除“${anime.displayName}”吗？\n\n这会同时删除数据库记录、qBittorrent 下载任务和已下载文件，且无法撤销。',
-        ),
-        actions: [
-          Builder(
-            builder: (context) => TextButton(
-              onPressed: () => AppDialog.dismiss(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          Builder(
-            builder: (context) => FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-                foregroundColor: colorScheme.onError,
+      StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('删除番剧'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('确定删除"${anime.displayName}"吗？此操作无法撤销。'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: !deleteFiles,
+                      onChanged: (value) {
+                        setState(() => deleteFiles = !(value ?? false));
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('保留磁盘文件'),
+                ],
               ),
-              onPressed: () => AppDialog.dismiss(context, true),
-              child: const Text('删除'),
-            ),
+            ],
           ),
-        ],
+          actions: [
+            Builder(
+              builder: (context) => TextButton(
+                onPressed: () => AppDialog.dismiss(context, false),
+                child: const Text('取消'),
+              ),
+            ),
+            Builder(
+              builder: (context) => FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: colorScheme.error,
+                  foregroundColor: colorScheme.onError,
+                ),
+                onPressed: () => AppDialog.dismiss(context, true),
+                child: const Text('删除'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true || !mounted) {
@@ -239,9 +264,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
     }
     _deleting.value = true;
     try {
-      await _animeService.deleteAnime(anime.id);
+      await _animeService.deleteAnime(anime.id, deleteFiles: deleteFiles);
       Get.back(result: true);
-      Get.snackbar('删除成功', '已删除“${anime.displayName}”及其下载文件');
+      Get.snackbar(
+        '删除成功',
+        deleteFiles
+            ? '已删除"${anime.displayName}"及其下载文件'
+            : '已删除"${anime.displayName}"，文件已保留',
+      );
     } catch (error) {
       if (mounted) {
         _deleting.value = false;

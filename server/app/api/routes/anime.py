@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
-from pathlib import Path
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user, get_session, require_admin
-from app.core.config import config
 from app.models import Anime, Episode, User, WatchProgress
 from app.schemas import AnimeCreate, AnimeRead, EpisodeRead, WatchProgressRead, WatchProgressUpdate
-from app.api.routes.qbittorrent import delete_torrent
+from app.services.qbittorrent_service import delete_torrent
+from app.services.storage_service import storage_service
+
+VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 logger = logging.getLogger(__name__)
@@ -102,6 +104,7 @@ async def get_anime(
 )
 async def delete_anime(
     anime_id: int,
+    delete_files: bool = Query(default=True),
     session: AsyncSession = Depends(get_session),
 ):
     anime = await session.scalar(
@@ -121,9 +124,12 @@ async def delete_anime(
         if references:
             raise HTTPException(
                 status_code=409,
-                detail="Torrent is referenced by another anime",
+                detail="Resource is referenced by another anime",
             )
-        await delete_torrent(torrent_hash)
+        if _is_bt_hash(torrent_hash):
+            await delete_torrent(torrent_hash, delete_files=delete_files)
+        elif delete_files:
+            storage_service.delete_local_folder(torrent_hash)
 
     await session.execute(
         delete(WatchProgress).where(WatchProgress.anime_id == anime_id)
@@ -226,6 +232,26 @@ async def get_episode_file_hash(
     return {"file_hash": file_hash}
 
 
+@router.post("/local-folder")
+async def create_local_folder(
+    bangumi_id: int = Query(...),
+    _: User = Depends(get_current_user),
+):
+    try:
+        folder_id = storage_service.create_local_folder(bangumi_id)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create folder: {e}")
+    return {"folder_id": folder_id}
+
+
+@router.get("/local-folder/{folder_id}/files")
+async def list_local_folder_files(
+    folder_id: str,
+    _: User = Depends(get_current_user),
+):
+    return [file.model_dump() for file in storage_service.list_local_files(folder_id)]
+
+
 async def _with_watch_progress(
     animes: list[Anime],
     user_id: int,
@@ -256,16 +282,8 @@ async def _with_watch_progress(
     return reads
 
 
-def _episode_file_path(anime: Anime, episode: Episode) -> Path | None:
-    download_path = str(config["storage"].get("data_path") or "").strip()
-    if not download_path or not anime.download_hash or not episode.filename:
-        return None
-
-    root = (Path(download_path).expanduser() / anime.download_hash).resolve()
-    path = (root / episode.filename).resolve()
-    if root != path and root not in path.parents:
-        return None
-    return path
+def _episode_file_path(anime: Anime, episode: Episode):
+    return storage_service.episode_file_path(anime.download_hash, episode.filename)
 
 
 def _first_16mb_md5(file_path: Path) -> str | None:
@@ -273,3 +291,7 @@ def _first_16mb_md5(file_path: Path) -> str | None:
         if file_path.stat().st_size < 16 * 1024 * 1024:
             return None
         return hashlib.md5(file.read(16 * 1024 * 1024)).hexdigest()
+
+
+def _is_bt_hash(hash_str: str) -> bool:
+    return len(hash_str) == 40 and all(c in "0123456789abcdef" for c in hash_str.lower())

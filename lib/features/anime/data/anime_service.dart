@@ -2,8 +2,8 @@ import 'package:dio/dio.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/network/api_paths.dart';
-import '../../../core/network/dio_client.dart';
 import '../../bangumi/data/bangumi_repository.dart';
+import '../../settings/data/authenticated_server_client.dart';
 import '../../settings/data/settings_repository.dart';
 
 class AnimeService {
@@ -11,9 +11,8 @@ class AnimeService {
     : _settingsRepository = settingsRepository ?? SettingsRepository();
 
   final SettingsRepository _settingsRepository;
-  Dio? _cachedDio;
-  String? _cachedUrl;
-  String? _cachedToken;
+  late final AuthenticatedServerClient _serverClient =
+      AuthenticatedServerClient(settingsRepository: _settingsRepository);
 
   Future<List<AnimeRead>> listAnimes() async {
     final dio = _serverDio();
@@ -34,9 +33,12 @@ class AnimeService {
     return AnimeRead.fromJson(data);
   }
 
-  Future<void> deleteAnime(int id) async {
+  Future<void> deleteAnime(int id, {bool deleteFiles = true}) async {
     final dio = _serverDio();
-    await dio.delete<void>('$animeApiPath/$id');
+    await dio.delete<void>(
+      '$animeApiPath/$id',
+      queryParameters: {'delete_files': deleteFiles},
+    );
   }
 
   Future<void> updateWatchProgress({
@@ -97,6 +99,27 @@ class AnimeService {
     return response.data?['hash'] as String? ?? '';
   }
 
+  Future<String> createLocalFolder(int bangumiId) async {
+    final dio = _serverDio();
+    final response = await dio.post<Map<String, dynamic>>(
+      '$animeApiPath/local-folder',
+      queryParameters: {'bangumi_id': bangumiId},
+    );
+    return response.data?['folder_id'] as String? ?? '';
+  }
+
+  Future<List<QBittorrentFile>> listLocalFiles(String folderId) async {
+    final dio = _serverDio();
+    final response = await dio.get<List<dynamic>>(
+      '$animeApiPath/local-folder/$folderId/files',
+    );
+    final data = response.data ?? [];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(QBittorrentFile.fromJson)
+        .toList();
+  }
+
   Future<List<QBittorrentFile>> getTorrentFiles(String source) async {
     final dio = _serverDio();
     final response = await dio.get<List<dynamic>>(
@@ -145,27 +168,7 @@ class AnimeService {
     AppLogger.info('添加 Anime 完成 bangumi=${subject.id}', tag: 'Anime');
   }
 
-  Dio _serverDio() {
-    final serverUrl = _settingsRepository.getServerUrl();
-    final accessToken = _settingsRepository.getAccessToken(serverUrl);
-    if (serverUrl.isEmpty || accessToken == null || accessToken.isEmpty) {
-      throw StateError('请先连接并登录服务器');
-    }
-    if (_cachedDio == null ||
-        _cachedUrl != serverUrl ||
-        _cachedToken != accessToken) {
-      _cachedDio = DioClient(
-        serverUrl,
-        certificateSha256: _settingsRepository.getCertificateFingerprint(
-          serverUrl,
-        ),
-        accessToken: accessToken,
-      ).dio;
-      _cachedUrl = serverUrl;
-      _cachedToken = accessToken;
-    }
-    return _cachedDio!;
-  }
+  Dio _serverDio() => _serverClient.dio;
 }
 
 class WatchProgressRead {
@@ -389,14 +392,4 @@ String episodeNameFromFilename(String filename) {
     return name;
   }
   return name.substring(0, dotIndex);
-}
-
-String messageFromDioError(Object error) {
-  if (error is DioException) {
-    final detail = error.response?.data is Map<String, dynamic>
-        ? error.response?.data['detail']
-        : null;
-    return detail?.toString() ?? error.message ?? error.toString();
-  }
-  return error.toString();
 }

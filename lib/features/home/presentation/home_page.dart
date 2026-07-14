@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
+import '../../anime/data/anime_list_store.dart';
 import '../../anime/presentation/anime_home_view.dart';
 import '../../downloads/presentation/download_progress_view.dart';
 import '../../settings/presentation/settings_home_view.dart';
@@ -19,10 +20,35 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _selectedIndex = 0.obs;
+  late final PageController _pageController;
+  late final AnimeListStore _animeListStore;
 
   static const _titles = ['主页', 'Bangumi', '下载', '设置'];
 
+  @override
+  void initState() {
+    super.initState();
+    _animeListStore = AnimeListStore();
+    Get.put<AnimeListStore>(_animeListStore, permanent: true);
+    _pageController = PageController(initialPage: _selectedIndex.value);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   void _onTabSelected(int index) {
+    _selectedIndex.value = index;
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _onPageChanged(int index) {
     _selectedIndex.value = index;
   }
 
@@ -44,11 +70,12 @@ class _HomePageState extends State<HomePage> {
           ),
           centerTitle: false,
         ),
-        body: IndexedStack(
-          index: selectedIndex,
+        body: PageView(
+          controller: _pageController,
+          onPageChanged: _onPageChanged,
           children: [
-            const AnimeHomeView(),
-            const BangumiSearchView(),
+            AnimeHomeView(store: _animeListStore),
+            BangumiSearchView(store: _animeListStore),
             DownloadProgressView(isActive: selectedIndex == 2),
             const SettingsHomeView(),
           ],

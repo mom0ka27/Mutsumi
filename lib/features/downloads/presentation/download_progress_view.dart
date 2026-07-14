@@ -5,14 +5,14 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
-import '../../../core/network/dio_client.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 
 import '../data/download_repository.dart';
 
 class DownloadProgressView extends StatefulWidget {
-  const DownloadProgressView({super.key, this.isActive = true});
+  const DownloadProgressView({super.key, required this.isActive});
 
   final bool isActive;
 
@@ -21,7 +21,7 @@ class DownloadProgressView extends StatefulWidget {
 }
 
 class _DownloadProgressViewState extends State<DownloadProgressView>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   final _repository = DownloadRepository();
   Timer? _timer;
   final _tasks = <DownloadTask>[].obs;
@@ -32,6 +32,9 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
   bool _appIsResumed = true;
   final _filter = _DownloadFilter.downloading.obs;
   final _changingTaskState = <String>{}.obs;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -62,7 +65,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
   }
 
   void _syncPolling() {
-    if (widget.isActive && _appIsResumed) {
+    if (_appIsResumed && widget.isActive) {
       _startPolling();
       return;
     }
@@ -92,7 +95,6 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       if (mounted) {
         _error.value = error;
         _loading.value = false;
-        _showErrorDialog(error);
       }
     } finally {
       _requesting = false;
@@ -104,24 +106,19 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       return;
     }
     _showingError = true;
-    final message = error is ApiBusinessException
-        ? error.message
-        : error.toString();
-    await showErrorDialog(title: '下载服务异常', message: message);
+    await showErrorDialog(title: '下载服务异常', message: errorMessageOf(error));
     _showingError = false;
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Obx(() {
       if (_loading.value) {
         return const Center(child: CircularProgressIndicator());
       }
       if (_error.value != null && _tasks.isEmpty) {
-        return RefreshIndicator(
-          onRefresh: _refresh,
-          child: Center(child: Text('加载下载任务失败\n${_error.value}')),
-        );
+        return Center(child: Text('加载下载任务失败\n${_error.value}'));
       }
       final tasks = _tasks
           .where(
@@ -131,51 +128,48 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
             },
           )
           .toList();
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView.separated(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            Constants.topPadding,
-            20,
-            Constants.bottomPadding,
-          ),
-          itemCount: tasks.length + 1,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return SegmentedButton<_DownloadFilter>(
-                segments: const [
-                  ButtonSegment(
-                    value: _DownloadFilter.downloading,
-                    label: Text('下载中'),
-                    icon: Icon(Icons.downloading_rounded),
-                  ),
-                  ButtonSegment(
-                    value: _DownloadFilter.completed,
-                    label: Text('已完成'),
-                    icon: Icon(Icons.check_circle_outline_rounded),
-                  ),
-                ],
-                selected: {_filter.value},
-                onSelectionChanged: (value) => _filter.value = value.first,
-              );
-            }
-            final task = tasks[index - 1];
-            return _DownloadCard(
-              task: task,
-              changingTaskState: _changingTaskState.contains(task.hash),
-              onTaskAction: _isCompleted(task)
-                  ? null
-                  : _isPaused(task)
-                  ? () => _resume(task)
-                  : () => _pause(task),
-              taskAction: _isPaused(task)
-                  ? _DownloadTaskAction.resume
-                  : _DownloadTaskAction.pause,
-            );
-          },
+      return ListView.separated(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          Constants.topPadding,
+          20,
+          Constants.bottomPadding,
         ),
+        itemCount: tasks.length + 1,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return SegmentedButton<_DownloadFilter>(
+              segments: const [
+                ButtonSegment(
+                  value: _DownloadFilter.downloading,
+                  label: Text('下载中'),
+                  icon: Icon(Icons.downloading_rounded),
+                ),
+                ButtonSegment(
+                  value: _DownloadFilter.completed,
+                  label: Text('已完成'),
+                  icon: Icon(Icons.check_circle_outline_rounded),
+                ),
+              ],
+              selected: {_filter.value},
+              onSelectionChanged: (value) => _filter.value = value.first,
+            );
+          }
+          final task = tasks[index - 1];
+          return _DownloadCard(
+            task: task,
+            changingTaskState: _changingTaskState.contains(task.hash),
+            onTaskAction: _isCompleted(task)
+                ? null
+                : _isPaused(task)
+                ? () => _resume(task)
+                : () => _pause(task),
+            taskAction: _isPaused(task)
+                ? _DownloadTaskAction.resume
+                : _DownloadTaskAction.pause,
+          );
+        },
       );
     });
   }

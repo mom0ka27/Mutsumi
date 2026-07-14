@@ -105,7 +105,6 @@ class IndexPlayerController {
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
 
-    stream.log.listen((event) => print(event));
     // await _setNativeProperty('sub-font-provider', 'auto');
     await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
     if (_disposed) {

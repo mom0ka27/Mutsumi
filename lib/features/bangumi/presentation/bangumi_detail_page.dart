@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/media_detail_overview.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
+import '../../anime_garden/presentation/local_add_prepare_page.dart';
 import '../data/bangumi_repository.dart';
 
 class BangumiDetailPage extends StatefulWidget {
@@ -72,7 +73,7 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
                       sliver: SliverToBoxAdapter(
                         child: MediaDetailOverview(
                           data: _overviewData(subject, detail),
-                          heroTag: 'bangumi-cover-${subject.id}',
+                          heroTag: 'cover-${subject.id}',
                         ),
                       ),
                     ),
@@ -82,16 +83,38 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
                       ),
                   ],
                 ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => Get.to(
-              () => AnimeGardenDownloadPage(
-                subject: subject,
-                backgroundImageUrl: subject.imageUrl,
-              ),
+          floatingActionButton: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'local-add',
+                  onPressed: () =>
+                      showLocalAddDialog(context, subject: subject),
+                  shape: LiquidRoundedRectangle(
+                    borderRadius: Constants.radius.x,
+                  ),
+                  label: const Text("添加"),
+                  icon: const Icon(Icons.add_rounded),
+                ),
+                const SizedBox(height: 16),
+                FloatingActionButton.extended(
+                  heroTag: 'download',
+                  onPressed: () => Get.to(
+                    () => AnimeGardenDownloadPage(
+                      subject: subject,
+                      backgroundImageUrl: subject.imageUrl,
+                    ),
+                  ),
+                  shape: LiquidRoundedRectangle(
+                    borderRadius: Constants.radius.x,
+                  ),
+                  label: const Text("下载"),
+                  icon: const Icon(Icons.download_rounded),
+                ),
+              ],
             ),
-            shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
-            label: Text("下载"),
-            icon: const Icon(Icons.download_rounded),
           ),
         );
       },
@@ -182,7 +205,7 @@ class _DetailError extends StatelessWidget {
                     tags: const [],
                     infoItems: const [],
                   ),
-                  heroTag: 'bangumi-cover-${subject.id}',
+                  heroTag: 'cover-${subject.id}',
                 ),
                 const SizedBox(height: 16),
                 Text('详情加载失败\n$message', textAlign: TextAlign.center),

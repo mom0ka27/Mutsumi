@@ -11,6 +11,7 @@ from app.core.auth import get_current_user, require_download_permission
 from app.core.config import config
 from app.core.qbittorrent_error import QBittorrentError
 from app.models import User
+from app.services.qbittorrent_service import delete_torrent as delete_torrent_request
 from app.schemas import (
     QBittorrentFileRead,
     QBittorrentTorrentAddResult,
@@ -158,18 +159,8 @@ async def get_torrent_files(
     return _metadata_files(metadata)
 
 
-async def delete_torrent(torrent_hash: str) -> None:
-    client = await _qbittorrent_client()
-    try:
-        response = await _qbittorrent_post(
-            client,
-            "/api/v2/torrents/delete",
-            data={"hashes": torrent_hash, "deleteFiles": "true"},
-        )
-        if response.status_code >= 400 or response.text.strip() == "Fails.":
-            raise QBittorrentError(21008, "删除下载任务或文件失败")
-    finally:
-        await client.aclose()
+async def delete_torrent(torrent_hash: str, delete_files: bool = True) -> None:
+    await delete_torrent_request(torrent_hash, delete_files=delete_files)
 
 
 async def _wait_for_metadata(

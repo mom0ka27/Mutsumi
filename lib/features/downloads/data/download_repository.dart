@@ -1,5 +1,5 @@
 import '../../../core/network/api_paths.dart';
-import '../../../core/network/dio_client.dart';
+import '../../settings/data/authenticated_server_client.dart';
 import '../../settings/data/settings_repository.dart';
 
 class DownloadRepository {
@@ -7,13 +7,11 @@ class DownloadRepository {
     : _settingsRepository = settingsRepository ?? SettingsRepository();
 
   final SettingsRepository _settingsRepository;
-  DioClient? _cachedClient;
-  String? _cachedUrl;
-  String? _cachedToken;
-  String? _cachedFingerprint;
+  late final AuthenticatedServerClient _client =
+      AuthenticatedServerClient(settingsRepository: _settingsRepository);
 
   Future<List<DownloadTask>> listTasks() async {
-    final response = await _dio().dio.get<dynamic>(
+    final response = await _client.dio.get<dynamic>(
       '$qbittorrentApiPath/torrents',
     );
     final data = response.data;
@@ -27,36 +25,11 @@ class DownloadRepository {
   }
 
   Future<void> pauseTask(String hash) async {
-    await _dio().dio.post<void>('$qbittorrentApiPath/torrents/$hash/pause');
+    await _client.dio.post<void>('$qbittorrentApiPath/torrents/$hash/pause');
   }
 
   Future<void> resumeTask(String hash) async {
-    await _dio().dio.post<void>('$qbittorrentApiPath/torrents/$hash/resume');
-  }
-
-  DioClient _dio() {
-    final serverUrl = _settingsRepository.getServerUrl();
-    final token = _settingsRepository.getAccessToken(serverUrl);
-    if (serverUrl.isEmpty || token == null || token.isEmpty) {
-      throw StateError('请先连接并登录服务器');
-    }
-    final fingerprint = _settingsRepository.getCertificateFingerprint(
-      serverUrl,
-    );
-    if (_cachedClient == null ||
-        _cachedUrl != serverUrl ||
-        _cachedToken != token ||
-        _cachedFingerprint != fingerprint) {
-      _cachedClient = DioClient(
-        serverUrl,
-        certificateSha256: fingerprint,
-        accessToken: token,
-      );
-      _cachedUrl = serverUrl;
-      _cachedToken = token;
-      _cachedFingerprint = fingerprint;
-    }
-    return _cachedClient!;
+    await _client.dio.post<void>('$qbittorrentApiPath/torrents/$hash/resume');
   }
 }
 

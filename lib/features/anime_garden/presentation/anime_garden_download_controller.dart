@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../../anime/data/anime_service.dart';
+import '../../anime/data/anime_list_store.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../data/anime_garden_download_coordinator.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_episode_match_page.dart';
@@ -148,13 +149,11 @@ class AnimeGardenDownloadController extends GetxController {
           resource: resource,
           files: context.files,
           bangumiEpisodes: context.bangumiEpisodes,
+          animeListStore: Get.find<AnimeListStore>(),
         ),
       );
     } catch (error) {
-      await showErrorDialog(
-        title: '获取文件列表失败',
-        message: messageFromDioError(error),
-      );
+      await showErrorDialog(title: '获取文件列表失败', message: errorMessageOf(error));
     } finally {
       addingResourceIds.remove(resource.id);
     }

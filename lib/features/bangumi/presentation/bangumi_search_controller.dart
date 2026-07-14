@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../anime/data/anime_list_store.dart';
+import '../../anime/data/anime_service.dart';
 import '../data/bangumi_repository.dart';
 
 class BangumiSearchController extends GetxController {
-  BangumiSearchController({BangumiRepository? repository})
-    : _repository = repository ?? BangumiRepository();
+  BangumiSearchController({
+    required this.animeListStore,
+    BangumiRepository? repository,
+  }) : _repository = repository ?? BangumiRepository();
 
+  final AnimeListStore animeListStore;
   final BangumiRepository _repository;
   final queryController = TextEditingController();
   final results = <BangumiSubject>[].obs;
@@ -16,6 +21,8 @@ class BangumiSearchController extends GetxController {
   final message = RxnString();
   Timer? _debounce;
   var _searchGeneration = 0;
+
+  Map<int, AnimeRead> get existingAnimeMap => animeListStore.animeMap;
 
   @override
   void onClose() {

@@ -5,39 +5,35 @@ import 'package:get/get.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../player/extension/duration.dart';
-import '../../../core/network/dio_client.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/media_summary_card.dart';
+import '../data/anime_list_store.dart';
 import '../data/anime_service.dart';
 import 'anime_detail_page.dart';
 
 class AnimeHomeView extends StatefulWidget {
-  const AnimeHomeView({super.key});
+  const AnimeHomeView({super.key, required this.store});
+
+  final AnimeListStore store;
 
   @override
   State<AnimeHomeView> createState() => _AnimeHomeViewState();
 }
 
-class _AnimeHomeViewState extends State<AnimeHomeView> {
-  final _animeService = AnimeService();
-  final _animes = <AnimeRead>[].obs;
-  final _isLoading = true.obs;
+class _AnimeHomeViewState extends State<AnimeHomeView>
+    with AutomaticKeepAliveClientMixin {
+  AnimeListStore get store => widget.store;
   var _showingError = false;
 
   @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
+  bool get wantKeepAlive => true;
 
   Future<void> _refresh() async {
-    _isLoading.value = true;
     try {
-      _animes.value = await _animeService.listAnimes();
+      await store.refresh();
     } catch (error) {
       unawaited(_showErrorDialog(error));
-    } finally {
-      _isLoading.value = false;
     }
   }
 
@@ -46,22 +42,20 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
       return;
     }
     _showingError = true;
-    final message = error is ApiBusinessException
-        ? error.message
-        : error.toString();
-    await showErrorDialog(title: '加载 Anime 失败', message: message);
+    await showErrorDialog(title: '加载 Anime 失败', message: errorMessageOf(error));
     _showingError = false;
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Obx(() {
-      if (_isLoading.value) {
+      if (store.isLoading.value) {
         return const Center(child: CircularProgressIndicator());
       }
       return RefreshIndicator(
         onRefresh: _refresh,
-        child: _animes.isEmpty
+        child: store.animes.isEmpty
             ? ListView(
                 padding: EdgeInsets.fromLTRB(
                   24,
@@ -78,9 +72,9 @@ class _AnimeHomeViewState extends State<AnimeHomeView> {
                   Constants.bottomPadding,
                 ),
                 itemBuilder: (context, index) =>
-                    _AnimeCard(anime: _animes[index], refresh: _refresh),
+                    _AnimeCard(anime: store.animes[index], refresh: _refresh),
                 separatorBuilder: (_, _) => const SizedBox(height: 14),
-                itemCount: _animes.length,
+                itemCount: store.animes.length,
               ),
       );
     });
@@ -104,7 +98,7 @@ class _AnimeCard extends StatelessWidget {
 
     return MediaSummaryCard(
       imageUrl: anime.imageUrl,
-      heroTag: 'anime-cover-${anime.id}',
+      heroTag: 'cover-${anime.id}',
       title: anime.displayName,
       subtitle: anime.originalName,
       summary: anime.summary,

@@ -5,11 +5,12 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/network/api_paths.dart';
-import '../../../core/network/dio_client.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../data/settings_repository.dart';
+import '../data/authenticated_server_client.dart';
 
 class QBittorrentSettingsView extends StatefulWidget {
   const QBittorrentSettingsView({super.key, this.bottomPadding = 120});
@@ -53,6 +54,7 @@ class QBittorrentSettingsPage extends StatelessWidget {
 
 class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
   final _settings = SettingsRepository();
+  late final _client = AuthenticatedServerClient(settingsRepository: _settings);
   final _shareRatioSlider = 3.0.obs;
   Map<String, dynamic>? _config;
   final _loading = true.obs;
@@ -66,20 +68,11 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
     _load();
   }
 
-  DioClient _client() {
-    final url = _settings.getServerUrl();
-    return DioClient(
-      url,
-      certificateSha256: _settings.getCertificateFingerprint(url),
-      accessToken: _settings.getAccessToken(url),
-    );
-  }
-
   Future<void> _load() async {
     _loading.value = true;
     _errorMessage.value = null;
     try {
-      final response = await _client().dio.get<Map<String, dynamic>>(
+      final response = await _client.dio.get<Map<String, dynamic>>(
         qbittorrentConfigApiPath,
       );
       if (!mounted) return;
@@ -92,10 +85,10 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
       if (error.response?.statusCode == 403) {
         _forbidden.value = true;
       } else {
-        _errorMessage.value = _errorText(error);
+        _errorMessage.value = errorMessageOf(error);
       }
     } catch (error) {
-      _errorMessage.value = error.toString();
+      _errorMessage.value = errorMessageOf(error);
     } finally {
       if (mounted) _loading.value = false;
     }
@@ -107,7 +100,7 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
     }
     _saving.value = true;
     try {
-      await _client().dio.put<void>(
+      await _client.dio.put<void>(
         qbittorrentConfigApiPath,
         data: {
           'url': _config!['url'] ?? '',
@@ -128,10 +121,10 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
       if (error.response?.statusCode == 403) {
         _forbidden.value = true;
       } else {
-        await showErrorDialog(title: '保存失败', message: _errorText(error));
+        await showErrorDialog(title: '保存失败', message: errorMessageOf(error));
       }
     } catch (error) {
-      await showErrorDialog(title: '保存失败', message: error.toString());
+      await showErrorDialog(title: '保存失败', message: errorMessageOf(error));
     } finally {
       if (mounted) _saving.value = false;
     }
@@ -229,13 +222,6 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
       ? '无限'
       : _shareRatioSlider.value.toStringAsFixed(1);
 
-  String _errorText(DioException error) {
-    final data = error.response?.data;
-    if (data is Map && data['detail'] is String) {
-      return data['detail'] as String;
-    }
-    return error.message ?? '请求失败';
-  }
 }
 
 class _AccessDenied extends StatelessWidget {

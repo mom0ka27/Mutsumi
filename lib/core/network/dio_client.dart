@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 import '../logging/app_logger.dart';
+import 'app_network_error.dart';
 
 class DioClient {
   DioClient(String baseUrl, {String? certificateSha256, String? accessToken})
@@ -90,14 +91,4 @@ class DioClient {
   static String _normalizeFingerprint(String value) {
     return value.replaceAll(RegExp(r'[^a-fA-F0-9]'), '').toLowerCase();
   }
-}
-
-class ApiBusinessException implements Exception {
-  const ApiBusinessException(this.code, this.message);
-
-  final int code;
-  final String message;
-
-  @override
-  String toString() => message;
 }

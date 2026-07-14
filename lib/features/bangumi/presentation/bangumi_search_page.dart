@@ -5,16 +5,33 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/media_summary_card.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../anime/data/anime_list_store.dart';
+import '../../anime/data/anime_service.dart';
+import '../../anime/presentation/anime_detail_page.dart';
 import '../data/bangumi_repository.dart';
 import 'bangumi_detail_page.dart';
 import 'bangumi_search_controller.dart';
 
-class BangumiSearchView extends StatelessWidget {
-  const BangumiSearchView({super.key});
+class BangumiSearchView extends StatefulWidget {
+  const BangumiSearchView({super.key, required this.store});
+
+  final AnimeListStore store;
+
+  @override
+  State<BangumiSearchView> createState() => _BangumiSearchViewState();
+}
+
+class _BangumiSearchViewState extends State<BangumiSearchView>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(BangumiSearchController());
+    super.build(context);
+    final controller = Get.put(
+      BangumiSearchController(animeListStore: widget.store),
+    );
 
     return CustomScrollView(
       slivers: [
@@ -45,9 +62,11 @@ class BangumiSearchView extends StatelessWidget {
             sliver: SliverList.separated(
               itemBuilder: (context, index) {
                 final subject = controller.results[index];
+                final existingAnime = controller.existingAnimeMap[subject.id];
                 return _SubjectCard(
                   key: ValueKey('bangumi-subject-${subject.id}'),
                   subject: subject,
+                  existingAnime: existingAnime,
                 );
               },
               separatorBuilder: (_, _) => const SizedBox(height: 14),
@@ -145,19 +164,22 @@ class _SearchHeader extends StatelessWidget {
 }
 
 class _SubjectCard extends StatelessWidget {
-  const _SubjectCard({super.key, required this.subject});
+  const _SubjectCard({super.key, required this.subject, this.existingAnime});
 
   final BangumiSubject subject;
+  final AnimeRead? existingAnime;
 
   @override
   Widget build(BuildContext context) {
     return MediaSummaryCard(
       imageUrl: subject.imageUrl,
-      heroTag: 'bangumi-cover-${subject.id}',
+      heroTag: 'cover-${subject.id}',
       title: subject.displayName,
       subtitle: subject.originalName,
       summary: subject.summary,
       chips: [
+        if (existingAnime != null)
+          MediaInfoChip(icon: Icons.check_circle_rounded, label: '已添加'),
         if (subject.score > 0)
           MediaInfoChip(
             icon: Icons.star_rounded,
@@ -174,7 +196,18 @@ class _SubjectCard extends StatelessWidget {
             label: subject.airDate,
           ),
       ],
-      onTap: () => Get.to(() => BangumiDetailPage(subject: subject)),
+      onTap: () {
+        if (existingAnime != null) {
+          Get.to(
+            () => AnimeDetailPage(
+              animeId: existingAnime!.id,
+              initialAnime: existingAnime,
+            ),
+          );
+        } else {
+          Get.to(() => BangumiDetailPage(subject: subject));
+        }
+      },
     );
   }
 }

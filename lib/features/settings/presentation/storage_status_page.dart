@@ -5,10 +5,11 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/network/api_paths.dart';
-import '../../../core/network/dio_client.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../data/settings_repository.dart';
+import '../data/authenticated_server_client.dart';
 
 class StorageStatusPage extends StatefulWidget {
   const StorageStatusPage({super.key});
@@ -19,6 +20,7 @@ class StorageStatusPage extends StatefulWidget {
 
 class _StorageStatusPageState extends State<StorageStatusPage> {
   final _settings = SettingsRepository();
+  late final _client = AuthenticatedServerClient(settingsRepository: _settings);
   final _loading = true.obs;
   final _forbidden = false.obs;
   final _errorMessage = RxnString();
@@ -30,20 +32,11 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
     _load();
   }
 
-  DioClient _client() {
-    final url = _settings.getServerUrl();
-    return DioClient(
-      url,
-      certificateSha256: _settings.getCertificateFingerprint(url),
-      accessToken: _settings.getAccessToken(url),
-    );
-  }
-
   Future<void> _load() async {
     _loading.value = true;
     _errorMessage.value = null;
     try {
-      final response = await _client().dio.get<Map<String, dynamic>>(
+      final response = await _client.dio.get<Map<String, dynamic>>(
         storageApiPath,
       );
       if (!mounted || response.data == null) return;
@@ -53,10 +46,10 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
       if (error.response?.statusCode == 403) {
         _forbidden.value = true;
       } else {
-        _errorMessage.value = _errorText(error);
+        _errorMessage.value = errorMessageOf(error);
       }
     } catch (error) {
-      _errorMessage.value = error.toString();
+      _errorMessage.value = errorMessageOf(error);
     } finally {
       if (mounted) _loading.value = false;
     }
@@ -104,59 +97,45 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
         if (status == null) {
           return _LoadError(message: '未获得存储信息', onRetry: _load);
         }
-        return RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
-            children: [
-              Text('服务器存储', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(
-                status.dataPath,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 20),
-              _SummaryCard(status: status),
-              const SizedBox(height: 20),
-              Text('详情', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              if (status.anime.isEmpty)
-                const _EmptyCard()
-              else
-                GlassCard(
-                  useOwnLayer: true,
-                  padding: EdgeInsets.zero,
-                  shape: LiquidRoundedSuperellipse(
-                    borderRadius: Constants.radius.x,
-                  ),
-                  settings: AppGlassSettings.standard(context),
-                  child: Column(
-                    children: [
-                      for (
-                        var index = 0;
-                        index < status.anime.length;
-                        index++
-                      ) ...[
-                        _AnimeStorageTile(anime: status.anime[index]),
-                        if (index < status.anime.length - 1)
-                          const Divider(height: 1),
-                      ],
-                    ],
-                  ),
+        return ListView(
+          padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
+          children: [
+            Text('服务器存储', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            Text(status.dataPath, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 20),
+            _SummaryCard(status: status),
+            const SizedBox(height: 20),
+            Text('详情', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            if (status.anime.isEmpty)
+              const _EmptyCard()
+            else
+              GlassCard(
+                useOwnLayer: true,
+                padding: EdgeInsets.zero,
+                shape: LiquidRoundedSuperellipse(
+                  borderRadius: Constants.radius.x,
                 ),
-            ],
-          ),
+                settings: AppGlassSettings.standard(context),
+                child: Column(
+                  children: [
+                    for (
+                      var index = 0;
+                      index < status.anime.length;
+                      index++
+                    ) ...[
+                      _AnimeStorageTile(anime: status.anime[index]),
+                      if (index < status.anime.length - 1)
+                        const Divider(height: 1),
+                    ],
+                  ],
+                ),
+              ),
+          ],
         );
       }),
     );
-  }
-
-  String _errorText(DioException error) {
-    final data = error.response?.data;
-    if (data is Map && data['detail'] is String) {
-      return data['detail'] as String;
-    }
-    return error.message ?? '请求失败';
   }
 }
 

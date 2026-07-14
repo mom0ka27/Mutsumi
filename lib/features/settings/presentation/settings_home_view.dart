@@ -24,9 +24,13 @@ class SettingsHomeView extends StatefulWidget {
   State<SettingsHomeView> createState() => _SettingsHomeViewState();
 }
 
-class _SettingsHomeViewState extends State<SettingsHomeView> {
+class _SettingsHomeViewState extends State<SettingsHomeView>
+    with AutomaticKeepAliveClientMixin {
   final _settings = SettingsRepository();
   final _currentUser = Get.find<CurrentUserController>();
+
+  @override
+  bool get wantKeepAlive => true;
 
   Future<void> _addAccount() async {
     final account = _settings.getCurrentAccount();
@@ -129,128 +133,66 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
   }
 
   @override
-  Widget build(BuildContext context) => Obx(() {
-    final account = _settings.getCurrentAccount();
-    final colors = Theme.of(context).colorScheme;
-    final glassSettings = AppGlassSettings.standard(context);
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        Constants.topPadding,
-        20,
-        Constants.bottomPadding,
-      ),
-      children: [
-        GlassCard(
-          useOwnLayer: true,
-          padding: const EdgeInsets.all(20),
-          shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: glassSettings,
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: colors.primaryContainer,
-                foregroundColor: colors.onPrimaryContainer,
-                child: const Icon(Icons.person_rounded),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      account?.username ?? '未登录',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      account == null
-                          ? '未连接服务器'
-                          : _settings.getServerName(account.serverUrl),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                    if (account != null)
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Obx(() {
+      final account = _settings.getCurrentAccount();
+      final colors = Theme.of(context).colorScheme;
+      final glassSettings = AppGlassSettings.standard(context);
+      return ListView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          Constants.topPadding,
+          20,
+          Constants.bottomPadding,
+        ),
+        children: [
+          GlassCard(
+            useOwnLayer: true,
+            padding: const EdgeInsets.all(20),
+            shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
+            settings: glassSettings,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: colors.primaryContainer,
+                  foregroundColor: colors.onPrimaryContainer,
+                  child: const Icon(Icons.person_rounded),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        account.serverUrl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        account?.username ?? '未登录',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        account == null
+                            ? '未连接服务器'
+                            : _settings.getServerName(account.serverUrl),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        GlassCard(
-          useOwnLayer: true,
-          padding: EdgeInsets.zero,
-          shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: glassSettings,
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.switch_account_rounded),
-                title: const Text('切换账户'),
-                subtitle: const Text('管理已保存的服务器与账户'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Get.to(() => const SavedServersPage()),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.person_add_alt_1_rounded),
-                title: const Text('添加账户'),
-                subtitle: const Text('登录当前服务器的其他账户'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: account == null ? null : _addAccount,
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.password_rounded),
-                title: const Text('修改密码'),
-                subtitle: const Text('更新当前账户的登录密码'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: account == null ? null : _changePassword,
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.add_link_rounded),
-                title: const Text('连接新服务器'),
-                subtitle: const Text('添加并登录另一台服务器'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Get.to(
-                  () => const ConnectServerPage(
-                    prefillLastServer: false,
-                    showBackButton: true,
+                      if (account != null)
+                        Text(
+                          account.serverUrl,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        GlassCard(
-          useOwnLayer: true,
-          padding: EdgeInsets.zero,
-          shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-          settings: glassSettings,
-          child: ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('外观'),
-            subtitle: const Text('调整主题模式'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => Get.to(() => const AppearanceSettingsPage()),
-          ),
-        ),
-        if (_currentUser.isAdmin) ...[
           const SizedBox(height: 20),
           GlassCard(
             useOwnLayer: true,
@@ -260,33 +202,98 @@ class _SettingsHomeViewState extends State<SettingsHomeView> {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.download_rounded),
-                  title: const Text('qBittorrent'),
-                  subtitle: const Text('下载与分享率设置'),
+                  leading: const Icon(Icons.switch_account_rounded),
+                  title: const Text('切换账户'),
+                  subtitle: const Text('管理已保存的服务器与账户'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Get.to(() => const QBittorrentSettingsPage()),
+                  onTap: () => Get.to(() => const SavedServersPage()),
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.manage_accounts_rounded),
-                  title: const Text('用户管理'),
-                  subtitle: const Text('新增、编辑和删除用户'),
+                  leading: const Icon(Icons.person_add_alt_1_rounded),
+                  title: const Text('添加账户'),
+                  subtitle: const Text('登录当前服务器的其他账户'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Get.to(() => const UsersManagementPage()),
+                  onTap: account == null ? null : _addAccount,
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.storage_rounded),
-                  title: const Text('存储空间'),
-                  subtitle: const Text('查看 data 文件夹和服务器磁盘容量'),
+                  leading: const Icon(Icons.password_rounded),
+                  title: const Text('修改密码'),
+                  subtitle: const Text('更新当前账户的登录密码'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Get.to(() => const StorageStatusPage()),
+                  onTap: account == null ? null : _changePassword,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.add_link_rounded),
+                  title: const Text('连接新服务器'),
+                  subtitle: const Text('添加并登录另一台服务器'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Get.to(
+                    () => const ConnectServerPage(
+                      prefillLastServer: false,
+                      showBackButton: true,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          GlassCard(
+            useOwnLayer: true,
+            padding: EdgeInsets.zero,
+            shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
+            settings: glassSettings,
+            child: ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('外观'),
+              subtitle: const Text('调整主题模式'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Get.to(() => const AppearanceSettingsPage()),
+            ),
+          ),
+          if (_currentUser.isAdmin) ...[
+            const SizedBox(height: 20),
+            GlassCard(
+              useOwnLayer: true,
+              padding: EdgeInsets.zero,
+              shape: LiquidRoundedSuperellipse(
+                borderRadius: Constants.radius.x,
+              ),
+              settings: glassSettings,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.download_rounded),
+                    title: const Text('qBittorrent'),
+                    subtitle: const Text('下载与分享率设置'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Get.to(() => const QBittorrentSettingsPage()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.manage_accounts_rounded),
+                    title: const Text('用户管理'),
+                    subtitle: const Text('新增、编辑和删除用户'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Get.to(() => const UsersManagementPage()),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.storage_rounded),
+                    title: const Text('存储空间'),
+                    subtitle: const Text('查看 data 文件夹和服务器磁盘容量'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Get.to(() => const StorageStatusPage()),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
-      ],
-    );
-  });
+      );
+    });
+  }
 }

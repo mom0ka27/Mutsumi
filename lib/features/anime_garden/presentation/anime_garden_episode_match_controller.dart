@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../anime/data/anime_list_store.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../../core/widgets/error_dialog.dart';
@@ -37,19 +39,24 @@ class EpisodeFileMatch {
 class AnimeGardenEpisodeMatchController extends GetxController {
   AnimeGardenEpisodeMatchController({
     required this.subject,
-    required this.resource,
+    this.resource,
     required List<QBittorrentFile> files,
     required List<BangumiEpisode> bangumiEpisodes,
     AnimeGardenDownloadCoordinator? downloadCoordinator,
+    AnimeListStore? animeListStore,
+    this.onSave,
   }) : _downloadCoordinator =
-           downloadCoordinator ?? AnimeGardenDownloadCoordinator() {
+           downloadCoordinator ?? AnimeGardenDownloadCoordinator(),
+       _animeListStore = animeListStore {
     _files.addAll(files);
     _bangumiEpisodes.addAll(bangumiEpisodes);
   }
 
   final BangumiSubject subject;
-  final AnimeGardenResource resource;
+  final AnimeGardenResource? resource;
   final AnimeGardenDownloadCoordinator _downloadCoordinator;
+  final AnimeListStore? _animeListStore;
+  final Future<void> Function(List<AnimeEpisodeCreate> episodes)? onSave;
   final _files = <QBittorrentFile>[];
   final _bangumiEpisodes = <BangumiEpisode>[];
   final matches = <EpisodeFileMatch>[].obs;
@@ -147,20 +154,33 @@ class AnimeGardenEpisodeMatchController extends GetxController {
 
     saving.value = true;
     try {
-      await _downloadCoordinator.submitEpisodeSelection(
-        subject: subject,
-        resource: resource,
-        episodes: episodes,
-      );
-      Get
-        ..back()
-        ..back()
-        ..snackbar('已添加', 'Anime、BT 任务和 Episode 已保存到服务器');
+      if (onSave != null) {
+        await onSave!(episodes);
+        _refreshAnimeList();
+        Get
+          ..back()
+          ..snackbar('已添加', 'Anime 和 Episode 已保存到服务器');
+      } else {
+        await _downloadCoordinator.submitEpisodeSelection(
+          subject: subject,
+          resource: resource!,
+          episodes: episodes,
+        );
+        _refreshAnimeList();
+        Get
+          ..back()
+          ..back()
+          ..snackbar('已添加', 'Anime、BT 任务和 Episode 已保存到服务器');
+      }
     } catch (error) {
-      await showErrorDialog(title: '添加失败', message: messageFromDioError(error));
+      await showErrorDialog(title: '添加失败', message: errorMessageOf(error));
     } finally {
       saving.value = false;
     }
+  }
+
+  void _refreshAnimeList() {
+    _animeListStore?.refresh();
   }
 
   List<String> _duplicateValues(Iterable<String> values) {

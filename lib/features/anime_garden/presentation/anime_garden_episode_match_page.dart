@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../anime/data/anime_list_store.dart';
 import '../../anime/data/anime_service.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_garden_repository.dart';
@@ -15,15 +16,21 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
   const AnimeGardenEpisodeMatchPage({
     super.key,
     required this.subject,
-    required this.resource,
+    this.resource,
     required this.files,
     required this.bangumiEpisodes,
+    required this.animeListStore,
+    this.onSave,
+    this.pageTitle = '匹配 Episode',
   });
 
   final BangumiSubject subject;
-  final AnimeGardenResource resource;
+  final AnimeGardenResource? resource;
   final List<QBittorrentFile> files;
   final List<BangumiEpisode> bangumiEpisodes;
+  final AnimeListStore animeListStore;
+  final Future<void> Function(List<AnimeEpisodeCreate> episodes)? onSave;
+  final String pageTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +40,8 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
         resource: resource,
         files: files,
         bangumiEpisodes: bangumiEpisodes,
+        animeListStore: animeListStore,
+        onSave: onSave,
       ),
     );
     return GlassScaffold(
@@ -41,10 +50,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
       background: const AppGlassBackground(),
       appBar: GlassAppBar(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        title: Text(
-          '匹配 Episode',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
+        title: Text(pageTitle, style: Theme.of(context).textTheme.titleLarge),
         leading: GlassButton(
           width: 40,
           height: 40,
@@ -76,7 +82,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
       ),
       body: Obx(() {
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 96),
+          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 120),
           itemBuilder: (context, index) {
             return _EpisodeMatchCard(controller: controller, index: index);
           },
