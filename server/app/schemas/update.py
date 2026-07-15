@@ -9,6 +9,13 @@ class UpdateChannel(StrEnum):
     BRANCH = "branch"
 
 
+class UpdateStatus(StrEnum):
+    DOWNLOADING = "downloading"
+    INSTALLING = "installing"
+    RUNNING = "running"
+    FAILED = "failed"
+
+
 class ServerUpdateRead(BaseModel):
     channel: UpdateChannel
     current_version: str
@@ -22,3 +29,10 @@ class ServerUpdateRead(BaseModel):
 
 class ServerUpdateRequest(BaseModel):
     channel: UpdateChannel
+
+
+class ServerUpdateStatusRead(BaseModel):
+    status: UpdateStatus
+    channel: UpdateChannel | None
+    target_version: str
+    message: str

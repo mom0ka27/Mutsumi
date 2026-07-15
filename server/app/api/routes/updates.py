@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.core.auth import require_admin
 from app.core.constants import SERVER_VERSION
-from app.schemas import ServerUpdateRead, ServerUpdateRequest
+from app.schemas import ServerUpdateRead, ServerUpdateRequest, ServerUpdateStatusRead
 from app.schemas.update import UpdateChannel
 from app.services.server_update_service import server_update_service
 
@@ -36,8 +36,16 @@ async def apply_update(
     background_tasks: BackgroundTasks,
     _=Depends(require_admin),
 ):
+    state = server_update_service.begin_update(payload.channel)
+    if state is None:
+        raise HTTPException(status_code=409, detail="已有更新任务正在执行")
     background_tasks.add_task(server_update_service.apply_update, payload.channel)
-    return {"status": "updating"}
+    return state
+
+
+@router.get("/status", response_model=ServerUpdateStatusRead)
+async def get_update_status(_=Depends(require_admin)):
+    return server_update_service.update_status()
 
 
 def _versions_equal(left: str, right: str) -> bool:

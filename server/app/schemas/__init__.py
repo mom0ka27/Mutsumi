@@ -18,7 +18,7 @@ from app.schemas.qbittorrent import (
 )
 from app.schemas.setup import SetupCreate, SetupStatus
 from app.schemas.user import PasswordChange, UserCreate, UserRead, UserUpdate
-from app.schemas.update import ServerUpdateRead, ServerUpdateRequest
+from app.schemas.update import ServerUpdateRead, ServerUpdateRequest, ServerUpdateStatusRead
 
 __all__ = [
     "AnimeCreate",
@@ -45,4 +45,5 @@ __all__ = [
     "UserUpdate",
     "ServerUpdateRead",
     "ServerUpdateRequest",
+    "ServerUpdateStatusRead",
 ]

@@ -29,6 +29,18 @@ class ServerUpdateService {
 
   Future<void> applyUpdate(ServerUpdateChannel channel) =>
       _client.dio.post<void>(updatesApiPath, data: {'channel': channel.name});
+
+  Future<ServerUpdateStatusInfo> getUpdateStatus() async {
+    final response = await _client.dio.get<Map<String, dynamic>>(
+      updateStatusApiPath,
+    );
+    final data = response.data ?? {};
+    return ServerUpdateStatusInfo(
+      status: serverUpdateStatusOf(data['status'] as String?),
+      targetVersion: data['target_version'] as String? ?? '',
+      message: data['message'] as String? ?? '',
+    );
+  }
 }
 
 class ServerUpdateInfo {
@@ -47,4 +59,26 @@ class ServerUpdateInfo {
   final String releaseName;
   final String releaseNotes;
   final bool updateAvailable;
+}
+
+enum ServerUpdateStatus { downloading, installing, running, failed }
+
+ServerUpdateStatus serverUpdateStatusOf(String? value) => switch (value) {
+  'downloading' => ServerUpdateStatus.downloading,
+  'installing' => ServerUpdateStatus.installing,
+  'running' => ServerUpdateStatus.running,
+  'failed' => ServerUpdateStatus.failed,
+  _ => ServerUpdateStatus.running,
+};
+
+class ServerUpdateStatusInfo {
+  const ServerUpdateStatusInfo({
+    required this.status,
+    required this.targetVersion,
+    required this.message,
+  });
+
+  final ServerUpdateStatus status;
+  final String targetVersion;
+  final String message;
 }

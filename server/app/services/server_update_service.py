@@ -13,6 +13,7 @@ import httpx
 from app.core.config import config
 from app.core.constants import SERVER_VERSION
 from app.schemas.update import UpdateChannel
+from app.schemas.update import UpdateStatus
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,10 @@ class ServerUpdateService:
     _repository_pattern = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     _update_lock = asyncio.Lock()
     _build_info_path = Path(__file__).resolve().parents[2] / ".build-info"
+    _status = UpdateStatus.RUNNING
+    _channel: UpdateChannel | None = None
+    _target_version = ""
+    _message = "服务端正在运行"
 
     async def get_candidate(self, channel: UpdateChannel) -> UpdateCandidate:
         repository = self._repository()
@@ -44,16 +49,65 @@ class ServerUpdateService:
 
     async def apply_update(self, channel: UpdateChannel) -> None:
         async with self._update_lock:
-            candidate = await self.get_candidate(channel)
-            archive = await self._download(candidate.download_url)
             try:
-                await asyncio.to_thread(self._replace_files, archive)
-                if channel == UpdateChannel.BRANCH:
-                    await asyncio.to_thread(self._write_build_commit, candidate.version)
-            finally:
-                archive.unlink(missing_ok=True)
+                candidate = await self.get_candidate(channel)
+                self._set_status(
+                    UpdateStatus.DOWNLOADING,
+                    channel=channel,
+                    target_version=candidate.version,
+                    message="正在下载更新包",
+                )
+                archive = await self._download(candidate.download_url)
+                try:
+                    self._set_status(
+                        UpdateStatus.INSTALLING,
+                        message="正在替换服务端文件",
+                    )
+                    await asyncio.to_thread(self._replace_files, archive)
+                    if channel == UpdateChannel.BRANCH:
+                        await asyncio.to_thread(self._write_build_commit, candidate.version)
+                finally:
+                    archive.unlink(missing_ok=True)
+            except Exception as exc:
+                self._set_status(UpdateStatus.FAILED, message=str(exc))
+                logger.exception("服务端更新失败")
+                return
             logger.warning("服务端更新完成，正在重启至 %s", candidate.version)
         os._exit(75)
+
+    def begin_update(self, channel: UpdateChannel) -> dict[str, object] | None:
+        if self._status in {UpdateStatus.DOWNLOADING, UpdateStatus.INSTALLING}:
+            return None
+        self._set_status(
+            UpdateStatus.DOWNLOADING,
+            channel=channel,
+            target_version="",
+            message="正在获取更新信息",
+        )
+        return self.update_status()
+
+    def update_status(self) -> dict[str, object]:
+        return {
+            "status": self._status,
+            "channel": self._channel,
+            "target_version": self._target_version,
+            "message": self._message,
+        }
+
+    def _set_status(
+        self,
+        status: UpdateStatus,
+        *,
+        channel: UpdateChannel | None = None,
+        target_version: str | None = None,
+        message: str,
+    ) -> None:
+        self._status = status
+        if channel is not None:
+            self._channel = channel
+        if target_version is not None:
+            self._target_version = target_version
+        self._message = message
 
     async def _release_candidate(
         self,
@@ -136,7 +190,7 @@ class ServerUpdateService:
 
     def _replace_files(self, archive: Path) -> None:
         root = Path(__file__).resolve().parents[2]
-        with tempfile.TemporaryDirectory(dir=root.parent) as temp_dir:
+        with tempfile.TemporaryDirectory(dir=root) as temp_dir:
             extracted = Path(temp_dir) / "extracted"
             extracted.mkdir()
             with zipfile.ZipFile(archive) as zip_file:

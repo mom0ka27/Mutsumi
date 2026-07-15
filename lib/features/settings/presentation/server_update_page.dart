@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -24,11 +26,21 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
   String? _errorMessage;
   var _loading = true;
   var _applying = false;
+  ServerUpdateStatusInfo? _updateStatus;
+  Timer? _statusTimer;
+  var _statusChecks = 0;
+  late String _targetVersion;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -73,20 +85,79 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _applying = true);
+    setState(() {
+      _applying = true;
+      _targetVersion = info.latestVersion;
+      _updateStatus = null;
+    });
     try {
       await _service.applyUpdate(_channel);
-      if (mounted) {
-        await showInfoDialog(title: '更新已开始', message: '服务端正在下载并重启，请稍后重新连接。');
-      }
+      _startStatusPolling();
     } catch (error) {
       if (mounted) {
         await showErrorDialog(title: '更新失败', message: errorMessageOf(error));
+        setState(() => _applying = false);
       }
-    } finally {
-      if (mounted) setState(() => _applying = false);
     }
   }
+
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _statusChecks = 0;
+    _pollUpdateStatus();
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _pollUpdateStatus(),
+    );
+  }
+
+  Future<void> _pollUpdateStatus() async {
+    if (!mounted || !_applying) return;
+    _statusChecks++;
+    if (_statusChecks > 120) {
+      _statusTimer?.cancel();
+      setState(() {
+        _applying = false;
+        _errorMessage = '等待服务端重启超时，请稍后手动刷新。';
+      });
+      return;
+    }
+    try {
+      final status = await _service.getUpdateStatus();
+      if (!mounted) return;
+      setState(() => _updateStatus = status);
+      if (status.status == ServerUpdateStatus.running) {
+        if (await _confirmUpdatedVersion()) {
+          _statusTimer?.cancel();
+        }
+      } else if (status.status == ServerUpdateStatus.failed) {
+        _statusTimer?.cancel();
+        setState(() {
+          _applying = false;
+          _errorMessage = status.message.isEmpty ? '服务端更新失败。' : status.message;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> _confirmUpdatedVersion() async {
+    try {
+      final info = await _service.getUpdate(_channel);
+      if (!mounted) return false;
+      if (_versionsEqual(info.currentVersion, _targetVersion)) {
+        setState(() {
+          _applying = false;
+          _info = info;
+        });
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  bool _versionsEqual(String left, String right) =>
+      left.replaceFirst(RegExp(r'^v'), '') ==
+      right.replaceFirst(RegExp(r'^v'), '');
 
   void _changeChannel(ServerUpdateChannel channel) {
     if (_channel == channel) return;
@@ -144,6 +215,7 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
             errorMessage: _errorMessage,
             loading: _loading,
             applying: _applying,
+            updateStatus: _updateStatus,
             onChannelChanged: _changeChannel,
             onApply: _apply,
           ),
@@ -160,6 +232,7 @@ class _UpdateInfoCard extends StatelessWidget {
     required this.errorMessage,
     required this.loading,
     required this.applying,
+    required this.updateStatus,
     required this.onChannelChanged,
     required this.onApply,
   });
@@ -169,6 +242,7 @@ class _UpdateInfoCard extends StatelessWidget {
   final String? errorMessage;
   final bool loading;
   final bool applying;
+  final ServerUpdateStatusInfo? updateStatus;
   final ValueChanged<ServerUpdateChannel> onChannelChanged;
   final VoidCallback onApply;
 
@@ -234,7 +308,7 @@ class _UpdateInfoCard extends StatelessWidget {
               ButtonSegment(
                 value: ServerUpdateChannel.prerelease,
                 icon: Icon(Icons.science_outlined),
-                label: Text('Pre-release'),
+                label: Text('Beta'),
               ),
               ButtonSegment(
                 value: ServerUpdateChannel.branch,
@@ -274,6 +348,10 @@ class _UpdateInfoCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+          if (applying) ...[
+            const SizedBox(height: 16),
+            _UpdateProgressStatus(status: updateStatus),
           ],
           if (updateInfo != null) ...[
             const SizedBox(height: 20),
@@ -339,6 +417,43 @@ class _UpdateInfoCard extends StatelessWidget {
     return info.updateAvailable
         ? '确认后服务端会从 GitHub 下载并自动重启。'
         : '当前服务端版本已与所选渠道保持一致。';
+  }
+}
+
+class _UpdateProgressStatus extends StatelessWidget {
+  const _UpdateProgressStatus({this.status});
+
+  final ServerUpdateStatusInfo? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final message = status?.message;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.all(Constants.radius),
+      ),
+      child: Row(
+        children: [
+          const SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message == null || message.isEmpty ? '正在提交更新任务...' : message,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colors.onPrimaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
