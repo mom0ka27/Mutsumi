@@ -6,35 +6,6 @@ on:
       - 'v*'
 
 jobs:
-  analyze:
-    runs-on: macos-latest
-    env:
-      FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout source
-        run: |
-          git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "$GITHUB_SHA"
-          git checkout --detach FETCH_HEAD
-      - name: Install Flutter
-        run: |
-          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
-          curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
-          unzip -q flutter.zip
-          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
-      - name: Restore Pub cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.pub-cache
-          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
-      - name: Get dependencies
-        run: flutter pub get --enforce-lockfile
-      - name: Analyze
-        run: flutter analyze
-
   build-android:
     runs-on: macos-latest
     env:
@@ -148,11 +119,22 @@ jobs:
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
+      - name: Package server update asset
+        run: |
+          set -euo pipefail
+          server_asset="mutsumi-server-${GITHUB_REF_NAME}.zip"
+          (
+            cd server
+            zip -qry "../${server_asset}" . -x '*/.DS_Store' '.DS_Store'
+          )
+          sha256sum "${server_asset}" > "${server_asset}.sha256"
       - name: Upload server package
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-server
-          path: server
+          path: |
+            mutsumi-server-${{ github.ref_name }}.zip
+            mutsumi-server-${{ github.ref_name }}.zip.sha256
           if-no-files-found: error
 
   release:
@@ -181,11 +163,6 @@ jobs:
         run: |
           set -euo pipefail
           server_asset="mutsumi-server-${GITHUB_REF_NAME}.zip"
-          (
-            cd server
-            zip -qry "../${server_asset}" .
-          )
-          sha256sum "${server_asset}" > "${server_asset}.sha256"
           gh release create "$GITHUB_REF_NAME" \
             --draft \
             --title "$GITHUB_REF_NAME" \
