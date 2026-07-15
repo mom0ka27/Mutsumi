@@ -17,6 +17,7 @@ class AnimeListStore extends GetxController {
     refresh();
   }
 
+  @override
   Future<void> refresh() async {
     isLoading.value = true;
     try {

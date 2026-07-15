@@ -43,11 +43,10 @@ class AnimeGardenEpisodeMatchController extends GetxController {
     required List<QBittorrentFile> files,
     required List<BangumiEpisode> bangumiEpisodes,
     AnimeGardenDownloadCoordinator? downloadCoordinator,
-    AnimeListStore? animeListStore,
+    this._animeListStore,
     this.onSave,
   }) : _downloadCoordinator =
-           downloadCoordinator ?? AnimeGardenDownloadCoordinator(),
-       _animeListStore = animeListStore {
+           downloadCoordinator ?? AnimeGardenDownloadCoordinator() {
     _files.addAll(files);
     _bangumiEpisodes.addAll(bangumiEpisodes);
   }

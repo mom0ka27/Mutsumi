@@ -28,8 +28,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _animeListStore = AnimeListStore();
-    Get.put<AnimeListStore>(_animeListStore, permanent: true);
+    _animeListStore = Get.put<AnimeListStore>(AnimeListStore());
     _pageController = PageController(initialPage: _selectedIndex.value);
   }
 

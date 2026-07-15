@@ -7,6 +7,7 @@ import '../../../app/startup_page.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../anime/data/anime_list_store.dart';
 import '../../auth/presentation/current_user_controller.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/settings_repository.dart';
@@ -212,6 +213,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
                         Get.find<CurrentUserController>().setPermissionGroup(
                           permissionGroup,
                         );
+                        Get.delete<AnimeListStore>(force: true);
                         Get.offAllNamed(HomePage.routeName);
                       },
                     ),
