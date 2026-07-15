@@ -82,7 +82,7 @@ if __name__ == "__main__":
         host=server_config["host"],
         port=server_config["port"],
         reload=server_config.get("reload", False),
-        # log_config=None,
+        log_level=config["logging"]["level"],
         workers=1,
         **ssl_options,
     )

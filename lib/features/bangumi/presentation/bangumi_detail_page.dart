@@ -4,6 +4,8 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/media_detail_overview.dart';
+import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
 import '../../anime_garden/presentation/local_add_prepare_page.dart';
 import '../data/bangumi_repository.dart';
@@ -18,12 +20,27 @@ class BangumiDetailPage extends StatefulWidget {
 }
 
 class _BangumiDetailPageState extends State<BangumiDetailPage> {
-  late final Future<BangumiSubjectDetail> _detailFuture;
+  late Future<BangumiSubjectDetail> _detailFuture;
+  bool _showingDetailError = false;
 
   @override
   void initState() {
     super.initState();
+    _loadDetail();
+  }
+
+  void _loadDetail() {
     _detailFuture = BangumiRepository().getSubjectDetail(widget.subject.id);
+  }
+
+  void _showDetailError(Object error) {
+    if (_showingDetailError) return;
+    _showingDetailError = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await showErrorDialog(title: '详情加载失败', message: errorMessageOf(error));
+      if (mounted) _showingDetailError = false;
+    });
   }
 
   @override
@@ -37,6 +54,9 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
         final subject = snapshot.data ?? widget.subject;
         final detail = snapshot.data;
 
+        if (snapshot.hasError) {
+          _showDetailError(snapshot.error!);
+        }
         return GlassScaffold(
           background: MediaDetailBackground(
             imageUrl: subject.imageUrl,
@@ -56,12 +76,7 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
               onTap: Get.back,
             ),
           ),
-          body: snapshot.hasError
-              ? _DetailError(
-                  subject: widget.subject,
-                  message: snapshot.error.toString(),
-                )
-              : CustomScrollView(
+          body: CustomScrollView(
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(
@@ -160,60 +175,6 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
             (item) => MediaDetailInfoItem(label: item.key, value: item.value),
           )
           .toList(),
-    );
-  }
-}
-
-class _DetailError extends StatelessWidget {
-  const _DetailError({required this.subject, required this.message});
-
-  final BangumiSubject subject;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 120),
-          sliver: SliverToBoxAdapter(
-            child: Column(
-              children: [
-                MediaDetailOverview(
-                  data: MediaDetailOverviewData(
-                    title: subject.displayName,
-                    originalTitle: subject.originalName,
-                    imageUrl: subject.imageUrl,
-                    metadata: [
-                      if (subject.score > 0)
-                        MediaDetailMetadata(
-                          icon: Icons.star_rounded,
-                          label: subject.score.toStringAsFixed(1),
-                        ),
-                      if (subject.episodeCount > 0)
-                        MediaDetailMetadata(
-                          icon: Icons.movie_filter_outlined,
-                          label: '${subject.episodeCount} 话',
-                        ),
-                      if (subject.airDate.isNotEmpty)
-                        MediaDetailMetadata(
-                          icon: Icons.calendar_month_outlined,
-                          label: subject.airDate,
-                        ),
-                    ],
-                    summary: subject.summary,
-                    tags: const [],
-                    infoItems: const [],
-                  ),
-                  heroTag: 'cover-${subject.id}',
-                ),
-                const SizedBox(height: 16),
-                Text('详情加载失败\n$message', textAlign: TextAlign.center),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

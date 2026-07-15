@@ -61,6 +61,7 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
   final _saving = false.obs;
   final _forbidden = false.obs;
   final _errorMessage = RxnString();
+  var _showingError = false;
 
   @override
   void initState() {
@@ -86,12 +87,21 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
         _forbidden.value = true;
       } else {
         _errorMessage.value = errorMessageOf(error);
+        await _showErrorDialog(_errorMessage.value!);
       }
     } catch (error) {
       _errorMessage.value = errorMessageOf(error);
+      await _showErrorDialog(_errorMessage.value!);
     } finally {
       if (mounted) _loading.value = false;
     }
+  }
+
+  Future<void> _showErrorDialog(String message) async {
+    if (_showingError || !mounted) return;
+    _showingError = true;
+    await showErrorDialog(title: '加载设置失败', message: message);
+    _showingError = false;
   }
 
   Future<void> _save() async {
@@ -113,9 +123,7 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
         },
       );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('分享率限制已保存')));
+        await showInfoDialog(title: '保存成功', message: '分享率限制已保存');
       }
     } on DioException catch (error) {
       if (error.response?.statusCode == 403) {
@@ -139,13 +147,7 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
       if (_forbidden.value) {
         return _AccessDenied(bottomPadding: widget.bottomPadding);
       }
-      if (_errorMessage.value != null) {
-        return _LoadError(
-          message: _errorMessage.value!,
-          bottomPadding: widget.bottomPadding,
-          onRetry: _load,
-        );
-      }
+      if (_errorMessage.value != null) return const SizedBox.shrink();
       return ListView(
         padding: EdgeInsets.fromLTRB(
           20,
@@ -221,7 +223,6 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
   String get _ratioLabel => _shareRatioSlider.value >= 10
       ? '无限'
       : _shareRatioSlider.value.toStringAsFixed(1);
-
 }
 
 class _AccessDenied extends StatelessWidget {
@@ -250,32 +251,6 @@ class _AccessDenied extends StatelessWidget {
             Text('当前账户没有读取或修改 qBittorrent 设置的权限。', textAlign: TextAlign.center),
           ],
         ),
-      ),
-    ],
-  );
-}
-
-class _LoadError extends StatelessWidget {
-  const _LoadError({
-    required this.message,
-    required this.bottomPadding,
-    required this.onRetry,
-  });
-
-  final String message;
-  final double bottomPadding;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, bottomPadding),
-    children: [
-      Center(child: Text('加载设置失败\n$message', textAlign: TextAlign.center)),
-      const SizedBox(height: 16),
-      FilledButton.icon(
-        onPressed: onRetry,
-        icon: const Icon(Icons.refresh_rounded),
-        label: const Text('重试'),
       ),
     ],
   );

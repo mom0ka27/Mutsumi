@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../../core/network/app_network_error.dart';
+import '../../../core/widgets/error_dialog.dart';
 
 import '../../auth/presentation/login_page.dart';
 import '../../settings/data/settings_repository.dart';
@@ -14,7 +16,6 @@ class ConnectServerController extends GetxController {
   final settingsRepository = SettingsRepository();
   final scheme = 'http'.obs;
   final checking = false.obs;
-  final message = RxnString();
 
   late final TextEditingController hostController;
   late final TextEditingController portController;
@@ -68,31 +69,30 @@ class ConnectServerController extends GetxController {
     scheme.value = value;
   }
 
-  bool validateServerInput() {
+  String? _validateServerInput() {
     if (hostController.text.trim().isEmpty) {
-      message.value = '请输入服务器 IP 地址或域名。';
-      return false;
+      return '请输入服务器 IP 地址或域名。';
     }
 
     final port = portController.text.trim();
     if (port.isNotEmpty) {
       final portNumber = int.tryParse(port);
       if (portNumber == null || portNumber < 1 || portNumber > 65535) {
-        message.value = '请输入有效端口号。';
-        return false;
+        return '请输入有效端口号。';
       }
     }
 
-    return true;
+    return null;
   }
 
   Future<void> checkSetupStatus() async {
-    if (!validateServerInput()) {
+    final validationMessage = _validateServerInput();
+    if (validationMessage != null) {
+      await showErrorDialog(title: '无法连接', message: validationMessage);
       return;
     }
 
     checking.value = true;
-    message.value = null;
 
     try {
       final status = await setupService.getStatus();
@@ -114,7 +114,7 @@ class ConnectServerController extends GetxController {
         );
       }
     } on DioException catch (error) {
-      message.value = '连接失败\n${error.toString()}';
+      await showErrorDialog(title: '连接失败', message: errorMessageOf(error));
     } finally {
       checking.value = false;
     }

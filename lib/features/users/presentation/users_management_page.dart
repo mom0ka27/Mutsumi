@@ -7,6 +7,7 @@ import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../data/users_repository.dart';
 
 class UsersManagementPage extends StatefulWidget {
@@ -32,7 +33,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     try {
       _users.assignAll(await _repository.listUsers());
     } catch (error) {
-      await showErrorDialog(title: '加载失败', message: error.toString());
+      await showErrorDialog(title: '加载失败', message: errorMessageOf(error));
     } finally {
       _loading.value = false;
     }
@@ -98,21 +99,26 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     if (confirmed == true &&
         username.text.trim().isNotEmpty &&
         (user != null || password.text.isNotEmpty)) {
-      if (user == null) {
-        await _repository.createUser(
-          username: username.text.trim(),
-          password: password.text,
-          permissionGroup: permission.value,
-        );
-      } else {
-        await _repository.updateUser(
-          user.id,
-          username: username.text.trim(),
-          permissionGroup: permission.value,
-          password: password.text,
-        );
+      try {
+        if (user == null) {
+          await _repository.createUser(
+            username: username.text.trim(),
+            password: password.text,
+            permissionGroup: permission.value,
+          );
+        } else {
+          await _repository.updateUser(
+            user.id,
+            username: username.text.trim(),
+            permissionGroup: permission.value,
+            password: password.text,
+          );
+        }
+        await _load();
+        await showInfoDialog(title: '保存成功', message: '用户信息已更新');
+      } catch (error) {
+        await showErrorDialog(title: '保存失败', message: errorMessageOf(error));
       }
-      await _load();
     }
     username.dispose();
     password.dispose();
@@ -140,8 +146,13 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
       ),
     );
     if (confirmed == true) {
-      await _repository.deleteUser(user.id);
-      await _load();
+      try {
+        await _repository.deleteUser(user.id);
+        await _load();
+        await showInfoDialog(title: '删除成功', message: '用户已删除');
+      } catch (error) {
+        await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
+      }
     }
   }
 

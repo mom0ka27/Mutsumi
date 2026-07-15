@@ -34,7 +34,6 @@ class AnimeGardenDownloadController extends GetxController {
   final selectedCodecs = <String>{}.obs;
   final sizeRange = const RangeValues(0, 50).obs;
   final addingResourceIds = <int>{}.obs;
-  final message = RxnString();
   int _page = 1;
   var _searchGeneration = 0;
 
@@ -65,7 +64,7 @@ class AnimeGardenDownloadController extends GetxController {
       filteredResults.clear();
       hasMore.value = false;
       loading.value = false;
-      message.value = '请输入动漫名';
+      await showErrorDialog(title: '无法检索', message: '请输入动漫名');
       return;
     }
 
@@ -74,7 +73,6 @@ class AnimeGardenDownloadController extends GetxController {
     filteredResults.clear();
     hasMore.value = true;
     loading.value = true;
-    message.value = null;
     try {
       final result = await _repository.searchResources(keyword, page: _page);
       if (generation != _searchGeneration || isClosed) {
@@ -84,13 +82,13 @@ class AnimeGardenDownloadController extends GetxController {
       _updateFilteredResults();
       hasMore.value = !result.complete;
       if (result.resources.isEmpty) {
-        message.value = '没有找到下载资源';
+        await showInfoDialog(title: '检索结果', message: '没有找到下载资源');
       }
     } catch (error) {
       if (generation != _searchGeneration || isClosed) {
         return;
       }
-      message.value = '检索失败\n${error.toString()}';
+      await showErrorDialog(title: '检索失败', message: errorMessageOf(error));
     } finally {
       if (generation == _searchGeneration && !isClosed) {
         loading.value = false;
@@ -124,7 +122,7 @@ class AnimeGardenDownloadController extends GetxController {
       if (generation != _searchGeneration || isClosed) {
         return;
       }
-      await showErrorDialog(title: '加载失败', message: error.toString());
+      await showErrorDialog(title: '加载失败', message: errorMessageOf(error));
     } finally {
       if (generation == _searchGeneration && !isClosed) {
         loadingMore.value = false;

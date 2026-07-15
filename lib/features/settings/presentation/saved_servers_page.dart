@@ -6,6 +6,8 @@ import 'package:mutsumi/constants.dart';
 import '../../../app/startup_page.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../anime/data/anime_list_store.dart';
 import '../../auth/presentation/current_user_controller.dart';
@@ -51,8 +53,13 @@ class _SavedServersPageState extends State<SavedServersPage> {
       ),
     );
     if (confirmed == true) {
-      await _repository.renameServer(url, serverName);
-      _revision.value++;
+      try {
+        await _repository.renameServer(url, serverName);
+        _revision.value++;
+        await showInfoDialog(title: '重命名成功', message: '服务器名称已更新');
+      } catch (error) {
+        await showErrorDialog(title: '重命名失败', message: errorMessageOf(error));
+      }
     }
   }
 
@@ -78,11 +85,16 @@ class _SavedServersPageState extends State<SavedServersPage> {
       ),
     );
     if (confirmed == true) {
-      await _repository.removeServer(url);
-      if (_repository.getCurrentAccount() == null) {
-        Get.offAllNamed(StartupPage.routeName);
-      } else {
-        _revision.value++;
+      try {
+        await _repository.removeServer(url);
+        if (_repository.getCurrentAccount() == null) {
+          Get.offAllNamed(StartupPage.routeName);
+        } else {
+          _revision.value++;
+          await showInfoDialog(title: '删除成功', message: '服务器已删除');
+        }
+      } catch (error) {
+        await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
       }
     }
   }
@@ -113,11 +125,16 @@ class _SavedServersPageState extends State<SavedServersPage> {
     if (confirmed != true) {
       return;
     }
-    await _repository.removeAccount(account.serverUrl, account.username);
-    if (_repository.getCurrentAccount() == null) {
-      Get.offAllNamed(StartupPage.routeName);
-    } else {
-      _revision.value++;
+    try {
+      await _repository.removeAccount(account.serverUrl, account.username);
+      if (_repository.getCurrentAccount() == null) {
+        Get.offAllNamed(StartupPage.routeName);
+      } else {
+        _revision.value++;
+        await showInfoDialog(title: '删除成功', message: '账户已删除');
+      }
+    } catch (error) {
+      await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
     }
   }
 
@@ -200,21 +217,28 @@ class _SavedServersPageState extends State<SavedServersPage> {
                         icon: const Icon(Icons.close_rounded),
                       ),
                       onTap: () async {
-                        await _repository.setCurrentAccount(
-                          account.serverUrl,
-                          account.username,
-                        );
-                        final permissionGroup = account.permissionGroup;
-                        if (permissionGroup == null ||
-                            permissionGroup.isEmpty) {
-                          Get.offAllNamed(StartupPage.routeName);
-                          return;
+                        try {
+                          await _repository.setCurrentAccount(
+                            account.serverUrl,
+                            account.username,
+                          );
+                          final permissionGroup = account.permissionGroup;
+                          if (permissionGroup == null ||
+                              permissionGroup.isEmpty) {
+                            Get.offAllNamed(StartupPage.routeName);
+                            return;
+                          }
+                          Get.find<CurrentUserController>().setPermissionGroup(
+                            permissionGroup,
+                          );
+                          Get.delete<AnimeListStore>(force: true);
+                          Get.offAllNamed(HomePage.routeName);
+                        } catch (error) {
+                          await showErrorDialog(
+                            title: '切换账户失败',
+                            message: errorMessageOf(error),
+                          );
                         }
-                        Get.find<CurrentUserController>().setPermissionGroup(
-                          permissionGroup,
-                        );
-                        Get.delete<AnimeListStore>(force: true);
-                        Get.offAllNamed(HomePage.routeName);
                       },
                     ),
                   ),

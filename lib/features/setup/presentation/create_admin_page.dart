@@ -1,9 +1,10 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../../../core/widgets/app_form_widgets.dart';
+import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/setup_service.dart';
@@ -33,7 +34,6 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
   late final TextEditingController _passwordController;
 
   final _initializing = false.obs;
-  final _message = RxnString();
 
   @override
   void initState() {
@@ -65,12 +65,11 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
     if (serverName.isEmpty || username.isEmpty || password.isEmpty) {
-      _message.value = '请输入服务器名称、管理员账号和密码。';
+      await showErrorDialog(title: '无法初始化', message: '请输入服务器名称、管理员账号和密码。');
       return;
     }
 
     _initializing.value = true;
-    _message.value = null;
 
     try {
       final result = await _setupService.initialize(
@@ -92,11 +91,8 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
-    } on DioException catch (error) {
-      final detail = error.response?.data is Map<String, dynamic>
-          ? error.response?.data['detail']
-          : null;
-      _message.value = '初始化失败：${detail ?? error.message}';
+    } catch (error) {
+      await showErrorDialog(title: '初始化失败', message: errorMessageOf(error));
     } finally {
       if (mounted) {
         _initializing.value = false;
@@ -155,7 +151,6 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
                   busyLabel: '正在初始化...',
                 ),
               ),
-              Obx(() => FormStatusMessage(message: _message.value)),
             ],
           ),
         ),

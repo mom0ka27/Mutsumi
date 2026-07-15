@@ -15,30 +15,35 @@ class AnimeService {
       AuthenticatedServerClient(settingsRepository: _settingsRepository);
 
   Future<List<AnimeRead>> listAnimes() async {
-    final dio = _serverDio();
-    final response = await dio.get<List<dynamic>>(animeApiPath);
-    return (response.data ?? [])
-        .whereType<Map<String, dynamic>>()
-        .map(AnimeRead.fromJson)
-        .toList();
+    return _request('获取 Anime 列表', () async {
+      final response = await _serverDio().get<List<dynamic>>(animeApiPath);
+      return (response.data ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(AnimeRead.fromJson)
+          .toList();
+    });
   }
 
   Future<AnimeRead> getAnime(int id) async {
-    final dio = _serverDio();
-    final response = await dio.get<Map<String, dynamic>>('$animeApiPath/$id');
-    final data = response.data;
-    if (data == null) {
-      throw StateError('服务器返回了空 Anime');
-    }
-    return AnimeRead.fromJson(data);
+    return _request('获取 Anime 详情 id=$id', () async {
+      final response = await _serverDio().get<Map<String, dynamic>>(
+        '$animeApiPath/$id',
+      );
+      final data = response.data;
+      if (data == null) {
+        throw StateError('服务器返回了空 Anime');
+      }
+      return AnimeRead.fromJson(data);
+    });
   }
 
   Future<void> deleteAnime(int id, {bool deleteFiles = true}) async {
-    final dio = _serverDio();
-    await dio.delete<void>(
-      '$animeApiPath/$id',
-      queryParameters: {'delete_files': deleteFiles},
-    );
+    await _request('删除 Anime id=$id', () {
+      return _serverDio().delete<void>(
+        '$animeApiPath/$id',
+        queryParameters: {'delete_files': deleteFiles},
+      );
+    });
   }
 
   Future<void> updateWatchProgress({
@@ -46,11 +51,12 @@ class AnimeService {
     required int episodeId,
     required Duration position,
   }) async {
-    final dio = _serverDio();
-    await dio.put<void>(
-      '$animeApiPath/$animeId/progress',
-      data: {'episode_id': episodeId, 'position_seconds': position.inSeconds},
-    );
+    await _request('同步播放进度 anime=$animeId episode=$episodeId', () {
+      return _serverDio().put<void>(
+        '$animeApiPath/$animeId/progress',
+        data: {'episode_id': episodeId, 'position_seconds': position.inSeconds},
+      );
+    });
   }
 
   String episodeVideoUrl({required int animeId, required int episodeId}) {
@@ -71,66 +77,80 @@ class AnimeService {
   }
 
   Future<String?> fetchEpisodeFileHash(int animeId, int episodeId) async {
-    final dio = _serverDio();
-    final response = await dio.get<Map<String, dynamic>>(
-      '$animeApiPath/$animeId/episodes/$episodeId/file-hash',
-    );
-    return response.data?['file_hash'] as String?;
+    try {
+      final response = await _serverDio().get<Map<String, dynamic>>(
+        '$animeApiPath/$animeId/episodes/$episodeId/file-hash',
+      );
+      return response.data?['file_hash'] as String?;
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '获取 Episode 文件哈希失败 anime=$animeId episode=$episodeId',
+        tag: 'Anime',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
   }
 
   Future<String> addTorrent(String url) async {
-    final dio = _serverDio();
-    final response = await dio.post<Map<String, dynamic>>(
-      '$qbittorrentApiPath/torrents',
-      data: {'url': url},
-    );
-    return response.data?['hash'] as String? ?? '';
+    return _request('添加种子', () async {
+      final response = await _serverDio().post<Map<String, dynamic>>(
+        '$qbittorrentApiPath/torrents',
+        data: {'url': url},
+      );
+      return response.data?['hash'] as String? ?? '';
+    });
   }
 
   Future<String> downloadTorrentFiles({
     required String source,
     required List<String> filenames,
   }) async {
-    final dio = _serverDio();
-    final response = await dio.post<Map<String, dynamic>>(
-      '$qbittorrentApiPath/torrents/download',
-      data: {'source': source, 'filenames': filenames},
-    );
-    return response.data?['hash'] as String? ?? '';
+    return _request('开始下载种子文件', () async {
+      final response = await _serverDio().post<Map<String, dynamic>>(
+        '$qbittorrentApiPath/torrents/download',
+        data: {'source': source, 'filenames': filenames},
+      );
+      return response.data?['hash'] as String? ?? '';
+    });
   }
 
   Future<String> createLocalFolder(int bangumiId) async {
-    final dio = _serverDio();
-    final response = await dio.post<Map<String, dynamic>>(
-      '$animeApiPath/local-folder',
-      queryParameters: {'bangumi_id': bangumiId},
-    );
-    return response.data?['folder_id'] as String? ?? '';
+    return _request('创建本地文件夹 bangumi=$bangumiId', () async {
+      final response = await _serverDio().post<Map<String, dynamic>>(
+        '$animeApiPath/local-folder',
+        queryParameters: {'bangumi_id': bangumiId},
+      );
+      return response.data?['folder_id'] as String? ?? '';
+    });
   }
 
   Future<List<QBittorrentFile>> listLocalFiles(String folderId) async {
-    final dio = _serverDio();
-    final response = await dio.get<List<dynamic>>(
-      '$animeApiPath/local-folder/$folderId/files',
-    );
-    final data = response.data ?? [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(QBittorrentFile.fromJson)
-        .toList();
+    return _request('获取本地文件夹内容', () async {
+      final response = await _serverDio().get<List<dynamic>>(
+        '$animeApiPath/local-folder/$folderId/files',
+      );
+      final data = response.data ?? [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(QBittorrentFile.fromJson)
+          .toList();
+    });
   }
 
   Future<List<QBittorrentFile>> getTorrentFiles(String source) async {
-    final dio = _serverDio();
-    final response = await dio.get<List<dynamic>>(
-      '$qbittorrentApiPath/torrents/metadata/files',
-      queryParameters: {'source': source},
-    );
-    final data = response.data ?? [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(QBittorrentFile.fromJson)
-        .toList();
+    return _request('获取种子文件列表', () async {
+      final response = await _serverDio().get<List<dynamic>>(
+        '$qbittorrentApiPath/torrents/metadata/files',
+        queryParameters: {'source': source},
+      );
+      final data = response.data ?? [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(QBittorrentFile.fromJson)
+          .toList();
+    });
   }
 
   Future<List<QBittorrentFile>> pollTorrentFiles(String source) async {
@@ -149,26 +169,40 @@ class AnimeService {
     String? downloadHash,
     List<AnimeEpisodeCreate>? episodes,
   }) async {
-    final dio = _serverDio();
-
     final hashState = downloadHash == null ? 'null' : 'provided';
     final episodeState = episodes?.length.toString() ?? 'null';
     AppLogger.info(
       '添加 Anime bangumi=${subject.id} hash=$hashState episodes=$episodeState',
       tag: 'Anime',
     );
-    await dio.post<void>(
-      animeApiPath,
-      data: _AnimeCreatePayload(
-        subject: subject,
-        downloadHash: downloadHash,
-        episodes: episodes,
-      ).toJson(),
-    );
+    await _request('添加 Anime bangumi=${subject.id}', () {
+      return _serverDio().post<void>(
+        animeApiPath,
+        data: _AnimeCreatePayload(
+          subject: subject,
+          downloadHash: downloadHash,
+          episodes: episodes,
+        ).toJson(),
+      );
+    });
     AppLogger.info('添加 Anime 完成 bangumi=${subject.id}', tag: 'Anime');
   }
 
   Dio _serverDio() => _serverClient.dio;
+
+  Future<T> _request<T>(String operation, Future<T> Function() request) async {
+    try {
+      return await request();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '$operation 失败',
+        tag: 'Anime',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
 }
 
 class WatchProgressRead {

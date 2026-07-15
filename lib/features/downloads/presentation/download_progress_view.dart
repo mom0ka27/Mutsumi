@@ -96,6 +96,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
         _error.value = error;
         _loading.value = false;
       }
+      await _showErrorDialog(error);
     } finally {
       _requesting = false;
     }
@@ -116,9 +117,6 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
     return Obx(() {
       if (_loading.value) {
         return const Center(child: CircularProgressIndicator());
-      }
-      if (_error.value != null && _tasks.isEmpty) {
-        return Center(child: Text('加载下载任务失败\n${_error.value}'));
       }
       final tasks = _tasks
           .where(

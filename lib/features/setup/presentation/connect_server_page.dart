@@ -133,11 +133,6 @@ class ConnectServerPage extends StatelessWidget {
                       label: '连接并检查',
                       busyLabel: '正在连接...',
                     ),
-                    FormStatusMessage(
-                      message: controller.message.value,
-                      isError: true,
-                      topSpacing: 16,
-                    ),
                   ],
                 ),
               ),

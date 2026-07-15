@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
@@ -122,9 +123,9 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
         accessToken: account.accessToken,
         permissionGroup: account.permissionGroup ?? 'User',
       );
-      Get.snackbar('修改成功', '密码已更新');
+      await showInfoDialog(title: '修改成功', message: '密码已更新');
     } catch (error) {
-      await showErrorDialog(title: '修改失败', message: error.toString());
+      await showErrorDialog(title: '修改失败', message: errorMessageOf(error));
     } finally {
       currentPassword.dispose();
       newPassword.dispose();

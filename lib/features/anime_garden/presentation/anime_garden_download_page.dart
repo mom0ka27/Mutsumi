@@ -6,6 +6,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_download_controller.dart';
@@ -56,27 +57,9 @@ class AnimeGardenDownloadPage extends StatelessWidget {
             ),
           ),
           Obx(() {
-            if (controller.message.value != null) {
-              return SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      controller.message.value!,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              );
-            }
-
             final filteredResults = controller.filteredResults;
             if (filteredResults.isEmpty && controller.results.isNotEmpty) {
-              return const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: Text('没有符合过滤条件的资源')),
-              );
+              return const SliverToBoxAdapter(child: SizedBox.shrink());
             }
 
             return SliverPadding(
@@ -325,7 +308,10 @@ class _ResourceCard extends StatelessWidget {
                               await Clipboard.setData(
                                 ClipboardData(text: resource.downloadLink),
                               );
-                              Get.snackbar('已复制', '下载链接已复制到剪贴板');
+                              await showInfoDialog(
+                                title: '已复制',
+                                message: '下载链接已复制到剪贴板',
+                              );
                             },
                       icon: const Icon(Icons.copy_rounded),
                       label: const Text('复制链接'),

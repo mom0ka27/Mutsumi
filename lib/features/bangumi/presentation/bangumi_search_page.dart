@@ -42,21 +42,6 @@ class _BangumiSearchViewState extends State<BangumiSearchView>
           ),
         ),
         Obx(() {
-          if (controller.message.value != null) {
-            return SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    controller.message.value!,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            );
-          }
-
           return SliverPadding(
             padding: EdgeInsets.fromLTRB(20, 0, 20, Constants.bottomPadding),
             sliver: SliverList.separated(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:mutsumi/player/model/danmaku.dart';
 
 import '../../core/formatters/date_formatter.dart';
 import '../controller.dart';
@@ -73,6 +74,7 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
       color: theme.colorScheme.primary,
       fontWeight: FontWeight.w600,
     );
+    final dandanPlayConfigured = Get.find<DandanPlayRepository>().isConfigured;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
@@ -180,6 +182,21 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
               _sectionHeader('弹幕缓存', sectionStyle),
               const SizedBox(height: 12),
               _infoRow(
+                '弹弹Play API',
+                dandanPlayConfigured ? '已配置' : '未配置',
+                labelStyle,
+                valueStyle,
+              ),
+              _infoRow(
+                'Hash',
+                (widget.controller.video.value?.danmakuProvider
+                            as DandanPlayDanmakuProvider)
+                        .fileHash ??
+                    '-',
+                labelStyle,
+                valueStyle,
+              ),
+              _infoRow(
                 'Episode ID',
                 widget.controller.danmakuEpisodeId.value?.toString() ?? '未匹配',
                 labelStyle,
@@ -261,7 +278,7 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
         crossAxisAlignment: CrossAxisAlignment.center,
 
         children: [
-          SizedBox(width: 100, child: Text(label, style: labelStyle)),
+          SizedBox(width: 110, child: Text(label, style: labelStyle)),
           Expanded(child: Text(value, style: valueStyle)),
         ],
       ),

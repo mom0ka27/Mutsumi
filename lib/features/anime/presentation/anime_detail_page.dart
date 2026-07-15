@@ -6,6 +6,7 @@ import 'package:mutsumi/player/extension/duration.dart';
 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/media_detail_overview.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
@@ -266,9 +267,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
     try {
       await _animeService.deleteAnime(anime.id, deleteFiles: deleteFiles);
       Get.back(result: true);
-      Get.snackbar(
-        '删除成功',
-        deleteFiles
+      await showInfoDialog(
+        title: '删除成功',
+        message: deleteFiles
             ? '已删除"${anime.displayName}"及其下载文件'
             : '已删除"${anime.displayName}"，文件已保留',
       );
@@ -276,7 +277,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
       if (mounted) {
         _deleting.value = false;
       }
-      await showErrorDialog(title: '删除失败', message: error.toString());
+      await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
     }
   }
 }

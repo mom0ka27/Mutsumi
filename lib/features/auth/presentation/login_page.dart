@@ -1,10 +1,11 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/app_form_widgets.dart';
+import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/auth_service.dart';
@@ -31,7 +32,6 @@ class _LoginPageState extends State<LoginPage> {
   late final TextEditingController _passwordController;
 
   final _loggingIn = false.obs;
-  final _message = RxnString();
 
   @override
   void initState() {
@@ -56,12 +56,11 @@ class _LoginPageState extends State<LoginPage> {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
     if (username.isEmpty || password.isEmpty) {
-      _message.value = '请输入账号和密码。';
+      await showErrorDialog(title: '无法登录', message: '请输入账号和密码。');
       return;
     }
 
     _loggingIn.value = true;
-    _message.value = null;
 
     try {
       final result = await _authService.login(
@@ -82,11 +81,8 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
-    } on DioException catch (error) {
-      final detail = error.response?.data is Map<String, dynamic>
-          ? error.response?.data['detail']
-          : null;
-      _message.value = '登录失败：${detail ?? error.message}';
+    } catch (error) {
+      await showErrorDialog(title: '登录失败', message: errorMessageOf(error));
     } finally {
       if (mounted) {
         _loggingIn.value = false;
@@ -147,7 +143,6 @@ class _LoginPageState extends State<LoginPage> {
                   busyLabel: '正在登录...',
                 ),
               ),
-              Obx(() => FormStatusMessage(message: _message.value)),
             ],
           ),
         ),

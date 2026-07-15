@@ -33,7 +33,7 @@ String errorMessageOf(Object error) {
     if ((error.response?.statusCode ?? 0) >= 500) {
       return '服务器暂时异常，请稍后重试';
     }
-    return error.message ?? '请求失败';
+    return '请求失败，请稍后重试';
   }
-  return error.toString();
+  return '操作未完成，请稍后重试';
 }

@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 
 import '../../anime/data/anime_list_store.dart';
 import '../../anime/data/anime_service.dart';
+import '../../../core/network/app_network_error.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/bangumi_repository.dart';
 
 class BangumiSearchController extends GetxController {
@@ -18,7 +20,6 @@ class BangumiSearchController extends GetxController {
   final queryController = TextEditingController();
   final results = <BangumiSubject>[].obs;
   final loading = false.obs;
-  final message = RxnString();
   Timer? _debounce;
   var _searchGeneration = 0;
 
@@ -38,12 +39,10 @@ class BangumiSearchController extends GetxController {
     if (keyword.isEmpty) {
       results.clear();
       loading.value = false;
-      message.value = null;
       return;
     }
 
     loading.value = true;
-    message.value = null;
     try {
       final subjects = await _repository.searchAnime(keyword);
       if (generation != _searchGeneration || isClosed) {
@@ -51,13 +50,13 @@ class BangumiSearchController extends GetxController {
       }
       results.assignAll(subjects);
       if (subjects.isEmpty) {
-        message.value = '没有找到相关番剧';
+        await showInfoDialog(title: '搜索结果', message: '没有找到相关番剧');
       }
     } catch (error) {
       if (generation != _searchGeneration || isClosed) {
         return;
       }
-      message.value = '搜索失败\n${error.toString()}';
+      await showErrorDialog(title: '搜索失败', message: errorMessageOf(error));
     } finally {
       if (generation == _searchGeneration && !isClosed) {
         loading.value = false;

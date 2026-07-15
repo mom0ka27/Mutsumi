@@ -6,6 +6,7 @@ import 'package:mutsumi/constants.dart';
 import '../../../core/appearance/app_background_preset.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 
 class AppearanceSettingsPage extends StatelessWidget {
   const AppearanceSettingsPage({super.key});
@@ -25,7 +26,7 @@ class AppearanceSettingsPage extends StatelessWidget {
       if (context.mounted) {
         await showErrorDialog(
           title: '设置失败',
-          message: '无法设置背景图片\n${e.toString()}',
+          message: errorMessageOf(e),
         );
       }
     }
@@ -40,7 +41,7 @@ class AppearanceSettingsPage extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        await showErrorDialog(title: '无法取色', message: e.toString());
+        await showErrorDialog(title: '无法取色', message: errorMessageOf(e));
       }
     }
   }

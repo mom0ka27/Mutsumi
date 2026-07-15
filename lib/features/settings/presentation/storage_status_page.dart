@@ -8,6 +8,7 @@ import '../../../core/network/api_paths.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../../core/widgets/error_dialog.dart';
 import '../data/settings_repository.dart';
 import '../data/authenticated_server_client.dart';
 
@@ -25,6 +26,7 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
   final _forbidden = false.obs;
   final _errorMessage = RxnString();
   StorageStatus? _status;
+  var _showingError = false;
 
   @override
   void initState() {
@@ -47,12 +49,21 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
         _forbidden.value = true;
       } else {
         _errorMessage.value = errorMessageOf(error);
+        await _showErrorDialog(_errorMessage.value!);
       }
     } catch (error) {
       _errorMessage.value = errorMessageOf(error);
+      await _showErrorDialog(_errorMessage.value!);
     } finally {
       if (mounted) _loading.value = false;
     }
+  }
+
+  Future<void> _showErrorDialog(String message) async {
+    if (_showingError || !mounted) return;
+    _showingError = true;
+    await showErrorDialog(title: '加载存储信息失败', message: message);
+    _showingError = false;
   }
 
   @override
@@ -90,12 +101,9 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
         if (_forbidden.value) {
           return const _AccessDenied();
         }
-        if (_errorMessage.value != null) {
-          return _LoadError(message: _errorMessage.value!, onRetry: _load);
-        }
         final status = _status;
         if (status == null) {
-          return _LoadError(message: '未获得存储信息', onRetry: _load);
+          return const SizedBox.shrink();
         }
         return ListView(
           padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
@@ -248,27 +256,6 @@ class _AccessDenied extends StatelessWidget {
             Text('当前账户没有查看服务器存储信息的权限。', textAlign: TextAlign.center),
           ],
         ),
-      ),
-    ],
-  );
-}
-
-class _LoadError extends StatelessWidget {
-  const _LoadError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
-    children: [
-      Center(child: Text('加载存储信息失败\n$message', textAlign: TextAlign.center)),
-      const SizedBox(height: 16),
-      FilledButton.icon(
-        onPressed: onRetry,
-        icon: const Icon(Icons.refresh_rounded),
-        label: const Text('重试'),
       ),
     ],
   );

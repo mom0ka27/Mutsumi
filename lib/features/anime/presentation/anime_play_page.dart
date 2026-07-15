@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../core/network/app_network_error.dart';
 import '../../../player/controller.dart';
 import '../../../player/model/video.dart';
 import '../../../player/model/danmaku.dart';
@@ -109,12 +111,11 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     final episode = _episode;
     final shouldResume =
         initial && widget.anime.watchProgress?.episodeId == episode.id;
-    String? fileHash;
-    fileHash = await _animeService.fetchEpisodeFileHash(
-      widget.anime.id,
-      episode.id,
-    );
     try {
+      final fileHash = await _animeService.fetchEpisodeFileHash(
+        widget.anime.id,
+        episode.id,
+      );
       await controller.setVideo(
         NetworkVideo(
           index: episode.index,
@@ -133,7 +134,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         start: shouldResume ? widget.anime.watchProgress?.position : null,
       );
     } catch (error) {
-      _showPlayerError(error.toString());
+      _showPlayerError(errorMessageOf(error));
       return;
     }
     if (_disposed ||
@@ -144,7 +145,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     try {
       await controller.play();
     } catch (error) {
-      _showPlayerError(error.toString());
+      _showPlayerError(errorMessageOf(error));
     }
   }
 
@@ -309,7 +310,14 @@ class _WatchProgressSyncer {
         try {
           await onSync(snapshot);
           _lastSynced = snapshot;
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            '播放进度同步失败',
+            tag: 'Anime',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
       }
     } finally {
       _draining = null;

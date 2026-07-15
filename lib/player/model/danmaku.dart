@@ -49,8 +49,8 @@ class DandanPlayDanmakuProvider extends DanmakuProvider {
 
   @override
   Future<DanmakuLoadResult> getDanmakuList() async {
-    final hash = fileHash;
-    if (hash == null || hash.isEmpty) {
+    final hash = fileHash ?? "";
+    if (hash.isEmpty) {
       return DanmakuLoadResult(list: DanmakuList(), count: 0);
     }
     AppLogger.info('Loading danmaku for $fileName($hash)');
