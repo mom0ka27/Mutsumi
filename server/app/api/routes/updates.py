@@ -1,8 +1,15 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.core.auth import require_admin
+from app.core.config import config, save_config
 from app.core.constants import SERVER_VERSION
-from app.schemas import ServerUpdateRead, ServerUpdateRequest, ServerUpdateStatusRead
+from app.schemas import (
+    ServerUpdateChannelRead,
+    ServerUpdateChannelUpdate,
+    ServerUpdateRead,
+    ServerUpdateRequest,
+    ServerUpdateStatusRead,
+)
 from app.schemas.update import UpdateChannel
 from app.services.server_update_service import server_update_service
 
@@ -10,7 +17,8 @@ router = APIRouter(prefix="/updates", tags=["updates"])
 
 
 @router.get("", response_model=ServerUpdateRead)
-async def get_update(channel: UpdateChannel, _=Depends(require_admin)):
+async def get_update(channel: UpdateChannel | None = None, _=Depends(require_admin)):
+    channel = channel or _configured_channel()
     try:
         candidate = await server_update_service.get_candidate(channel)
     except RuntimeError as exc:
@@ -43,6 +51,21 @@ async def apply_update(
     return state
 
 
+@router.get("/channel", response_model=ServerUpdateChannelRead)
+async def get_update_channel(_=Depends(require_admin)):
+    return ServerUpdateChannelRead(channel=_configured_channel())
+
+
+@router.put("/channel", response_model=ServerUpdateChannelRead)
+async def update_update_channel(
+    payload: ServerUpdateChannelUpdate,
+    _=Depends(require_admin),
+):
+    config["updates"]["channel"] = payload.channel
+    await save_config(config)
+    return ServerUpdateChannelRead(channel=payload.channel)
+
+
 @router.get("/status", response_model=ServerUpdateStatusRead)
 async def get_update_status(_=Depends(require_admin)):
     return server_update_service.update_status()
@@ -56,3 +79,10 @@ def _current_version(channel: UpdateChannel) -> str:
     if channel == UpdateChannel.BRANCH:
         return server_update_service.current_build_commit() or "未记录"
     return SERVER_VERSION
+
+
+def _configured_channel() -> UpdateChannel:
+    try:
+        return UpdateChannel(config["updates"].get("channel", UpdateChannel.RELEASE))
+    except ValueError:
+        return UpdateChannel.RELEASE

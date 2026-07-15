@@ -34,6 +34,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "repository": "mom0ka27/Mutsumi",
         "asset_template": "mutsumi-server-{tag}.zip",
         "default_branch": "main",
+        "channel": "release",
     },
     "auth": {
         "secret_key": None,

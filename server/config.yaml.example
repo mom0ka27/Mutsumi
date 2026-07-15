@@ -18,6 +18,7 @@ updates:
   repository: mom0ka27/Mutsumi
   asset_template: mutsumi-server-{tag}.zip
   default_branch: main
+  channel: release
 auth:
   secret_key: CHANGE_ME_TO_A_SECURE_RANDOM_VALUE
   algorithm: HS256

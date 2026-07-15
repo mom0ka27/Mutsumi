@@ -27,6 +27,14 @@ class ServerUpdateRead(BaseModel):
     update_available: bool
 
 
+class ServerUpdateChannelRead(BaseModel):
+    channel: UpdateChannel
+
+
+class ServerUpdateChannelUpdate(BaseModel):
+    channel: UpdateChannel
+
+
 class ServerUpdateRequest(BaseModel):
     channel: UpdateChannel
 

@@ -34,7 +34,7 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadChannel();
   }
 
   @override
@@ -57,6 +57,15 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadChannel() async {
+    try {
+      _channel = await _service.getUpdateChannel();
+    } catch (_) {
+      _channel = ServerUpdateChannel.release;
+    }
+    if (mounted) _load();
   }
 
   Future<void> _apply() async {
@@ -159,12 +168,24 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
       left.replaceFirst(RegExp(r'^v'), '') ==
       right.replaceFirst(RegExp(r'^v'), '');
 
-  void _changeChannel(ServerUpdateChannel channel) {
+  Future<void> _changeChannel(ServerUpdateChannel channel) async {
     if (_channel == channel) return;
+    final previousChannel = _channel;
     setState(() {
       _channel = channel;
       _info = null;
     });
+    try {
+      await _service.setUpdateChannel(channel);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _channel = previousChannel;
+          _errorMessage = errorMessageOf(error);
+        });
+      }
+      return;
+    }
     _load();
   }
 

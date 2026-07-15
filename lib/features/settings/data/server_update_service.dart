@@ -3,6 +3,12 @@ import 'authenticated_server_client.dart';
 
 enum ServerUpdateChannel { release, prerelease, branch }
 
+ServerUpdateChannel serverUpdateChannelOf(String? value) => switch (value) {
+  'prerelease' => ServerUpdateChannel.prerelease,
+  'branch' => ServerUpdateChannel.branch,
+  _ => ServerUpdateChannel.release,
+};
+
 class ServerUpdateService {
   ServerUpdateService({AuthenticatedServerClient? client})
     : _client = client ?? AuthenticatedServerClient();
@@ -26,6 +32,16 @@ class ServerUpdateService {
       updateAvailable: data['update_available'] == true,
     );
   }
+
+  Future<ServerUpdateChannel> getUpdateChannel() async {
+    final response = await _client.dio.get<Map<String, dynamic>>(
+      updateChannelApiPath,
+    );
+    return serverUpdateChannelOf(response.data?['channel'] as String?);
+  }
+
+  Future<void> setUpdateChannel(ServerUpdateChannel channel) => _client.dio
+      .put<void>(updateChannelApiPath, data: {'channel': channel.name});
 
   Future<void> applyUpdate(ServerUpdateChannel channel) =>
       _client.dio.post<void>(updatesApiPath, data: {'channel': channel.name});

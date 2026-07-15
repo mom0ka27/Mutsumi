@@ -3,6 +3,7 @@ const apiPrefix = '/api/$apiVersion';
 const healthApiPath = '$apiPrefix/health';
 const updatesApiPath = '$apiPrefix/updates';
 const updateStatusApiPath = '$updatesApiPath/status';
+const updateChannelApiPath = '$updatesApiPath/channel';
 const setupApiPath = '$apiPrefix/setup';
 const loginApiPath = '$apiPrefix/auth/login';
 const animeApiPath = '$apiPrefix/anime';
