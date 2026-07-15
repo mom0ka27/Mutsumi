@@ -31,7 +31,8 @@
             "flutterMode": "release",
             "args": [
                 "--dart-define=DANDANPLAY_APP_ID=${env:DANDANPLAY_APP_ID}",
-                "--dart-define=DANDANPLAY_APP_SECRET=${env:DANDANPLAY_APP_SECRET}"
+                "--dart-define=DANDANPLAY_APP_SECRET=${env:DANDANPLAY_APP_SECRET}",
+                "-v"
             ]
         }
     ]

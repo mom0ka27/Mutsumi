@@ -13,6 +13,7 @@ logging:
   retention_days: 7
 storage:
   data_path: ./data
+database_url: sqlite+aiosqlite:///./data/mutsumi.db
 auth:
   secret_key: CHANGE_ME_TO_A_SECURE_RANDOM_VALUE
   algorithm: HS256

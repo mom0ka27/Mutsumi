@@ -5,12 +5,10 @@ services:
     restart: unless-stopped
     ports:
       - "12091:12091"
-    environment:
-      DATABASE_URL: sqlite+aiosqlite:////app/mutsumi.db
     volumes:
       - ./config.yaml:/app/config.yaml
       - ./server.key:/app/server.key
       - ./server.crt:/app/server.crt
-      - ./mutsumi.db:/app/mutsumi.db
       - ./logs:/app/logs
       - ./data:/app/data
+      

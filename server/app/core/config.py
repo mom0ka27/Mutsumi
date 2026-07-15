@@ -29,6 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "storage": {
         "data_path": "./data",
     },
+    "database_url": "sqlite+aiosqlite:///./data/mutsumi.db",
     "auth": {
         "secret_key": None,
         "algorithm": "HS256",
