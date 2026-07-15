@@ -148,11 +148,22 @@ jobs:
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
+      - name: Package server update asset
+        run: |
+          set -euo pipefail
+          server_asset="mutsumi-server-${GITHUB_REF_NAME}.zip"
+          (
+            cd server
+            zip -qry "../${server_asset}" . -x '*/.DS_Store' '.DS_Store'
+          )
+          sha256sum "${server_asset}" > "${server_asset}.sha256"
       - name: Upload server package
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-server
-          path: server
+          path: |
+            mutsumi-server-${{ github.ref_name }}.zip
+            mutsumi-server-${{ github.ref_name }}.zip.sha256
           if-no-files-found: error
 
   release:
@@ -181,11 +192,6 @@ jobs:
         run: |
           set -euo pipefail
           server_asset="mutsumi-server-${GITHUB_REF_NAME}.zip"
-          (
-            cd server
-            zip -qry "../${server_asset}" .
-          )
-          sha256sum "${server_asset}" > "${server_asset}.sha256"
           gh release create "$GITHUB_REF_NAME" \
             --draft \
             --title "$GITHUB_REF_NAME" \
