@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.router import api_router
-from app.core.constants import API_VERSION
+from app.core.constants import API_VERSION, SERVER_VERSION
 from app.core.qbittorrent_error import QBittorrentError
 from app.db.session import engine, init_db
 from app.models import User
@@ -32,11 +32,19 @@ async def qbittorrent_error_handler(_, exc: QBittorrentError):
 
 @app.get("/")
 async def root():
-    return {"message": "Mutsumi Server is running", "api_version": API_VERSION}
+    return {
+        "message": "Mutsumi Server is running",
+        "api_version": API_VERSION,
+        "server_version": SERVER_VERSION,
+    }
 
 
 @app.get(f"/api/{API_VERSION}/health")
 async def health():
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
-    return {"status": "ok", "api_version": API_VERSION}
+    return {
+        "status": "ok",
+        "api_version": API_VERSION,
+        "server_version": SERVER_VERSION,
+    }

@@ -13,6 +13,7 @@ import '../../auth/presentation/current_user_controller.dart';
 import '../../setup/presentation/connect_server_page.dart';
 import '../../users/presentation/users_management_page.dart';
 import '../data/settings_repository.dart';
+import '../data/server_info_service.dart';
 import 'qbittorrent_settings_view.dart';
 import 'storage_status_page.dart';
 import 'appearance_settings_page.dart';
@@ -29,9 +30,32 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
     with AutomaticKeepAliveClientMixin {
   final _settings = SettingsRepository();
   final _currentUser = Get.find<CurrentUserController>();
+  final _serverVersion = RxnString();
+  var _versionServerUrl = '';
 
   @override
   bool get wantKeepAlive => true;
+
+  void _loadServerVersion(ServerAccount? account) {
+    if (account == null || _versionServerUrl == account.serverUrl) return;
+    _versionServerUrl = account.serverUrl;
+    _serverVersion.value = null;
+    ServerInfoService(
+      account.serverUrl,
+      certificateSha256: _settings.getCertificateFingerprint(account.serverUrl),
+    ).getInfo().then(
+      (info) {
+        if (_versionServerUrl == account.serverUrl && mounted) {
+          _serverVersion.value = info.version.isEmpty ? '未知' : info.version;
+        }
+      },
+      onError: (_) {
+        if (_versionServerUrl == account.serverUrl && mounted) {
+          _serverVersion.value = '获取失败';
+        }
+      },
+    );
+  }
 
   Future<void> _addAccount() async {
     final account = _settings.getCurrentAccount();
@@ -138,6 +162,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
     super.build(context);
     return Obx(() {
       final account = _settings.getCurrentAccount();
+      _loadServerVersion(account);
       final colors = Theme.of(context).colorScheme;
       final glassSettings = AppGlassSettings.standard(context);
       return ListView(
@@ -187,6 +212,14 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                      if (account != null)
+                        Obx(
+                          () => Text(
+                            '服务端版本：${_serverVersion.value ?? '获取中...'}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
                         ),
                     ],
                   ),
