@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import anime, auth, config, qbittorrent, setup, storage, users
+from app.api.routes import anime, auth, config, qbittorrent, setup, storage, updates, users
 from app.core.constants import API_PREFIX
 
 api_router = APIRouter(prefix=API_PREFIX)
@@ -11,3 +11,4 @@ api_router.include_router(config.router)
 api_router.include_router(storage.router)
 api_router.include_router(anime.router)
 api_router.include_router(qbittorrent.router)
+api_router.include_router(updates.router)

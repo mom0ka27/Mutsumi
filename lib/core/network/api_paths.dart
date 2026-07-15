@@ -1,6 +1,7 @@
 const apiVersion = 'v1';
 const apiPrefix = '/api/$apiVersion';
 const healthApiPath = '$apiPrefix/health';
+const updatesApiPath = '$apiPrefix/updates';
 const setupApiPath = '$apiPrefix/setup';
 const loginApiPath = '$apiPrefix/auth/login';
 const animeApiPath = '$apiPrefix/anime';

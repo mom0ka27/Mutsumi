@@ -30,6 +30,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "data_path": "./data",
     },
     "database_url": "sqlite+aiosqlite:///./data/mutsumi.db",
+    "updates": {
+        "repository": "mom0ka27/Mutsumi",
+        "asset_template": "mutsumi-server-{tag}.zip",
+        "default_branch": "main",
+    },
     "auth": {
         "secret_key": None,
         "algorithm": "HS256",

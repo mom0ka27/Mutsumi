@@ -6,9 +6,4 @@ services:
     ports:
       - "12091:12091"
     volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./server.key:/app/server.key
-      - ./server.crt:/app/server.crt
-      - ./logs:/app/logs
-      - ./data:/app/data
-      
+      - .:/app
