@@ -83,6 +83,7 @@ if __name__ == "__main__":
         port=server_config["port"],
         reload=server_config.get("reload", False),
         log_level=config["logging"]["level"],
+        log_config=None,
         workers=1,
         **ssl_options,
     )

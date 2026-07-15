@@ -1,3 +1,4 @@
+import copy
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -23,6 +24,7 @@ class ColorFormatter(logging.Formatter):
         if not color:
             return super().format(record)
 
+        record = copy.copy(record)
         record.msg = f"{color}{record.getMessage()}{RESET_COLOR}"
         record.name = f"\033[36m{record.name}{RESET_COLOR}"
         record.levelname = f"{color}{record.levelname}{RESET_COLOR}"
