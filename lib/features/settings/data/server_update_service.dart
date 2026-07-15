@@ -24,7 +24,6 @@ class ServerUpdateService {
       releaseName: data['release_name'] as String? ?? '',
       releaseNotes: data['release_notes'] as String? ?? '',
       updateAvailable: data['update_available'] == true,
-      integrityVerified: data['integrity_verified'] == true,
     );
   }
 
@@ -40,7 +39,6 @@ class ServerUpdateInfo {
     required this.releaseName,
     required this.releaseNotes,
     required this.updateAvailable,
-    required this.integrityVerified,
   });
 
   final ServerUpdateChannel channel;
@@ -49,5 +47,4 @@ class ServerUpdateInfo {
   final String releaseName;
   final String releaseNotes;
   final bool updateAvailable;
-  final bool integrityVerified;
 }

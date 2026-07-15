@@ -15,6 +15,7 @@ logs
 .pycache
 *.db
 config.yaml
+.build-info
 
 # certificate
 *.crt

@@ -49,7 +49,7 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
 
   Future<void> _apply() async {
     final info = _info;
-    if (info == null || !info.updateAvailable || !info.integrityVerified) {
+    if (info == null || !info.updateAvailable) {
       return;
     }
     final confirmed = await showAppDialog<bool>(
@@ -77,7 +77,7 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
     try {
       await _service.applyUpdate(_channel);
       if (mounted) {
-        await showInfoDialog(title: '更新已开始', message: '服务端正在下载、校验并重启，请稍后重新连接。');
+        await showInfoDialog(title: '更新已开始', message: '服务端正在下载并重启，请稍后重新连接。');
       }
     } catch (error) {
       if (mounted) {
@@ -133,14 +133,6 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
   }
 
   Widget _buildBody(BuildContext context) {
-    if (_loading && _info == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_errorMessage != null && _info == null) {
-      return _UpdateErrorState(message: _errorMessage!, onRetry: _load);
-    }
-    final info = _info;
-    if (info == null) return const SizedBox.shrink();
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
@@ -148,7 +140,8 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
           constraints: const BoxConstraints(maxWidth: 560),
           child: _UpdateInfoCard(
             channel: _channel,
-            info: info,
+            info: _info,
+            errorMessage: _errorMessage,
             loading: _loading,
             applying: _applying,
             onChannelChanged: _changeChannel,
@@ -164,6 +157,7 @@ class _UpdateInfoCard extends StatelessWidget {
   const _UpdateInfoCard({
     required this.channel,
     required this.info,
+    required this.errorMessage,
     required this.loading,
     required this.applying,
     required this.onChannelChanged,
@@ -171,7 +165,8 @@ class _UpdateInfoCard extends StatelessWidget {
   });
 
   final ServerUpdateChannel channel;
-  final ServerUpdateInfo info;
+  final ServerUpdateInfo? info;
+  final String? errorMessage;
   final bool loading;
   final bool applying;
   final ValueChanged<ServerUpdateChannel> onChannelChanged;
@@ -180,7 +175,11 @@ class _UpdateInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final canApply = info.updateAvailable && info.integrityVerified;
+    final updateInfo = info;
+    final hasError = errorMessage != null;
+    final canApply = updateInfo != null && updateInfo.updateAvailable;
+    final title = _title(updateInfo, hasError);
+    final description = _description(updateInfo, hasError);
     return GlassCard(
       useOwnLayer: true,
       padding: const EdgeInsets.all(24),
@@ -191,14 +190,20 @@ class _UpdateInfoCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundColor: info.updateAvailable
+            backgroundColor: hasError
+                ? colors.errorContainer
+                : updateInfo?.updateAvailable == true
                 ? colors.primaryContainer
                 : colors.secondaryContainer,
-            foregroundColor: info.updateAvailable
+            foregroundColor: hasError
+                ? colors.onErrorContainer
+                : updateInfo?.updateAvailable == true
                 ? colors.onPrimaryContainer
                 : colors.onSecondaryContainer,
             child: Icon(
-              info.updateAvailable
+              hasError
+                  ? Icons.error_outline_rounded
+                  : updateInfo?.updateAvailable == true
                   ? Icons.system_update_rounded
                   : Icons.verified_rounded,
               size: 30,
@@ -206,15 +211,13 @@ class _UpdateInfoCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            info.updateAvailable ? '发现服务端更新' : '服务端已是最新版本',
+            title,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
           Text(
-            info.updateAvailable
-                ? '选择更新来源，确认后服务端会下载、校验并自动重启。'
-                : '当前服务端版本已与所选来源保持一致。',
+            description,
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
@@ -245,39 +248,61 @@ class _UpdateInfoCard extends StatelessWidget {
                 : (values) => onChannelChanged(values.first),
           ),
           const SizedBox(height: 24),
-          _VersionRow(label: '当前版本', value: info.currentVersion),
+          _VersionRow(
+            label: '当前版本',
+            value: hasError ? '检查失败' : updateInfo?.currentVersion ?? '检查中...',
+          ),
           const SizedBox(height: 12),
           _VersionRow(
-            label: '可用版本',
-            value: info.latestVersion,
-            highlighted: info.updateAvailable,
+            label: '最新版本',
+            value: hasError ? '检查失败' : updateInfo?.latestVersion ?? '检查中...',
+            highlighted: updateInfo?.updateAvailable == true,
           ),
-          const SizedBox(height: 20),
-          const Divider(),
-          const SizedBox(height: 16),
-          Text('发布信息', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            info.releaseName.isEmpty ? '未提供发布名称' : info.releaseName,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          if (info.releaseNotes.isNotEmpty) ...[
+          if (hasError) ...[
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+                color: colors.errorContainer.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.all(Constants.radius),
               ),
               child: Text(
-                info.releaseNotes,
-                style: Theme.of(context).textTheme.bodyMedium,
+                errorMessage!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.onErrorContainer,
+                ),
               ),
             ),
           ],
-          const SizedBox(height: 20),
-          _IntegrityStatus(verified: info.integrityVerified),
+          if (updateInfo != null) ...[
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 16),
+            Text('发布信息', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              updateInfo.releaseName.isEmpty
+                  ? '未提供发布名称'
+                  : updateInfo.releaseName,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            if (updateInfo.releaseNotes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.all(Constants.radius),
+                ),
+                child: Text(
+                  updateInfo.releaseNotes,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ],
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: applying || !canApply ? null : onApply,
@@ -291,15 +316,29 @@ class _UpdateInfoCard extends StatelessWidget {
               applying
                   ? '正在启动更新...'
                   : canApply
-                  ? '立即更新至 ${info.latestVersion}'
-                  : info.integrityVerified
-                  ? '已是最新版本'
-                  : '更新包未通过校验',
+                  ? '立即更新至 ${updateInfo.latestVersion}'
+                  : hasError
+                  ? '检查更新失败'
+                  : '已是最新版本',
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _title(ServerUpdateInfo? info, bool hasError) {
+    if (hasError) return '检查更新失败';
+    if (info == null) return '正在检查更新';
+    return info.updateAvailable ? '发现服务端更新' : '服务端已是最新版本';
+  }
+
+  String _description(ServerUpdateInfo? info, bool hasError) {
+    if (hasError) return '无法从所选更新渠道获取版本信息，请稍后重新检查。';
+    if (info == null) return '正在从所选更新渠道获取版本信息。';
+    return info.updateAvailable
+        ? '确认后服务端会从 GitHub 下载并自动重启。'
+        : '当前服务端版本已与所选渠道保持一致。';
   }
 }
 
@@ -337,105 +376,6 @@ class _VersionRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _IntegrityStatus extends StatelessWidget {
-  const _IntegrityStatus({required this.verified});
-
-  final bool verified;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final color = verified ? colors.primary : colors.error;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          verified ? Icons.verified_user_outlined : Icons.warning_amber_rounded,
-          color: color,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                verified ? '更新包可校验' : '更新包无法校验',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(color: color),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                verified
-                    ? '安装前将验证发布包的 SHA-256 摘要。'
-                    : '当前来源没有可用的 SHA-256 校验文件，不能直接安装。',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _UpdateErrorState extends StatelessWidget {
-  const _UpdateErrorState({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: GlassCard(
-            useOwnLayer: true,
-            padding: const EdgeInsets.all(28),
-            shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
-            settings: AppGlassSettings.standard(context),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 48,
-                  color: colors.error,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '无法检查更新',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('重新检查'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

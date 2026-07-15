@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import logging
 import os
 import re
@@ -12,6 +11,7 @@ from pathlib import Path
 import httpx
 
 from app.core.config import config
+from app.core.constants import SERVER_VERSION
 from app.schemas.update import UpdateChannel
 
 logger = logging.getLogger(__name__)
@@ -26,12 +26,12 @@ class UpdateCandidate:
     published_at: str | None
     release_url: str
     download_url: str
-    checksum_url: str | None
 
 
 class ServerUpdateService:
     _repository_pattern = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
     _update_lock = asyncio.Lock()
+    _build_info_path = Path(__file__).resolve().parents[2] / ".build-info"
 
     async def get_candidate(self, channel: UpdateChannel) -> UpdateCandidate:
         repository = self._repository()
@@ -45,13 +45,11 @@ class ServerUpdateService:
     async def apply_update(self, channel: UpdateChannel) -> None:
         async with self._update_lock:
             candidate = await self.get_candidate(channel)
-            if candidate.checksum_url is None:
-                raise RuntimeError("当前更新通道不支持 SHA-256 校验")
             archive = await self._download(candidate.download_url)
             try:
-                checksum = await self._download_text(candidate.checksum_url)
-                self._verify_checksum(archive, checksum)
                 await asyncio.to_thread(self._replace_files, archive)
+                if channel == UpdateChannel.BRANCH:
+                    await asyncio.to_thread(self._write_build_commit, candidate.version)
             finally:
                 archive.unlink(missing_ok=True)
             logger.warning("服务端更新完成，正在重启至 %s", candidate.version)
@@ -65,6 +63,16 @@ class ServerUpdateService:
     ) -> UpdateCandidate:
         if channel == UpdateChannel.RELEASE:
             response = await client.get(f"https://api.github.com/repos/{repository}/releases/latest")
+            if response.status_code == 404:
+                return UpdateCandidate(
+                    channel=channel,
+                    version=SERVER_VERSION,
+                    name="暂无正式发布版本",
+                    notes="GitHub 仓库尚未创建正式 Release。",
+                    published_at=None,
+                    release_url=f"https://github.com/{repository}/releases",
+                    download_url="",
+                )
             response.raise_for_status()
             release = response.json()
         else:
@@ -91,7 +99,6 @@ class ServerUpdateService:
             published_at=release.get("published_at"),
             release_url=str(release.get("html_url") or ""),
             download_url=str(asset.get("browser_download_url") or ""),
-            checksum_url=f"{asset.get('browser_download_url')}.sha256",
         )
 
     async def _branch_candidate(
@@ -115,7 +122,6 @@ class ServerUpdateService:
             published_at=commit_info.get("author", {}).get("date"),
             release_url=str(commit.get("html_url") or ""),
             download_url=f"https://github.com/{repository}/archive/{sha}.zip",
-            checksum_url=None,
         )
 
     async def _download(self, url: str) -> Path:
@@ -127,12 +133,6 @@ class ServerUpdateService:
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as file:
             file.write(response.content)
             return Path(file.name)
-
-    async def _download_text(self, url: str) -> str:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0), follow_redirects=True) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.text
 
     def _replace_files(self, archive: Path) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -168,6 +168,20 @@ class ServerUpdateService:
                         os.replace(previous, target)
                 raise
 
+    def current_build_commit(self) -> str | None:
+        try:
+            value = self._build_info_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        return value if re.fullmatch(r"[a-f0-9]{7,40}", value) else None
+
+    def _write_build_commit(self, commit: str) -> None:
+        if not re.fullmatch(r"[a-f0-9]{7,40}", commit):
+            raise RuntimeError("GitHub 分支提交哈希无效")
+        temporary_path = self._build_info_path.with_suffix(".tmp")
+        temporary_path.write_text(f"{commit}\n", encoding="utf-8")
+        os.replace(temporary_path, self._build_info_path)
+
     def _extract_safely(self, zip_file: zipfile.ZipFile, target: Path) -> None:
         target_resolved = target.resolve()
         for info in zip_file.infolist():
@@ -184,14 +198,6 @@ class ServerUpdateService:
                 return source / "server"
             return source
         return extracted
-
-    def _verify_checksum(self, archive: Path, checksum_text: str) -> None:
-        expected = checksum_text.strip().split()[0].lower()
-        if not re.fullmatch(r"[a-f0-9]{64}", expected):
-            raise RuntimeError("更新包 SHA-256 校验文件无效")
-        actual = hashlib.sha256(archive.read_bytes()).hexdigest()
-        if actual != expected:
-            raise RuntimeError("更新包 SHA-256 校验失败")
 
     def _repository(self) -> str:
         repository = str(config["updates"]["repository"]).strip()

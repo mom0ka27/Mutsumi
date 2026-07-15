@@ -17,15 +17,16 @@ async def get_update(channel: UpdateChannel, _=Depends(require_admin)):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return ServerUpdateRead(
         channel=candidate.channel,
-        current_version=SERVER_VERSION,
+        current_version=_current_version(candidate.channel),
         latest_version=candidate.version,
         release_name=candidate.name,
         release_notes=candidate.notes,
         published_at=candidate.published_at,
         release_url=candidate.release_url,
-        update_available=not _versions_equal(candidate.version, SERVER_VERSION)
-        and candidate.checksum_url is not None,
-        integrity_verified=candidate.checksum_url is not None,
+        update_available=not _versions_equal(
+            candidate.version,
+            _current_version(candidate.channel),
+        ),
     )
 
 
@@ -41,3 +42,9 @@ async def apply_update(
 
 def _versions_equal(left: str, right: str) -> bool:
     return left.removeprefix("v") == right.removeprefix("v")
+
+
+def _current_version(channel: UpdateChannel) -> str:
+    if channel == UpdateChannel.BRANCH:
+        return server_update_service.current_build_commit() or "未记录"
+    return SERVER_VERSION

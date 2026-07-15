@@ -56,17 +56,18 @@ chmod 600 config.yaml
 
 ## 服务端更新
 
-仅管理员可在客户端的“服务端更新”页面检查并确认更新。更新器可查询正式 Release、Pre-release 或 `main` 分支；当前仅允许安装带 SHA-256 校验文件的 Release 和 Pre-release，分支仅用于查看最新提交。
+仅管理员可在客户端的“服务端更新”页面检查并确认更新。更新器可查询并安装正式 Release、Pre-release 或 `main` 分支的最新版本。
 
 每个可安装 Release 必须包含以下资产：
 
 ```text
 mutsumi-server-{tag}.zip
-mutsumi-server-{tag}.zip.sha256
 ```
 
 工作流会打包 `server/` 下的发布文件并排除 `.DS_Store`。更新器会安全解压 ZIP，拒绝越界路径，并仅原子替换以下内容：`app/`、`run.py`、`pyproject.toml`、`uv.lock`、`.python-version`。`config.yaml`、`data/`、`logs/`、证书、`compose.yaml`、`Dockerfile` 和 `start.sh` 不会被自动覆盖。
 
-`.sha256` 只能检测下载损坏或意外篡改，不能证明发布者身份；它与 ZIP 资产来自同一个 Release。仅应将 `updates.repository` 配置为受信任且已启用多因素认证、最小权限和受保护发布流程的仓库。若需要抵御仓库发布权限被盗用，应使用独立的发布签名与固定公钥验证机制。
+更新包直接从配置的 GitHub 仓库下载。仅应将 `updates.repository` 配置为受信任且已启用多因素认证、最小权限和受保护发布流程的仓库。
+
+从 `main` 渠道更新成功后，服务端会将对应提交哈希写入本地 `.build-info`。后续检查 `main` 时会与 GitHub 最新提交比较；未通过 `main` 渠道更新过的部署会显示“未记录”，并视为可更新。
 
 更新校验与替换成功后，服务会以专用退出码结束；`start.sh` 会重新同步依赖并拉起 Python 进程。Docker 通过源码挂载保留更新结果，本机部署同样必须通过 `./start.sh` 运行。更新中断或替换失败时，更新器会尝试恢复已替换的文件；请始终保留 `data/` 与 `config.yaml` 的独立备份。

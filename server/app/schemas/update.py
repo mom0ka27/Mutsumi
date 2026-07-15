@@ -18,7 +18,6 @@ class ServerUpdateRead(BaseModel):
     published_at: str | None
     release_url: str
     update_available: bool
-    integrity_verified: bool
 
 
 class ServerUpdateRequest(BaseModel):
