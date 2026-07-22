@@ -61,7 +61,7 @@ async def update_update_channel(
     payload: ServerUpdateChannelUpdate,
     _=Depends(require_admin),
 ):
-    config["updates"]["channel"] = payload.channel
+    config["updates"]["channel"] = payload.channel.value
     await save_config(config)
     return ServerUpdateChannelRead(channel=payload.channel)
 

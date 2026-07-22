@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,20 +38,30 @@ class ServerUpdateService:
     _channel: UpdateChannel | None = None
     _target_version = ""
     _message = "服务端正在运行"
+    _candidate_cache: dict[UpdateChannel, tuple[float, UpdateCandidate]] = {}
+    _candidate_cache_seconds = 300
 
-    async def get_candidate(self, channel: UpdateChannel) -> UpdateCandidate:
+    async def get_candidate(
+        self, channel: UpdateChannel, *, refresh: bool = False
+    ) -> UpdateCandidate:
+        cached = self._candidate_cache.get(channel)
+        if not refresh and cached is not None and time.monotonic() - cached[0] < self._candidate_cache_seconds:
+            return cached[1]
         repository = self._repository()
         timeout = httpx.Timeout(15.0)
         headers = {"Accept": "application/vnd.github+json", "User-Agent": "Mutsumi-Server"}
         async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
             if channel == UpdateChannel.BRANCH:
-                return await self._branch_candidate(client, repository)
-            return await self._release_candidate(client, repository, channel)
+                candidate = await self._branch_candidate(client, repository)
+            else:
+                candidate = await self._release_candidate(client, repository, channel)
+        self._candidate_cache[channel] = (time.monotonic(), candidate)
+        return candidate
 
     async def apply_update(self, channel: UpdateChannel) -> None:
         async with self._update_lock:
             try:
-                candidate = await self.get_candidate(channel)
+                candidate = await self.get_candidate(channel, refresh=True)
                 self._set_status(
                     UpdateStatus.DOWNLOADING,
                     channel=channel,
@@ -127,11 +138,11 @@ class ServerUpdateService:
                     release_url=f"https://github.com/{repository}/releases",
                     download_url="",
                 )
-            response.raise_for_status()
+            self._raise_for_github_error(response)
             release = response.json()
         else:
             response = await client.get(f"https://api.github.com/repos/{repository}/releases")
-            response.raise_for_status()
+            self._raise_for_github_error(response)
             release = next((item for item in response.json() if item.get("prerelease")), None)
             if release is None:
                 raise RuntimeError("未找到预发布版本")
@@ -162,7 +173,7 @@ class ServerUpdateService:
         response = await client.get(
             f"https://api.github.com/repos/{repository}/commits/{branch}"
         )
-        response.raise_for_status()
+        self._raise_for_github_error(response)
         commit = response.json()
         sha = str(commit.get("sha") or "")
         if not sha:
@@ -187,6 +198,19 @@ class ServerUpdateService:
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as file:
             file.write(response.content)
             return Path(file.name)
+
+    def _raise_for_github_error(self, response: httpx.Response) -> None:
+        if response.status_code == 403 and response.headers.get("x-ratelimit-remaining") == "0":
+            reset = response.headers.get("x-ratelimit-reset")
+            message = "GitHub API 请求次数已用尽，请稍后重试"
+            if reset is not None:
+                try:
+                    remaining = max(0, int(reset) - int(time.time()))
+                    message = f"GitHub API 请求次数已用尽，请在约 {remaining // 60 + 1} 分钟后重试"
+                except ValueError:
+                    pass
+            raise RuntimeError(message)
+        response.raise_for_status()
 
     def _replace_files(self, archive: Path) -> None:
         root = Path(__file__).resolve().parents[2]
