@@ -1,5 +1,6 @@
 from app.schemas.anime import (
     AnimeCreate,
+    AnimeMetadataUpdate,
     AnimeRead,
     BangumiInfoItem,
     EpisodeCreate,
@@ -28,6 +29,7 @@ from app.schemas.update import (
 
 __all__ = [
     "AnimeCreate",
+    "AnimeMetadataUpdate",
     "AnimeRead",
     "BangumiInfoItem",
     "EpisodeCreate",

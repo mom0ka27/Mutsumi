@@ -48,6 +48,20 @@ class AnimeCreate(BaseModel):
     episodes: list[EpisodeCreate] | None = None
 
 
+class AnimeMetadataUpdate(BaseModel):
+    name: str
+    name_cn: str = ""
+    summary: str = ""
+    image_url: str = ""
+    score: float = 0
+    episode_count: int = 0
+    air_date: str = ""
+    rank: int = 0
+    platform: str = ""
+    tags: list[str] = Field(default_factory=list)
+    infobox: list[BangumiInfoItem] = Field(default_factory=list)
+
+
 class AnimeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

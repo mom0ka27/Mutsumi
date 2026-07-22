@@ -11,7 +11,14 @@ from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user, get_session, require_admin
 from app.models import Anime, Episode, User, WatchProgress
-from app.schemas import AnimeCreate, AnimeRead, EpisodeRead, WatchProgressRead, WatchProgressUpdate
+from app.schemas import (
+    AnimeCreate,
+    AnimeMetadataUpdate,
+    AnimeRead,
+    EpisodeRead,
+    WatchProgressRead,
+    WatchProgressUpdate,
+)
 from app.services.qbittorrent_service import delete_torrent
 from app.services.storage_service import storage_service
 
@@ -78,6 +85,37 @@ async def create_anime(
         .where(Anime.id == anime.id)
     )
     return created
+
+
+@router.put("/{anime_id}/metadata", response_model=AnimeRead)
+async def update_anime_metadata(
+    anime_id: int,
+    payload: AnimeMetadataUpdate,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    anime = await session.scalar(
+        select(Anime)
+        .options(selectinload(Anime.episodes))
+        .where(Anime.id == anime_id)
+    )
+    if not anime:
+        raise HTTPException(status_code=404, detail="Anime not found")
+
+    anime.name = payload.name
+    anime.name_cn = payload.name_cn
+    anime.summary = payload.summary
+    anime.image_url = payload.image_url
+    anime.score = payload.score
+    anime.episode_count = payload.episode_count
+    anime.air_date = payload.air_date
+    anime.rank = payload.rank
+    anime.platform = payload.platform
+    anime.tags = payload.tags
+    anime.infobox = [item.model_dump() for item in payload.infobox]
+    await session.commit()
+    await session.refresh(anime)
+    return (await _with_watch_progress([anime], _.id, session))[0]
 
 
 @router.get("/{anime_id}", response_model=AnimeRead)
