@@ -9,9 +9,7 @@ import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_settings.dart';
-import '../../anime/data/anime_list_store.dart';
-import '../../auth/presentation/current_user_controller.dart';
-import '../../home/presentation/home_page.dart';
+import '../../setup/presentation/connect_server_page.dart';
 import '../data/settings_repository.dart';
 
 class SavedServersPage extends StatefulWidget {
@@ -58,7 +56,11 @@ class _SavedServersPageState extends State<SavedServersPage> {
         _revision.value++;
         await showInfoDialog(title: '重命名成功', message: '服务器名称已更新');
       } catch (error) {
-        await showErrorDialog(title: '重命名失败', message: errorMessageOf(error));
+        await showErrorDialog(
+          title: '重命名失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
       }
     }
   }
@@ -94,7 +96,11 @@ class _SavedServersPageState extends State<SavedServersPage> {
           await showInfoDialog(title: '删除成功', message: '服务器已删除');
         }
       } catch (error) {
-        await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
+        await showErrorDialog(
+          title: '删除失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
       }
     }
   }
@@ -155,6 +161,21 @@ class _SavedServersPageState extends State<SavedServersPage> {
           label: '返回',
           onTap: Get.back,
         ),
+        actions: [
+          GlassButton(
+            width: 40,
+            height: 40,
+            iconSize: 20,
+            icon: const Icon(Icons.add_link_rounded),
+            label: '添加新服务器',
+            onTap: () => Get.to(
+              () => const ConnectServerPage(
+                prefillLastServer: false,
+                showBackButton: true,
+              ),
+            ),
+          ),
+        ],
         centerTitle: false,
       ),
       body: Obx(() {
@@ -222,21 +243,12 @@ class _SavedServersPageState extends State<SavedServersPage> {
                             account.serverUrl,
                             account.username,
                           );
-                          final permissionGroup = account.permissionGroup;
-                          if (permissionGroup == null ||
-                              permissionGroup.isEmpty) {
-                            Get.offAllNamed(StartupPage.routeName);
-                            return;
-                          }
-                          Get.find<CurrentUserController>().setPermissionGroup(
-                            permissionGroup,
-                          );
-                          Get.delete<AnimeListStore>(force: true);
-                          Get.offAllNamed(HomePage.routeName);
+                          Get.offAllNamed(StartupPage.routeName);
                         } catch (error) {
                           await showErrorDialog(
                             title: '切换账户失败',
                             message: errorMessageOf(error),
+                            error: error,
                           );
                         }
                       },

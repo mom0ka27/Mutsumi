@@ -10,7 +10,6 @@ import '../../../core/widgets/app_glass_settings.dart';
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
 import '../../auth/presentation/current_user_controller.dart';
-import '../../setup/presentation/connect_server_page.dart';
 import '../../users/presentation/users_management_page.dart';
 import '../data/settings_repository.dart';
 import '../data/server_info_service.dart';
@@ -150,7 +149,11 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
       );
       await showInfoDialog(title: '修改成功', message: '密码已更新');
     } catch (error) {
-      await showErrorDialog(title: '修改失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '修改失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       currentPassword.dispose();
       newPassword.dispose();
@@ -258,19 +261,6 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                   subtitle: const Text('更新当前账户的登录密码'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: account == null ? null : _changePassword,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.add_link_rounded),
-                  title: const Text('连接新服务器'),
-                  subtitle: const Text('添加并登录另一台服务器'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Get.to(
-                    () => const ConnectServerPage(
-                      prefillLastServer: false,
-                      showBackButton: true,
-                    ),
-                  ),
                 ),
               ],
             ),

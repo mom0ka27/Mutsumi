@@ -56,7 +56,11 @@ class BangumiSearchController extends GetxController {
       if (generation != _searchGeneration || isClosed) {
         return;
       }
-      await showErrorDialog(title: '搜索失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '搜索失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       if (generation == _searchGeneration && !isClosed) {
         loading.value = false;

@@ -38,7 +38,11 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
     _showingDetailError = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await showErrorDialog(title: '详情加载失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '详情加载失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
       if (mounted) _showingDetailError = false;
     });
   }
@@ -77,27 +81,27 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
             ),
           ),
           body: CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(
-                        20,
-                        Constants.topPadding,
-                        20,
-                        120,
-                      ),
-                      sliver: SliverToBoxAdapter(
-                        child: MediaDetailOverview(
-                          data: _overviewData(subject, detail),
-                          heroTag: 'cover-${subject.id}',
-                        ),
-                      ),
-                    ),
-                    if (snapshot.connectionState != ConnectionState.done)
-                      const SliverToBoxAdapter(
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                  ],
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  Constants.topPadding,
+                  20,
+                  120,
                 ),
+                sliver: SliverToBoxAdapter(
+                  child: MediaDetailOverview(
+                    data: _overviewData(subject, detail),
+                    heroTag: 'cover-${subject.id}',
+                  ),
+                ),
+              ),
+              if (snapshot.connectionState != ConnectionState.done)
+                const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+            ],
+          ),
           floatingActionButton: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(

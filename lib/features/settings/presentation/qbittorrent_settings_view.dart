@@ -129,10 +129,18 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
       if (error.response?.statusCode == 403) {
         _forbidden.value = true;
       } else {
-        await showErrorDialog(title: '保存失败', message: errorMessageOf(error));
+        await showErrorDialog(
+          title: '保存失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
       }
     } catch (error) {
-      await showErrorDialog(title: '保存失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '保存失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       if (mounted) _saving.value = false;
     }

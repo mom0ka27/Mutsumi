@@ -33,7 +33,11 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
     try {
       _users.assignAll(await _repository.listUsers());
     } catch (error) {
-      await showErrorDialog(title: '加载失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '加载失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       _loading.value = false;
     }
@@ -117,7 +121,11 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
         await _load();
         await showInfoDialog(title: '保存成功', message: '用户信息已更新');
       } catch (error) {
-        await showErrorDialog(title: '保存失败', message: errorMessageOf(error));
+        await showErrorDialog(
+          title: '保存失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
       }
     }
     username.dispose();
@@ -151,7 +159,11 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
         await _load();
         await showInfoDialog(title: '删除成功', message: '用户已删除');
       } catch (error) {
-        await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
+        await showErrorDialog(
+          title: '删除失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
       }
     }
   }

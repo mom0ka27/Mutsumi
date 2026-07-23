@@ -42,7 +42,11 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
       return;
     }
     _showingError = true;
-    await showErrorDialog(title: '加载 Anime 失败', message: errorMessageOf(error));
+    await showErrorDialog(
+      title: '加载 Anime 失败',
+      message: errorMessageOf(error),
+      error: error,
+    );
     _showingError = false;
   }
 

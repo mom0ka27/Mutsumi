@@ -104,7 +104,11 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
       _startStatusPolling();
     } catch (error) {
       if (mounted) {
-        await showErrorDialog(title: '更新失败', message: errorMessageOf(error));
+        await showErrorDialog(
+          title: '更新失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
         setState(() => _applying = false);
       }
     }
@@ -403,15 +407,9 @@ class _UpdateInfoCard extends StatelessWidget {
             ],
           ],
           const SizedBox(height: 24),
-          FilledButton.icon(
+          FilledButton(
             onPressed: applying || !canApply ? null : onApply,
-            icon: applying
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.system_update_rounded),
-            label: Text(
+            child: Text(
               applying
                   ? '正在启动更新...'
                   : canApply

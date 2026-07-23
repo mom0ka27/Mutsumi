@@ -88,7 +88,11 @@ class AnimeGardenDownloadController extends GetxController {
       if (generation != _searchGeneration || isClosed) {
         return;
       }
-      await showErrorDialog(title: '检索失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '检索失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       if (generation == _searchGeneration && !isClosed) {
         loading.value = false;
@@ -122,7 +126,11 @@ class AnimeGardenDownloadController extends GetxController {
       if (generation != _searchGeneration || isClosed) {
         return;
       }
-      await showErrorDialog(title: '加载失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '加载失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       if (generation == _searchGeneration && !isClosed) {
         loadingMore.value = false;
@@ -151,7 +159,11 @@ class AnimeGardenDownloadController extends GetxController {
         ),
       );
     } catch (error) {
-      await showErrorDialog(title: '获取文件列表失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '获取文件列表失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       addingResourceIds.remove(resource.id);
     }

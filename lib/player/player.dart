@@ -61,27 +61,6 @@ class _IndexPlayerState extends State<IndexPlayer> {
               key: widget.controller.videoKey,
               controller: widget.controller.videoController,
               controls: null,
-              subtitleViewConfiguration: SubtitleViewConfiguration(
-                style: TextStyle(
-                  color: Colors.white,
-                  // fontFamily: "FangZhengZhunYuanJianTi",
-                  // borderColor: Colors.pink[200],
-                  fontSize: widget.controller.isFullScreen.value ? 28 : 20,
-                  fontWeight: FontWeight.w600,
-                  shadows: const [
-                    Shadow(color: Colors.black, blurRadius: 4),
-                    Shadow(color: Colors.black, offset: Offset(1, 1)),
-                  ],
-                ),
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
-                  widget.controller.isFullScreen.value ? 24 : 12,
-                ),
-                // letterSpacing: 0.0,
-                // wordSpacing: 0.0,
-              ),
             ),
             Opacity(
               opacity: widget.controller.enableDanmaku.value ? 1 : 0,

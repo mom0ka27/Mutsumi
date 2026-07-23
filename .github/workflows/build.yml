@@ -4,10 +4,20 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - '**.dart'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'analysis_options.yaml'
+      - 'assets/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
 
 jobs:
   analyze:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     env:
       FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
     permissions:
@@ -16,15 +26,23 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
           archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
-          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
       - name: Restore Pub cache
         uses: actions/cache@v6
         with:
@@ -36,7 +54,7 @@ jobs:
         run: flutter analyze lib
 
   build-android:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     env:
       FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
       ARTIFACT_NAME: Mutsumi-${{ github.sha }}
@@ -46,15 +64,23 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
-          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
-          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
       - name: Restore Pub cache
         uses: actions/cache@v6
         with:
@@ -92,15 +118,23 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
           archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
-          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
       - name: Restore Pub cache
         uses: actions/cache@v6
         with:
@@ -136,7 +170,7 @@ jobs:
           if-no-files-found: error
 
   package-server:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     env:
       ARTIFACT_NAME: Mutsumi-${{ github.sha }}
     permissions:
@@ -145,7 +179,7 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Upload server package

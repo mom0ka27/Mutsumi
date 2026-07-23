@@ -114,7 +114,11 @@ class ConnectServerController extends GetxController {
         );
       }
     } on DioException catch (error) {
-      await showErrorDialog(title: '连接失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '连接失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       checking.value = false;
     }

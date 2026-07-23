@@ -92,7 +92,11 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
         Get.offAllNamed(HomePage.routeName);
       }
     } catch (error) {
-      await showErrorDialog(title: '初始化失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '初始化失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       if (mounted) {
         _initializing.value = false;

@@ -1,4 +1,9 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+
 import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/network/api_paths.dart';
@@ -28,6 +33,23 @@ class AnimeService {
     return _request('获取 Anime 详情 id=$id', () async {
       final response = await _serverDio().get<Map<String, dynamic>>(
         '$animeApiPath/$id',
+      );
+      final data = response.data;
+      if (data == null) {
+        throw StateError('服务器返回了空 Anime');
+      }
+      return AnimeRead.fromJson(data);
+    });
+  }
+
+  Future<AnimeRead> updateAnimeMetadata({
+    required int animeId,
+    required BangumiSubject subject,
+  }) async {
+    return _request('更新 Anime 元数据 bangumi=${subject.id}', () async {
+      final response = await _serverDio().put<Map<String, dynamic>>(
+        '$animeApiPath/$animeId/metadata',
+        data: _AnimeMetadataPayload(subject).toJson(),
       );
       final data = response.data;
       if (data == null) {
@@ -91,6 +113,58 @@ class AnimeService {
       );
       rethrow;
     }
+  }
+
+  Future<List<AnimeSubtitle>> listEpisodeSubtitles(
+    int animeId,
+    int episodeId,
+  ) async {
+    return _request(
+      '搜索 Episode 字幕 anime=$animeId episode=$episodeId',
+      () async {
+        final response = await _serverDio().get<List<dynamic>>(
+          '$animeApiPath/$animeId/episodes/$episodeId/subtitles',
+        );
+        return response.data
+                ?.whereType<Map<String, dynamic>>()
+                .map(AnimeSubtitle.fromJson)
+                .toList() ??
+            const [];
+      },
+    );
+  }
+
+  Future<String?> downloadEpisodeSubtitle({
+    required int animeId,
+    required int episodeId,
+    required String filename,
+  }) async {
+    return _request(
+      '下载 Episode 字幕 anime=$animeId episode=$episodeId',
+      () async {
+        final fileResponse = await _serverDio().get<List<int>>(
+          '$animeApiPath/$animeId/episodes/$episodeId/subtitles/file',
+          queryParameters: {'filename': filename},
+          options: Options(responseType: ResponseType.bytes),
+        );
+        final bytes = fileResponse.data;
+        if (bytes == null || bytes.isEmpty) {
+          return null;
+        }
+
+        final directory = Directory(
+          '${(await getTemporaryDirectory()).path}/mutsumi_subtitles',
+        );
+        await directory.create(recursive: true);
+        final suffix = filename.contains('.')
+            ? filename.substring(filename.lastIndexOf('.'))
+            : '';
+        final hash = sha1.convert(utf8.encode(filename)).toString();
+        final file = File('${directory.path}/$animeId-$episodeId-$hash$suffix');
+        await file.writeAsBytes(bytes, flush: true);
+        return file.path;
+      },
+    );
   }
 
   Future<String> addTorrent(String url) async {
@@ -217,6 +291,21 @@ class WatchProgressRead {
 
   final int? episodeId;
   final Duration position;
+}
+
+class AnimeSubtitle {
+  const AnimeSubtitle({required this.filename, required this.name});
+
+  factory AnimeSubtitle.fromJson(Map<String, dynamic> json) {
+    final filename = json['filename'] as String? ?? '';
+    return AnimeSubtitle(
+      filename: filename,
+      name: json['name'] as String? ?? filename,
+    );
+  }
+
+  final String filename;
+  final String name;
 }
 
 class AnimeEpisodeRead {
@@ -406,6 +495,38 @@ class _AnimeCreatePayload {
           : <Map<String, String>>[],
       'download_hash': downloadHash,
       'episodes': episodes?.map((episode) => episode.toJson()).toList(),
+    };
+  }
+}
+
+class _AnimeMetadataPayload {
+  const _AnimeMetadataPayload(this.subject);
+
+  final BangumiSubject subject;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': subject.name,
+      'name_cn': subject.nameCn,
+      'summary': subject.summary,
+      'image_url': subject.imageUrl,
+      'score': subject.score,
+      'episode_count': subject.episodeCount,
+      'air_date': subject.airDate,
+      'rank': subject is BangumiSubjectDetail
+          ? (subject as BangumiSubjectDetail).rank
+          : 0,
+      'platform': subject is BangumiSubjectDetail
+          ? (subject as BangumiSubjectDetail).platform
+          : '',
+      'tags': subject is BangumiSubjectDetail
+          ? (subject as BangumiSubjectDetail).tags
+          : <String>[],
+      'infobox': subject is BangumiSubjectDetail
+          ? (subject as BangumiSubjectDetail).infobox
+                .map((item) => {'key': item.key, 'value': item.value})
+                .toList()
+          : <Map<String, String>>[],
     };
   }
 }

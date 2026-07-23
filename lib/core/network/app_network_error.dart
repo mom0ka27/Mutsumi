@@ -12,6 +12,40 @@ class ApiBusinessException implements Exception {
   String toString() => message;
 }
 
+class AppErrorInfo {
+  const AppErrorInfo({required this.message, this.details});
+
+  final String message;
+  final String? details;
+}
+
+AppErrorInfo errorInfoOf(Object error) {
+  final message = errorMessageOf(error);
+  String? details;
+
+  if (error is ApiBusinessException) {
+    details = '业务错误码：${error.code}\n${error.message}';
+  } else if (error is DioException) {
+    final request = error.requestOptions;
+    final statusCode = error.response?.statusCode;
+    final responseData = error.response?.data;
+    details = [
+      '错误类型：${error.type.name}',
+      if (statusCode != null) 'HTTP 状态码：$statusCode',
+      '请求：${request.method} ${request.uri}',
+      if (responseData != null) '响应：$responseData',
+      if (error.error != null) '底层原因：${error.error}',
+    ].join('\n');
+  } else {
+    details = error.toString();
+  }
+
+  if (details == message || details.isEmpty) {
+    details = null;
+  }
+  return AppErrorInfo(message: message, details: details);
+}
+
 String errorMessageOf(Object error) {
   if (error is ApiBusinessException) return error.message;
   if (error is DioException) {

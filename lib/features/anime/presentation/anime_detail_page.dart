@@ -8,6 +8,7 @@ import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/media_detail_overview.dart';
+import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_service.dart';
 import 'anime_play_page.dart';
 
@@ -23,8 +24,9 @@ class AnimeDetailPage extends StatefulWidget {
 
 class _AnimeDetailPageState extends State<AnimeDetailPage> {
   final _animeService = AnimeService();
-  late final Future<AnimeRead> _future;
+  late Future<AnimeRead> _future;
   final _deleting = false.obs;
+  final _refreshing = false.obs;
 
   @override
   void initState() {
@@ -65,6 +67,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
               onTap: Get.back,
             ),
             actions: [
+              Obx(
+                () => _refreshing.value
+                    ? SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : GlassButton(
+                        width: 40,
+                        height: 40,
+                        iconSize: 20,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: '刷新番剧信息',
+                        onTap: () => _refreshAnime(anime),
+                      ),
+              ),
+              SizedBox(width: 2),
               Obx(
                 () => _deleting.value
                     ? const Padding(
@@ -127,6 +145,39 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
         );
       },
     );
+  }
+
+  Future<void> _refreshAnime(AnimeRead anime) async {
+    if (_refreshing.value) {
+      return;
+    }
+    _refreshing.value = true;
+    try {
+      final subject = await BangumiRepository().getSubjectDetail(
+        anime.bangumiId,
+      );
+      final updatedAnime = await _animeService.updateAnimeMetadata(
+        animeId: anime.id,
+        subject: subject,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _future = Future.value(updatedAnime);
+      });
+      await showInfoDialog(title: '刷新成功', message: '番剧信息已从 Bangumi 更新到服务器');
+    } catch (error) {
+      if (mounted) {
+        await showErrorDialog(
+          title: '刷新失败',
+          message: errorMessageOf(error),
+          error: error,
+        );
+      }
+    } finally {
+      _refreshing.value = false;
+    }
   }
 
   int _initialEpisode(AnimeRead anime) {
@@ -277,7 +328,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
       if (mounted) {
         _deleting.value = false;
       }
-      await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '删除失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     }
   }
 }

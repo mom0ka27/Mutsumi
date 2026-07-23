@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-android:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     env:
       FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
       ARTIFACT_NAME: Mutsumi-${{ github.ref_name }}
@@ -17,15 +17,23 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
           archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
-          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
       - name: Restore Pub cache
         uses: actions/cache@v6
         with:
@@ -63,15 +71,23 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
           archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
-          echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
       - name: Restore Pub cache
         uses: actions/cache@v6
         with:
@@ -107,7 +123,7 @@ jobs:
           if-no-files-found: error
 
   package-server:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     env:
       ARTIFACT_NAME: Mutsumi-${{ github.ref_name }}
     permissions:
@@ -116,7 +132,7 @@ jobs:
       - name: Checkout source
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin "$GITHUB_SHA"
           git checkout --detach FETCH_HEAD
       - name: Package server update asset
@@ -160,10 +176,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          apk_asset="mutsumi-${GITHUB_REF_NAME}.apk"
+          ipa_asset="mutsumi-${GITHUB_REF_NAME}.ipa"
           server_asset="mutsumi-server-${GITHUB_REF_NAME}.zip"
+          mv app-arm64-v8a-release.apk "${apk_asset}"
+          mv Runner.ipa "${ipa_asset}"
           gh release create "$GITHUB_REF_NAME" \
             --draft \
             --title "$GITHUB_REF_NAME" \
-            app-arm64-v8a-release.apk \
-            Runner.ipa \
+            "${apk_asset}" \
+            "${ipa_asset}" \
             "${server_asset}"

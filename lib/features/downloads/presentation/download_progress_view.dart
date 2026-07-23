@@ -107,7 +107,11 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       return;
     }
     _showingError = true;
-    await showErrorDialog(title: '下载服务异常', message: errorMessageOf(error));
+    await showErrorDialog(
+      title: '下载服务异常',
+      message: errorMessageOf(error),
+      error: error,
+    );
     _showingError = false;
   }
 

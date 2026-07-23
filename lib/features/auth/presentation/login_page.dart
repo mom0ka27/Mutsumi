@@ -82,7 +82,11 @@ class _LoginPageState extends State<LoginPage> {
         Get.offAllNamed(HomePage.routeName);
       }
     } catch (error) {
-      await showErrorDialog(title: '登录失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '登录失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       if (mounted) {
         _loggingIn.value = false;

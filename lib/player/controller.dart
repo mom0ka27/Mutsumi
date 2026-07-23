@@ -67,10 +67,6 @@ class IndexPlayerController {
   var _videoGeneration = 0;
 
   IndexPlayerController({this.options = const IndexPlayerOptions()}) {
-    // (_player.platform as NativePlayer)
-    //     .getProperty("gpu-api")
-    //     .then((v) => print("gpu-api: $v"));
-
     _positionSubscription = stream.position.listen((position) {
       if (!_disposed && !seeking && wantSeeking.isFalse) {
         sliderPostion.value = position;
@@ -106,6 +102,9 @@ class IndexPlayerController {
         _prepareSubtitleFont());
 
     // await _setNativeProperty('sub-font-provider', 'auto');
+    await _setNativeProperty("sub-font", "方正准圆简体");
+    await _setNativeProperty("sub-font-size", "46");
+    await _setNativeProperty("sub-border-color", "#FFFF69B4");
     await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
     if (_disposed) {
       return;
@@ -331,6 +330,16 @@ class IndexPlayerController {
       return;
     }
     await _player.setSubtitleTrack(track);
+  }
+
+  Future<void> loadExternalSubtitleTracks(List<SubtitleTrack> tracks) async {
+    for (final track in tracks) {
+      if (_disposed) {
+        return;
+      }
+      await _player.setSubtitleTrack(track);
+    }
+    await _selectSimplifiedChineseSubtitle();
   }
 
   Future<void> _selectSimplifiedChineseSubtitle() async {

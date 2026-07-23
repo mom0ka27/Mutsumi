@@ -6,7 +6,7 @@ import '../features/auth/data/auth_service.dart';
 import '../features/auth/presentation/auth_session.dart';
 import '../features/home/presentation/home_page.dart';
 import '../features/settings/data/settings_repository.dart';
-import '../features/setup/presentation/connect_server_page.dart';
+import '../features/settings/presentation/saved_servers_page.dart';
 import '../core/widgets/app_glass_background.dart';
 
 class StartupPage extends StatefulWidget {
@@ -32,13 +32,13 @@ class _StartupPageState extends State<StartupPage> {
   Future<void> _autoConnect() async {
     final serverUrl = _settingsRepository.getCurrentServerUrl();
     if (serverUrl == null || serverUrl.isEmpty) {
-      _goToConnectServer();
+      _goToSavedServers();
       return;
     }
 
     final credential = await _settingsRepository.getServerCredential(serverUrl);
     if (credential == null) {
-      _goToConnectServer();
+      _goToSavedServers();
       return;
     }
 
@@ -67,16 +67,16 @@ class _StartupPageState extends State<StartupPage> {
         Get.offAllNamed(HomePage.routeName);
       }
     } catch (_) {
-      _goToConnectServer();
+      _goToSavedServers();
     }
   }
 
-  void _goToConnectServer() {
+  void _goToSavedServers() {
     if (!mounted) {
       return;
     }
 
-    Get.offAllNamed(ConnectServerPage.routeName);
+    Get.offAll(() => const SavedServersPage());
   }
 
   @override

@@ -172,7 +172,11 @@ class AnimeGardenEpisodeMatchController extends GetxController {
           ..snackbar('已添加', 'Anime、BT 任务和 Episode 已保存到服务器');
       }
     } catch (error) {
-      await showErrorDialog(title: '添加失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '添加失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     } finally {
       saving.value = false;
     }

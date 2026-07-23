@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:media_kit/media_kit.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/widgets/app_glass_background.dart';
@@ -116,6 +117,36 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         widget.anime.id,
         episode.id,
       );
+      final subtitleTracks = <SubtitleTrack>[];
+      try {
+        final subtitles = await _animeService.listEpisodeSubtitles(
+          widget.anime.id,
+          episode.id,
+        );
+        for (final subtitle in subtitles) {
+          final subtitlePath = await _animeService.downloadEpisodeSubtitle(
+            animeId: widget.anime.id,
+            episodeId: episode.id,
+            filename: subtitle.filename,
+          );
+          if (subtitlePath != null) {
+            subtitleTracks.add(
+              SubtitleTrack.uri(
+                subtitlePath,
+                title: subtitle.name,
+                language: "",
+              ),
+            );
+          }
+        }
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          '搜索字幕失败，将继续播放视频',
+          tag: 'AnimePlayer',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       await controller.setVideo(
         NetworkVideo(
           index: episode.index,
@@ -133,6 +164,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         ),
         start: shouldResume ? widget.anime.watchProgress?.position : null,
       );
+      await controller.loadExternalSubtitleTracks(subtitleTracks);
     } catch (error) {
       _showPlayerError(errorMessageOf(error));
       return;

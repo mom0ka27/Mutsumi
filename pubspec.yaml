@@ -38,7 +38,7 @@ dependencies:
   hive_ce: ^2.19.3
   path_provider: ^2.1.6
   crypto: ^3.0.7
-  liquid_glass_widgets: ^0.21.3
+  liquid_glass_widgets: ^0.22.1
   get: ^4.7.3
   cached_network_image: ^3.4.1
   image_picker: ^1.2.3
