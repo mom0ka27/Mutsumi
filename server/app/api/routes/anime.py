@@ -22,7 +22,7 @@ from app.schemas import (
 from app.services.qbittorrent_service import delete_torrent
 from app.services.storage_service import storage_service
 
-VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
+SUBTITLE_EXTENSIONS = {".ass", ".ssa", ".srt", ".vtt"}
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 logger = logging.getLogger(__name__)
@@ -56,21 +56,8 @@ async def create_anime(
     if exists:
         raise HTTPException(status_code=409, detail="Anime already exists")
 
-    anime = Anime(
-        bangumi_id=payload.bangumi_id,
-        name=payload.name,
-        name_cn=payload.name_cn,
-        summary=payload.summary,
-        image_url=payload.image_url,
-        score=payload.score,
-        episode_count=payload.episode_count,
-        air_date=payload.air_date,
-        rank=payload.rank,
-        platform=payload.platform,
-        tags=payload.tags,
-        infobox=[item.model_dump() for item in payload.infobox],
-        download_hash=payload.download_hash,
-    )
+    anime = Anime(bangumi_id=payload.bangumi_id, download_hash=payload.download_hash)
+    _apply_metadata(anime, payload)
     anime.episodes = [
         Episode(index=episode.index, name=episode.name, filename=episode.filename)
         for episode in payload.episodes or []
@@ -102,17 +89,7 @@ async def update_anime_metadata(
     if not anime:
         raise HTTPException(status_code=404, detail="Anime not found")
 
-    anime.name = payload.name
-    anime.name_cn = payload.name_cn
-    anime.summary = payload.summary
-    anime.image_url = payload.image_url
-    anime.score = payload.score
-    anime.episode_count = payload.episode_count
-    anime.air_date = payload.air_date
-    anime.rank = payload.rank
-    anime.platform = payload.platform
-    anime.tags = payload.tags
-    anime.infobox = [item.model_dump() for item in payload.infobox]
+    _apply_metadata(anime, payload)
     await session.commit()
     await session.refresh(anime)
     return (await _with_watch_progress([anime], _.id, session))[0]
@@ -223,20 +200,64 @@ async def stream_episode_video(
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    anime = await session.scalar(select(Anime).where(Anime.id == anime_id))
-    if not anime:
-        raise HTTPException(status_code=404, detail="Anime not found")
-    episode = await session.scalar(
-        select(Episode).where(Episode.id == episode_id, Episode.anime_id == anime_id)
-    )
-    if not episode:
-        raise HTTPException(status_code=404, detail="Episode not found")
+    anime, episode = await _get_episode(anime_id, episode_id, session)
 
     file_path = _episode_file_path(anime, episode)
     logger.info(f"Streaming video from {file_path}")
     if not file_path or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Video file not found")
     return FileResponse(file_path)
+
+
+@router.get("/{anime_id}/episodes/{episode_id}/subtitles")
+async def list_episode_subtitles(
+    anime_id: int,
+    episode_id: int,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    anime, episode = await _get_episode(anime_id, episode_id, session)
+    video_path = _episode_file_path(anime, episode)
+    if not video_path or not video_path.is_file():
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    subtitles = []
+    for path in sorted(video_path.parent.iterdir()):
+        if not _is_episode_subtitle(path, video_path):
+            continue
+        subtitles.append(
+            {
+                "filename": str(path.relative_to(video_path.parent)),
+                "name": _subtitle_display_name(path, video_path),
+            }
+        )
+    return subtitles
+
+
+@router.get("/{anime_id}/episodes/{episode_id}/subtitles/file")
+async def get_episode_subtitle(
+    anime_id: int,
+    episode_id: int,
+    filename: str = Query(...),
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    anime, episode = await _get_episode(anime_id, episode_id, session)
+    video_path = _episode_file_path(anime, episode)
+    if not video_path or not video_path.is_file():
+        raise HTTPException(status_code=404, detail="Video file not found")
+    subtitle_path = storage_service.episode_file_path(
+        anime.download_hash,
+        str(Path(episode.filename).parent / filename),
+    )
+    if (
+        not subtitle_path
+        or not subtitle_path.is_file()
+        or subtitle_path.parent != video_path.parent
+        or not _is_episode_subtitle(subtitle_path, video_path)
+    ):
+        raise HTTPException(status_code=404, detail="Subtitle file not found")
+    return FileResponse(subtitle_path)
 
 
 @router.get("/{anime_id}/episodes/{episode_id}/file-hash")
@@ -246,14 +267,7 @@ async def get_episode_file_hash(
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    anime = await session.scalar(select(Anime).where(Anime.id == anime_id))
-    if not anime:
-        raise HTTPException(status_code=404, detail="Anime not found")
-    episode = await session.scalar(
-        select(Episode).where(Episode.id == episode_id, Episode.anime_id == anime_id)
-    )
-    if not episode:
-        raise HTTPException(status_code=404, detail="Episode not found")
+    anime, episode = await _get_episode(anime_id, episode_id, session)
 
     if episode.file_hash:
         return {"file_hash": episode.file_hash}
@@ -268,6 +282,22 @@ async def get_episode_file_hash(
     episode.file_hash = file_hash
     await session.commit()
     return {"file_hash": file_hash}
+
+
+async def _get_episode(
+    anime_id: int,
+    episode_id: int,
+    session: AsyncSession,
+) -> tuple[Anime, Episode]:
+    anime = await session.scalar(select(Anime).where(Anime.id == anime_id))
+    if not anime:
+        raise HTTPException(status_code=404, detail="Anime not found")
+    episode = await session.scalar(
+        select(Episode).where(Episode.id == episode_id, Episode.anime_id == anime_id)
+    )
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episode not found")
+    return anime, episode
 
 
 @router.post("/local-folder")
@@ -322,6 +352,35 @@ async def _with_watch_progress(
 
 def _episode_file_path(anime: Anime, episode: Episode):
     return storage_service.episode_file_path(anime.download_hash, episode.filename)
+
+
+def _apply_metadata(anime: Anime, payload: AnimeCreate | AnimeMetadataUpdate) -> None:
+    anime.name = payload.name
+    anime.name_cn = payload.name_cn
+    anime.summary = payload.summary
+    anime.image_url = payload.image_url
+    anime.score = payload.score
+    anime.episode_count = payload.episode_count
+    anime.air_date = payload.air_date
+    anime.rank = payload.rank
+    anime.platform = payload.platform
+    anime.tags = payload.tags
+    anime.infobox = [item.model_dump() for item in payload.infobox]
+
+
+def _is_episode_subtitle(path: Path, video_path: Path) -> bool:
+    return (
+        path.is_file()
+        and path.suffix.lower() in SUBTITLE_EXTENSIONS
+        and video_path.stem in path.name
+    )
+
+
+def _subtitle_display_name(path: Path, video_path: Path) -> str:
+    remaining = path.name.replace(video_path.stem, "", 1)
+    remaining = remaining.removesuffix(path.suffix)
+    remaining = remaining.strip(" .-_()[]")
+    return remaining or "默认字幕"
 
 
 def _first_16mb_md5(file_path: Path) -> str | None:
