@@ -36,7 +36,7 @@ class _BangumiSearchViewState extends State<BangumiSearchView>
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 16),
+          padding: EdgeInsets.fromLTRB(20, Constants.homeTopPadding, 20, 16),
           sliver: SliverToBoxAdapter(
             child: _SearchHeader(controller: controller),
           ),

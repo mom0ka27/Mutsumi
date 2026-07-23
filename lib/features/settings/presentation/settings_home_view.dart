@@ -172,7 +172,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
       return ListView(
         padding: EdgeInsets.fromLTRB(
           20,
-          Constants.topPadding,
+          Constants.homeTopPadding,
           20,
           Constants.bottomPadding,
         ),

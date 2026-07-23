@@ -133,7 +133,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
       return ListView.separated(
         padding: EdgeInsets.fromLTRB(
           20,
-          Constants.topPadding,
+          Constants.homeTopPadding,
           20,
           Constants.bottomPadding,
         ),

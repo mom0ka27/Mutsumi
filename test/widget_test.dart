@@ -43,6 +43,11 @@ void main() {
       await SettingsRepository.migrate();
       final repository = SettingsRepository();
       expect(repository.getCurrentAccount()?.username, 'admin');
+      final legacyCredential = await repository.getServerCredential(
+        'http://localhost:12091',
+      );
+      expect(legacyCredential?.username, 'admin');
+      expect(legacyCredential?.password, 'secret');
       expect(
         repository.getAccessToken('http://localhost:12091'),
         'legacy-token',
@@ -57,9 +62,17 @@ void main() {
       );
       expect(repository.getAccounts('http://localhost:12091'), hasLength(2));
       expect(repository.getCurrentAccount()?.username, 'user');
+      final userCredential = await repository.getServerCredential(
+        'http://localhost:12091',
+      );
+      expect(userCredential?.password, 'password');
 
       await repository.setCurrentAccount('http://localhost:12091', 'admin');
       expect(repository.getCurrentAccount()?.username, 'admin');
+      final currentCredential = await repository.getServerCredential(
+        'http://localhost:12091',
+      );
+      expect(currentCredential?.password, 'secret');
       expect(
         repository.getAccessToken('http://localhost:12091'),
         'legacy-token',

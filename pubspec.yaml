@@ -50,12 +50,12 @@ dependencies:
   audio_video_progress_bar: ^2.0.3
   media_kit:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: media_kit
   media_kit_video:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: media_kit_video
   media_kit_libs_video:
@@ -65,17 +65,16 @@ dependencies:
       path: libs/universal/media_kit_libs_video
   auto_orientation_v2: ^2.3.8
   package_info_plus: ^10.2.0
-  flutter_secure_storage: ^10.3.1
 
 dependency_overrides:
   media_kit:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: media_kit
   media_kit_libs_android_video:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: libs/android/media_kit_libs_android_video
   media_kit_libs_ios_video:
@@ -85,17 +84,17 @@ dependency_overrides:
       path: libs/ios/media_kit_libs_ios_video
   media_kit_libs_macos_video:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: libs/macos/media_kit_libs_macos_video
   media_kit_libs_windows_video:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: libs/windows/media_kit_libs_windows_video
   media_kit_libs_linux:
     git:
-      url: https://github.com/media-kit/media-kit.git
+      url: https://github.com/mom0ka27/media-kit.git
       ref: main
       path: libs/linux/media_kit_libs_linux
 

@@ -17,7 +17,12 @@ import 'package:ns_danmaku/ns_danmaku.dart';
 import 'package:path_provider/path_provider.dart';
 
 class IndexPlayerController {
-  final _player = Player(configuration: PlayerConfiguration(libass: true));
+  final _player = Player(
+    configuration: PlayerConfiguration(
+      libass: true,
+      logLevel: MPVLogLevel.trace,
+    ),
+  );
   late final VideoController _controller = VideoController(
     _player,
     configuration: const VideoControllerConfiguration(),
@@ -100,11 +105,13 @@ class IndexPlayerController {
     danmakuEpisodeId.value = null;
     final fontDirectory = await (_subtitleFontDirectory ??=
         _prepareSubtitleFont());
-
+    stream.log.listen((event) {
+      print("[${{event.level}} ]${event.prefix}: ${event.text}");
+    });
     // await _setNativeProperty('sub-font-provider', 'auto');
     await _setNativeProperty("sub-font", "方正准圆简体");
     await _setNativeProperty("sub-font-size", "46");
-    await _setNativeProperty("sub-border-color", "#FFFF69B4");
+    await _setNativeProperty("sub-border-color", "#FFFEDFE1");
     await _setNativeProperty('sub-fonts-dir', fontDirectory.path);
     if (_disposed) {
       return;
@@ -269,7 +276,9 @@ class IndexPlayerController {
     if (_disposed || !isFullScreen.value || _fullscreenTransition != null) {
       return;
     }
-    await AutoOrientation.landscapeAutoMode();
+    if (!Platform.isMacOS) {
+      await AutoOrientation.landscapeAutoMode();
+    }
     if (!_disposed) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     }
@@ -279,7 +288,7 @@ class IndexPlayerController {
     isFullScreen.value = true;
     try {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      if (!_disposed) {
+      if (!_disposed && !Platform.isMacOS) {
         await AutoOrientation.landscapeAutoMode();
       }
     } finally {
@@ -296,7 +305,7 @@ class IndexPlayerController {
           statusBarBrightness: Brightness.dark,
         ),
       );
-      if (!_disposed) {
+      if (!_disposed && !Platform.isMacOS) {
         await AutoOrientation.portraitAutoMode();
       }
       if (!_disposed) {

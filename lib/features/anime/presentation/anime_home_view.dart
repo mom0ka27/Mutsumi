@@ -63,7 +63,7 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
             ? ListView(
                 padding: EdgeInsets.fromLTRB(
                   24,
-                  Constants.topPadding,
+                  Constants.homeTopPadding,
                   24,
                   Constants.bottomPadding,
                 ),
@@ -71,7 +71,7 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
             : ListView.separated(
                 padding: EdgeInsets.fromLTRB(
                   20,
-                  Constants.topPadding,
+                  Constants.homeTopPadding,
                   20,
                   Constants.bottomPadding,
                 ),
