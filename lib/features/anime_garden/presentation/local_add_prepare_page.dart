@@ -20,7 +20,11 @@ Future<void> showLocalAddDialog(
     folderId = await coordinator.createFolder(subject.id);
   } catch (error) {
     if (context.mounted) {
-      await showErrorDialog(title: '创建文件夹失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '创建文件夹失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     }
     return;
   }
@@ -73,6 +77,7 @@ Future<void> showLocalAddDialog(
             await showErrorDialog(
               title: '读取文件失败',
               message: errorMessageOf(error),
+              error: error,
             );
           } finally {
             if (context.mounted) {

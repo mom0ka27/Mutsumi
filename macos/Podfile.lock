@@ -1,16 +1,22 @@
 PODS:
+  - erika_flutter (0.1.3):
+    - FlutterMacOS
   - FlutterMacOS (1.0.0)
 
 DEPENDENCIES:
+  - erika_flutter (from `Flutter/ephemeral/.symlinks/plugins/erika_flutter/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
 
 EXTERNAL SOURCES:
+  erika_flutter:
+    :path: Flutter/ephemeral/.symlinks/plugins/erika_flutter/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
 
 SPEC CHECKSUMS:
+  erika_flutter: 9e5ec3b12d117de03270dd925f9a4bccc2140e9a
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
 
-PODFILE CHECKSUM: 458bfd891059d3858b5d0454f27e779182c05879
+PODFILE CHECKSUM: 9d58f1303fb9dd76dac0ff8a74c5bc2d52e5fdb5
 
 COCOAPODS: 1.16.2

@@ -10,8 +10,7 @@ import 'widget/bottom_bar.dart';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'package:erika_flutter/erika_flutter.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
 
 class IndexPlayer extends StatefulWidget {
@@ -22,9 +21,7 @@ class IndexPlayer extends StatefulWidget {
   @override
   State<IndexPlayer> createState() => _IndexPlayerState();
 
-  static void init() {
-    MediaKit.ensureInitialized();
-  }
+  static void init() {}
 }
 
 class _IndexPlayerState extends State<IndexPlayer> {
@@ -57,10 +54,9 @@ class _IndexPlayerState extends State<IndexPlayer> {
         child: Stack(
           alignment: Alignment.topCenter,
           children: [
-            Video(
+            ErikaWindowOverlayVideoView(
               key: widget.controller.videoKey,
-              controller: widget.controller.videoController,
-              controls: null,
+              player: widget.controller.player,
             ),
             Opacity(
               opacity: widget.controller.enableDanmaku.value ? 1 : 0,

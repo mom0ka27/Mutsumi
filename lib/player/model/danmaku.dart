@@ -67,14 +67,27 @@ class DandanPlayDanmakuProvider extends DanmakuProvider {
           final danmaku = fromJson(comment);
           list.addDanmaku(danmaku.time, danmaku);
           count++;
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            '弹幕解析失败',
+            tag: 'Danmaku',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
       }
       return DanmakuLoadResult(
         list: list,
         count: count,
         episodeId: result.episodeId,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '弹幕加载失败',
+        tag: 'Danmaku',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return DanmakuLoadResult(list: DanmakuList(), count: 0);
     }
   }

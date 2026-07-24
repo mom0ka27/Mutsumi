@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_glass_background.dart';
@@ -62,7 +63,13 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
   Future<void> _loadChannel() async {
     try {
       _channel = await _service.getUpdateChannel();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '读取服务端更新渠道失败，使用 Release 渠道',
+        tag: 'ServerUpdate',
+        error: error,
+        stackTrace: stackTrace,
+      );
       _channel = ServerUpdateChannel.release;
     }
     if (mounted) _load();
@@ -150,7 +157,14 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
           _errorMessage = status.message.isEmpty ? '服务端更新失败。' : status.message;
         });
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '查询服务端更新状态失败',
+        tag: 'ServerUpdate',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<bool> _confirmUpdatedVersion() async {
@@ -164,7 +178,14 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
         });
         return true;
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '确认服务端版本失败',
+        tag: 'ServerUpdate',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
     return false;
   }
 

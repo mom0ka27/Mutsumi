@@ -193,6 +193,7 @@ async def update_watch_progress(
     )
 
 
+@router.head("/{anime_id}/episodes/{episode_id}/video")
 @router.get("/{anime_id}/episodes/{episode_id}/video")
 async def stream_episode_video(
     anime_id: int,

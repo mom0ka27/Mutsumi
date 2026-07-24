@@ -5,7 +5,6 @@ import '../model/dandanplay_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
-import 'package:media_kit/media_kit.dart';
 
 class BottomBar extends StatelessWidget {
   final IndexPlayerController controller;
@@ -32,8 +31,9 @@ class BottomBar extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Obx(
-              () => ProgressBar(
+            child: Obx(() {
+              controller.revision;
+              return ProgressBar(
                 progress: controller.sliderPostion.value,
                 total: controller.state.duration,
                 buffered: controller.state.buffer,
@@ -53,13 +53,14 @@ class BottomBar extends StatelessWidget {
                 onSeek: (d) {
                   controller.endSeeking(d);
                 },
-              ),
-            ),
+              );
+            }),
           ),
           Row(
             children: [
-              StreamBuilder(
-                stream: controller.stream.playing,
+              StreamBuilder<bool>(
+                stream: controller.playingStream,
+                initialData: controller.state.playing,
                 builder: (c, v) => controller.seeking
                     ? Padding(
                         padding: EdgeInsets.symmetric(horizontal: 15),
@@ -150,65 +151,54 @@ class BottomBar extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 8),
-              StreamBuilder<Tracks>(
-                stream: controller.stream.tracks,
-                initialData: controller.state.tracks,
-                builder: (context, tracksSnapshot) => StreamBuilder<Track>(
-                  stream: controller.stream.track,
-                  initialData: controller.state.track,
-                  builder: (context, trackSnapshot) {
-                    final tracks = (tracksSnapshot.data?.subtitle ?? const [])
-                        .where((track) => track.id != 'auto')
-                        .toList();
-                    final selected = trackSnapshot.data?.subtitle;
-                    return PopupMenuButton<SubtitleTrack>(
-                      tooltip: '选择字幕',
-                      enabled: tracks.isNotEmpty,
-                      color: Colors.black.withValues(alpha: 0.9),
-                      position: PopupMenuPosition.over,
-                      onSelected: controller.setSubtitleTrack,
-                      itemBuilder: (context) => tracks
-                          .map(
-                            (track) => PopupMenuItem(
-                              value: track,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    selected == track
-                                        ? Icons.check_rounded
-                                        : Icons.closed_caption_outlined,
-                                    color: selected == track
-                                        ? accentColor
-                                        : Colors.white70,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Flexible(
-                                    child: Text(
-                                      _subtitleLabel(track),
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+              Obx(() {
+                controller.revision;
+                final tracks = controller.state.subtitles;
+                final selected = controller.state.subtitle;
+                return PopupMenuButton<PlayerSubtitleTrack>(
+                  tooltip: '选择字幕',
+                  enabled: tracks.isNotEmpty,
+                  color: Colors.black.withValues(alpha: 0.9),
+                  position: PopupMenuPosition.over,
+                  onSelected: controller.setSubtitleTrack,
+                  itemBuilder: (context) => tracks
+                      .map(
+                        (track) => PopupMenuItem(
+                          value: track,
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected == track
+                                    ? Icons.check_rounded
+                                    : Icons.closed_caption_outlined,
+                                color: selected == track
+                                    ? accentColor
+                                    : Colors.white70,
+                                size: 20,
                               ),
-                            ),
-                          )
-                          .toList(),
-                      icon: Icon(
-                        selected?.id == 'no'
-                            ? Icons.closed_caption_disabled_outlined
-                            : Icons.closed_caption_rounded,
-                        color: selected?.id == 'no'
-                            ? Colors.white70
-                            : Colors.white,
-                      ),
-                    );
-                  },
-                ),
-              ),
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  _subtitleLabel(track),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  icon: Icon(
+                    selected?.disabled == true
+                        ? Icons.closed_caption_disabled_outlined
+                        : Icons.closed_caption_rounded,
+                    color: selected?.disabled == true
+                        ? Colors.white70
+                        : Colors.white,
+                  ),
+                );
+              }),
               IconButton(
                 icon: Obx(
                   () => Icon(
@@ -233,8 +223,8 @@ class BottomBar extends StatelessWidget {
     );
   }
 
-  String _subtitleLabel(SubtitleTrack track) {
-    if (track.id == 'no') {
+  String _subtitleLabel(PlayerSubtitleTrack track) {
+    if (track.disabled) {
       return '关闭字幕';
     }
     final title = track.title?.trim();

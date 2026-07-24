@@ -140,7 +140,11 @@ class _SavedServersPageState extends State<SavedServersPage> {
         await showInfoDialog(title: '删除成功', message: '账户已删除');
       }
     } catch (error) {
-      await showErrorDialog(title: '删除失败', message: errorMessageOf(error));
+      await showErrorDialog(
+        title: '删除失败',
+        message: errorMessageOf(error),
+        error: error,
+      );
     }
   }
 

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mutsumi/core/appearance/app_image_cache.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:path_provider/path_provider.dart';
+import '../logging/app_logger.dart';
 
 import '../appearance/app_background_preset.dart';
 import '../appearance/appearance_settings_repository.dart';
@@ -126,7 +127,13 @@ class AppearanceController extends GetxService {
       return palette.vibrantColor?.color ??
           palette.dominantColor?.color ??
           palette.mutedColor?.color;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '背景图片取色失败',
+        tag: 'Appearance',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return null;
     }
   }

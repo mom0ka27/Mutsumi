@@ -41,6 +41,8 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
       config.build_settings['ARCHS'] = 'arm64'
+      # config.build_settings['ERIKA_PREBUILT'] = '1'
+      # config.build_settings['ERIKA_PREBUILT_TAG'] = 'feat/http-headers'
     end
   end
 end

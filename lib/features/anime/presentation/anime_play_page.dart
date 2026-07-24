@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:media_kit/media_kit.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/widgets/app_glass_background.dart';
@@ -70,7 +69,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         initial: true,
       ),
     );
-    _errorSubscription = controller.stream.error.listen(_showPlayerError);
+    _errorSubscription = controller.errorStream.listen(_showPlayerError);
     _progressTimer = Timer.periodic(
       const Duration(seconds: 10),
       (_) => _saveProgress(),
@@ -130,13 +129,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
             filename: subtitle.filename,
           );
           if (subtitlePath != null) {
-            subtitleTracks.add(
-              SubtitleTrack.uri(
-                subtitlePath,
-                title: subtitle.name,
-                language: "",
-              ),
-            );
+            subtitleTracks.add(SubtitleTrack(path: subtitlePath));
           }
         }
       } catch (error, stackTrace) {
@@ -166,7 +159,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       );
       await controller.loadExternalSubtitleTracks(subtitleTracks);
     } catch (error) {
-      _showPlayerError(errorMessageOf(error));
+      _showPlayerError(error);
       return;
     }
     if (_disposed ||
@@ -177,16 +170,17 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     try {
       await controller.play();
     } catch (error) {
-      _showPlayerError(errorMessageOf(error));
+      _showPlayerError(error);
     }
   }
 
-  Future<void> _showPlayerError(String message) async {
+  Future<void> _showPlayerError(Object error) async {
+    final message = errorMessageOf(error);
     if (_disposed || _showingError || message.trim().isEmpty) {
       return;
     }
     _showingError = true;
-    await showErrorDialog(title: '播放出错', message: message);
+    await showErrorDialog(title: '播放出错', message: message, error: error);
     _showingError = false;
   }
 

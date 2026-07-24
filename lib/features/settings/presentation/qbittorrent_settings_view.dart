@@ -87,20 +87,24 @@ class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
         _forbidden.value = true;
       } else {
         _errorMessage.value = errorMessageOf(error);
-        await _showErrorDialog(_errorMessage.value!);
+        await _showErrorDialog(error);
       }
     } catch (error) {
       _errorMessage.value = errorMessageOf(error);
-      await _showErrorDialog(_errorMessage.value!);
+      await _showErrorDialog(error);
     } finally {
       if (mounted) _loading.value = false;
     }
   }
 
-  Future<void> _showErrorDialog(String message) async {
+  Future<void> _showErrorDialog(Object error) async {
     if (_showingError || !mounted) return;
     _showingError = true;
-    await showErrorDialog(title: '加载设置失败', message: message);
+    await showErrorDialog(
+      title: '加载设置失败',
+      message: errorMessageOf(error),
+      error: error,
+    );
     _showingError = false;
   }
 

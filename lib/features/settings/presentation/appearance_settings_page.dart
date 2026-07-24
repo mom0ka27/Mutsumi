@@ -27,6 +27,7 @@ class AppearanceSettingsPage extends StatelessWidget {
         await showErrorDialog(
           title: '设置失败',
           message: errorMessageOf(e),
+          error: e,
         );
       }
     }
@@ -41,7 +42,11 @@ class AppearanceSettingsPage extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        await showErrorDialog(title: '无法取色', message: errorMessageOf(e));
+        await showErrorDialog(
+          title: '无法取色',
+          message: errorMessageOf(e),
+          error: e,
+        );
       }
     }
   }

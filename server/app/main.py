@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -26,8 +26,33 @@ app.include_router(api_router)
 
 
 @app.exception_handler(QBittorrentError)
-async def qbittorrent_error_handler(_, exc: QBittorrentError):
+async def qbittorrent_error_handler(request: Request, exc: QBittorrentError):
+    logger.warning(
+        "qBittorrent business error: %s %s code=%s msg=%s",
+        request.method,
+        request.url.path,
+        exc.code,
+        exc.msg,
+    )
     return JSONResponse(status_code=200, content={"code": exc.code, "msg": exc.msg})
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.warning(
+        "HTTP error: %s %s status=%s detail=%s",
+        request.method,
+        request.url.path,
+        exc.status_code,
+        exc.detail,
+    )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error: %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/")

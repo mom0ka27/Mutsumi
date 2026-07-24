@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../core/logging/app_logger.dart';
 import '../features/auth/data/auth_service.dart';
 import '../features/auth/presentation/auth_session.dart';
 import '../features/home/presentation/home_page.dart';
@@ -66,7 +67,13 @@ class _StartupPageState extends State<StartupPage> {
       if (mounted) {
         Get.offAllNamed(HomePage.routeName);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '自动连接服务器失败',
+        tag: 'Startup',
+        error: error,
+        stackTrace: stackTrace,
+      );
       _goToSavedServers();
     }
   }

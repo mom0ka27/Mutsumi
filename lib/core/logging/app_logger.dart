@@ -1,7 +1,5 @@
 import 'dart:developer' as developer;
 
-import 'package:flutter/foundation.dart';
-
 class AppLogger {
   const AppLogger._();
 
@@ -35,9 +33,6 @@ class AppLogger {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    if (!kDebugMode) {
-      return;
-    }
     developer.log(
       message,
       name: tag,

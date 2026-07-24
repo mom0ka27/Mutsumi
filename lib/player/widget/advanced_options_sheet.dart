@@ -16,7 +16,7 @@ class AdvancedOptionsSheet extends StatefulWidget {
 }
 
 class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
-  MpvInfo? _mpvInfo;
+  PlayerInfo? _playerInfo;
   DanmakuCacheInfo? _cacheInfo;
   bool _loading = true;
   bool _isRefreshing = false;
@@ -28,11 +28,11 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
   }
 
   Future<void> _loadData() async {
-    final mpvFuture = widget.controller.getMpvInfo();
+    final playerFuture = widget.controller.getPlayerInfo();
     final repo = Get.find<DandanPlayRepository>();
     final episodeId = widget.controller.danmakuEpisodeId.value;
     _cacheInfo = episodeId == null ? null : repo.getCacheInfo(episodeId);
-    _mpvInfo = await mpvFuture;
+    _playerInfo = await playerFuture;
     if (mounted) {
       setState(() => _loading = false);
     }
@@ -119,61 +119,61 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
               else ...[
                 _infoRow(
                   '视频编码',
-                  _mpvInfo?.videoCodec ?? '-',
+                  _playerInfo?.videoCodec ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '分辨率',
-                  _mpvInfo?.resolution ?? '-',
+                  _playerInfo?.resolution ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '像素格式',
-                  _mpvInfo?.pixelFormat ?? '-',
+                  _playerInfo?.pixelFormat ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '视频格式',
-                  _mpvInfo?.videoFormat ?? '-',
+                  _playerInfo?.videoFormat ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '帧率',
-                  _mpvInfo?.frameRate ?? '-',
+                  _playerInfo?.frameRate ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '视频码率',
-                  _mpvInfo?.videoBitrate ?? '-',
+                  _playerInfo?.videoBitrate ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '音频编码',
-                  _mpvInfo?.audioCodec ?? '-',
+                  _playerInfo?.audioCodec ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '音频码率',
-                  _mpvInfo?.audioBitrate ?? '-',
+                  _playerInfo?.audioBitrate ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '硬件解码',
-                  _mpvInfo?.hwDecoder ?? '-',
+                  _playerInfo?.hwDecoder ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
                 _infoRow(
                   '分离器',
-                  _mpvInfo?.demuxer ?? '-',
+                  _playerInfo?.demuxer ?? '-',
                   labelStyle,
                   valueStyle,
                 ),
