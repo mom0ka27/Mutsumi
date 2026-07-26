@@ -10,7 +10,7 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 LEVEL_COLORS = {
     logging.DEBUG: "\033[36m",
-    logging.INFO: "\033[0m",
+    logging.INFO: "\033[32m",
     logging.WARNING: "\033[33m",
     logging.ERROR: "\033[31m",
     logging.CRITICAL: "\033[35m",
@@ -25,7 +25,7 @@ class ColorFormatter(logging.Formatter):
             return super().format(record)
 
         record = copy.copy(record)
-        record.msg = f"{color}{record.getMessage()}{RESET_COLOR}"
+        record.msg = f"{record.getMessage()}"
         record.name = f"\033[36m{record.name}{RESET_COLOR}"
         record.levelname = f"{color}{record.levelname}{RESET_COLOR}"
         record.args = ()
@@ -61,8 +61,7 @@ def setup_logging() -> None:
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
-    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    for logger_name in ("uvicorn", "uvicorn.error"):
         logger = logging.getLogger(logger_name)
-        logger.handlers.clear()
         logger.propagate = True
         logger.setLevel(log_level)

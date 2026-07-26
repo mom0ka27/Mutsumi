@@ -14,6 +14,8 @@ data
 logs
 .pycache
 *.db
+*.db-shm
+*.db-wal
 config.yaml
 .build-info
 

@@ -15,8 +15,9 @@ import 'package:ns_danmaku/ns_danmaku.dart';
 
 class IndexPlayer extends StatefulWidget {
   final IndexPlayerController controller;
+  final bool useOverlay;
 
-  const IndexPlayer(this.controller, {super.key});
+  const IndexPlayer(this.controller, {super.key, this.useOverlay = false});
 
   @override
   State<IndexPlayer> createState() => _IndexPlayerState();
@@ -37,9 +38,8 @@ class _IndexPlayerState extends State<IndexPlayer> {
   @override
   void dispose() {
     _interaction.dispose();
-    final danmakuController = _danmakuController;
-    if (danmakuController != null) {
-      widget.controller.clearDanmakuController(danmakuController);
+    if (_danmakuController != null) {
+      widget.controller.clearDanmakuController(_danmakuController!);
     }
     super.dispose();
   }
@@ -54,10 +54,15 @@ class _IndexPlayerState extends State<IndexPlayer> {
         child: Stack(
           alignment: Alignment.topCenter,
           children: [
-            ErikaWindowOverlayVideoView(
-              key: widget.controller.videoKey,
-              player: widget.controller.player,
-            ),
+            widget.useOverlay
+                ? ErikaWindowOverlayVideoView(
+                    key: widget.controller.videoKey,
+                    player: widget.controller.player,
+                  )
+                : ErikaVideoView(
+                    key: widget.controller.videoKey,
+                    player: widget.controller.player,
+                  ),
             Opacity(
               opacity: widget.controller.enableDanmaku.value ? 1 : 0,
               child: Padding(

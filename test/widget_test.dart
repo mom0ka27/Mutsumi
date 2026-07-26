@@ -1,82 +1,54 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:hive_ce/hive.dart';
 
 import 'package:mutsumi/app/mutsumi_app.dart';
 import 'package:mutsumi/core/storage/local_storage.dart';
-import 'package:mutsumi/features/settings/data/settings_repository.dart';
+import 'package:mutsumi/core/widgets/app_glass_background.dart';
+import 'package:mutsumi/features/auth/presentation/current_user_controller.dart';
+import 'package:mutsumi/features/settings/presentation/saved_servers_page.dart';
+import 'package:mutsumi/features/setup/presentation/connect_server_page.dart';
 
 void main() {
   setUpAll(() async {
-    Hive.init('.test_hive');
+    Hive.init('.test_hive/widget');
     await Hive.openBox(LocalStorage.settingsBoxName);
+    // MutsumiApp resolves these through Get, the same way main() registers them.
+    Get.put(AppearanceController(), permanent: true);
+    Get.put(CurrentUserController(), permanent: true);
   });
 
   tearDownAll(() async {
+    await Get.deleteAll(force: true);
     await Hive.deleteBoxFromDisk(LocalStorage.settingsBoxName);
     await Hive.close();
   });
 
-  testWidgets('shows connect server page without saved session', (
+  setUp(() async {
+    await Hive.box(LocalStorage.settingsBoxName).clear();
+  });
+
+  testWidgets('lands on the saved servers page without a saved session', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MutsumiApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('连接 Mutsumi Server'), findsOneWidget);
-    expect(find.text('连接并检查'), findsOneWidget);
+    expect(find.byType(SavedServersPage), findsOneWidget);
+    expect(find.text('已保存服务器'), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
   });
 
-  test(
-    'migrates legacy storage and keeps multiple accounts on one server',
-    () async {
-      final box = Hive.box(LocalStorage.settingsBoxName);
-      await box.clear();
-      await box.put('server_url', 'http://localhost:12091/');
-      await box.put('server_urls', ['http://localhost:12091/']);
-      await box.put('server_credentials', {
-        'http://localhost:12091': {'username': 'admin', 'password': 'secret'},
-      });
-      await box.put('server_tokens', {
-        'http://localhost:12091': 'legacy-token',
-      });
+  testWidgets('offers adding a server from the saved servers page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MutsumiApp());
+    await tester.pumpAndSettle();
 
-      await SettingsRepository.migrate();
-      final repository = SettingsRepository();
-      expect(repository.getCurrentAccount()?.username, 'admin');
-      final legacyCredential = await repository.getServerCredential(
-        'http://localhost:12091',
-      );
-      expect(legacyCredential?.username, 'admin');
-      expect(legacyCredential?.password, 'secret');
-      expect(
-        repository.getAccessToken('http://localhost:12091'),
-        'legacy-token',
-      );
+    await tester.tap(find.byIcon(Icons.add_link_rounded));
+    await tester.pumpAndSettle();
 
-      await repository.saveLogin(
-        serverUrl: 'http://localhost:12091/',
-        username: 'user',
-        password: 'password',
-        accessToken: 'user-token',
-        permissionGroup: 'admin',
-      );
-      expect(repository.getAccounts('http://localhost:12091'), hasLength(2));
-      expect(repository.getCurrentAccount()?.username, 'user');
-      final userCredential = await repository.getServerCredential(
-        'http://localhost:12091',
-      );
-      expect(userCredential?.password, 'password');
-
-      await repository.setCurrentAccount('http://localhost:12091', 'admin');
-      expect(repository.getCurrentAccount()?.username, 'admin');
-      final currentCredential = await repository.getServerCredential(
-        'http://localhost:12091',
-      );
-      expect(currentCredential?.password, 'secret');
-      expect(
-        repository.getAccessToken('http://localhost:12091'),
-        'legacy-token',
-      );
-    },
-  );
+    expect(find.byType(ConnectServerPage), findsOneWidget);
+  });
 }

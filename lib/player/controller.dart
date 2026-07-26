@@ -16,7 +16,7 @@ import 'model/video.dart' as models;
 class PlayerState {
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
-  Duration buffer = Duration.zero;
+  bool buffering = false;
   bool playing = false;
   List<PlayerSubtitleTrack> subtitles = const [];
   PlayerSubtitleTrack? subtitle;
@@ -39,7 +39,7 @@ class PlayerSubtitleTrack {
 }
 
 class IndexPlayerController {
-  final _player = ErikaPlayer(outputMode: ErikaOutputMode.appleEdr);
+  final _player = ErikaPlayer();
   final IndexPlayerOptions options;
   final _state = PlayerState();
   final _revision = 0.obs;
@@ -65,6 +65,7 @@ class IndexPlayerController {
   int? _lastDanmakuSecond;
   int _videoGeneration = 0;
   double _currentRate = 1.0;
+  Completer<Duration>? _durationCompleter;
 
   IndexPlayerController({this.options = const IndexPlayerOptions()}) {
     _eventSubscription = _player.events.listen(_handleEvent);
@@ -83,9 +84,23 @@ class IndexPlayerController {
 
   void _handleEvent(ErikaPlayerEvent event) {
     if (_disposed) return;
-    _state.position = event.position;
-    _state.duration = event.duration;
-    _state.playing = event.state == ErikaPlaybackState.playing;
+    if (event.kind == ErikaEventKind.positionChanged) {
+      _state.position = event.position;
+      if (!_seeking) sliderPostion.value = event.position;
+    }
+    if (event.kind == ErikaEventKind.durationChanged) {
+      _state.duration = event.duration;
+      final completer = _durationCompleter;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(event.duration);
+      }
+    }
+    _state.buffering = event.buffering;
+    if (event.state == ErikaPlaybackState.playing) {
+      _state.playing = true;
+    } else if (event.state == ErikaPlaybackState.paused) {
+      _state.playing = false;
+    }
     if (event.kind == ErikaEventKind.tracksChanged ||
         event.kind == ErikaEventKind.trackSelectionChanged) {
       _updateTracks(event.trackList, event.trackSelection.subtitle);
@@ -96,7 +111,6 @@ class IndexPlayerController {
     if (event.error != null && event.error!.isNotEmpty) {
       _errors.add(event.error!);
     }
-    if (!_seeking) sliderPostion.value = event.position;
     _pushDanmaku(event.position);
   }
 
@@ -132,30 +146,59 @@ class IndexPlayerController {
 
   Future<void> setVideo(models.Video video, {Duration? start}) async {
     if (_disposed) return;
-    this.video.value = video;
     final generation = ++_videoGeneration;
+    this.video.value = video;
+    _resetPlaybackState();
     _resetDanmakuSecond();
     _danmakuList = null;
-    danmakuCount.value = -1;
+    danmakuCount.value = 0;
     danmakuEpisodeId.value = null;
-    await _player.open(
-      video.uri.toString(),
-      httpHeaders: video is models.NetworkVideo ? video.httpHeaders : null,
-    );
+    final durationCompleter = Completer<Duration>();
+    _durationCompleter = durationCompleter;
+    try {
+      await _player.open(
+        video.uri.toString(),
+        httpHeaders: video is models.NetworkVideo ? video.httpHeaders : null,
+      );
+      if (generation != _videoGeneration || _disposed) return;
+      await durationCompleter.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => _state.duration,
+      );
+    } finally {
+      if (identical(_durationCompleter, durationCompleter)) {
+        _durationCompleter = null;
+      }
+    }
+    if (generation != _videoGeneration || _disposed) return;
     if (start != null && start > Duration.zero) await _player.seek(start);
+    if (generation != _videoGeneration || _disposed) return;
     if (video.subtitleUri != null) {
       await _player.addExternalSubtitle(video.subtitleUri!);
     }
     final provider = video.danmakuProvider;
     if (provider != null) {
-      provider.getDanmakuList().then((result) {
-        if (!_disposed && generation == _videoGeneration) {
-          _danmakuList = result.list;
-          danmakuCount.value = result.count;
-          danmakuEpisodeId.value = result.episodeId;
-        }
-      });
+      unawaited(
+        provider.getDanmakuList().then((result) {
+          if (!_disposed && generation == _videoGeneration) {
+            _danmakuList = result.list;
+            danmakuCount.value = result.count;
+            danmakuEpisodeId.value = result.episodeId;
+          }
+        }),
+      );
     }
+  }
+
+  void _resetPlaybackState() {
+    _state.position = Duration.zero;
+    _state.duration = Duration.zero;
+    _state.buffering = false;
+    _state.playing = false;
+    _state.subtitles = const [];
+    _state.subtitle = null;
+    sliderPostion.value = Duration.zero;
+    _revision.value++;
   }
 
   void setDanmakuController(DanmakuController controller) {
@@ -186,13 +229,13 @@ class IndexPlayerController {
   }
 
   Future<void> play() async {
-    if (_disposed) return;
+    if (_disposed || _state.playing) return;
     await _player.play();
     _danmakuController?.resume();
   }
 
   Future<void> pause() async {
-    if (_disposed) return;
+    if (_disposed || !_state.playing) return;
     await _player.pause();
     _danmakuController?.pause();
   }

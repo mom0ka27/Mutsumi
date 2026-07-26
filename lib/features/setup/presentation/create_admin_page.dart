@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -89,7 +91,7 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
         serverName: serverName,
       );
       if (mounted) {
-        Get.offAllNamed(HomePage.routeName);
+        unawaited(Get.offAllNamed(HomePage.routeName));
       }
     } catch (error) {
       await showErrorDialog(

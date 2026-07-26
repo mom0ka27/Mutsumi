@@ -36,7 +36,6 @@ class BottomBar extends StatelessWidget {
               return ProgressBar(
                 progress: controller.sliderPostion.value,
                 total: controller.state.duration,
-                buffered: controller.state.buffer,
                 baseBarColor: Colors.white.withValues(alpha: 0.2),
                 bufferedBarColor: Colors.white.withValues(alpha: 0.35),
                 progressBarColor: accentColor,
@@ -88,64 +87,53 @@ class BottomBar extends StatelessWidget {
                     )
                   : SizedBox(),
               const SizedBox(width: 10),
-              Obx(
-                () => Text(
-                  "${controller.sliderPostion.value.str} / ${controller.state.duration.str}",
+              Obx(() {
+                controller.revision;
+                final duration = controller.state.duration;
+                return Text(
+                  "${controller.sliderPostion.value.str} / ${duration > Duration.zero ? duration.str : '--:--'}",
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Colors.white,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
-                ),
-              ),
+                );
+              }),
               const Spacer(),
-              Obx(
-                () => Semantics(
-                  label: '弹幕',
-                  button: true,
-                  enabled: dandanPlayConfigured,
-                  selected:
-                      dandanPlayConfigured && controller.enableDanmaku.value,
-                  child: InkWell(
-                    onTap: dandanPlayConfigured
-                        ? controller.toggleDanmaku
-                        : null,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 11,
-                        vertical: 7,
+              Semantics(
+                label: '弹幕',
+                button: true,
+                enabled: dandanPlayConfigured,
+                selected:
+                    dandanPlayConfigured && controller.enableDanmaku.value,
+                child: InkWell(
+                  onTap: dandanPlayConfigured ? controller.toggleDanmaku : null,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 11,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          dandanPlayConfigured && controller.enableDanmaku.value
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Obx(
+                      () => Text(
+                        '弹 ${controller.danmakuCount.value}',
+                        style: TextStyle(
+                          color:
+                              dandanPlayConfigured &&
+                                  controller.enableDanmaku.value
+                              ? Colors.black
+                              : Colors.white.withValues(
+                                  alpha: dandanPlayConfigured ? 1 : 0.4,
+                                ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color:
-                            dandanPlayConfigured &&
-                                controller.enableDanmaku.value
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: controller.danmakuCount.value == -1
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                              ),
-                            )
-                          : Text(
-                              dandanPlayConfigured
-                                  ? '弹 ${controller.danmakuCount.value}'
-                                  : '弹',
-                              style: TextStyle(
-                                color:
-                                    dandanPlayConfigured &&
-                                        controller.enableDanmaku.value
-                                    ? Colors.black
-                                    : Colors.white.withValues(
-                                        alpha: dandanPlayConfigured ? 1 : 0.4,
-                                      ),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
                     ),
                   ),
                 ),
@@ -210,9 +198,9 @@ class BottomBar extends StatelessWidget {
                 ),
                 onPressed: () async {
                   if (controller.isFullScreen.value) {
-                    controller.exitFullscreen();
+                    await controller.exitFullscreen();
                   } else {
-                    controller.enterFullscreen();
+                    await controller.enterFullscreen();
                   }
                 },
               ),

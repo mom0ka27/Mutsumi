@@ -1,14 +1,8 @@
 import '../../../core/network/api_paths.dart';
 import '../../settings/data/authenticated_server_client.dart';
-import '../../settings/data/settings_repository.dart';
 
 class DownloadRepository {
-  DownloadRepository({SettingsRepository? settingsRepository})
-    : _settingsRepository = settingsRepository ?? SettingsRepository();
-
-  final SettingsRepository _settingsRepository;
-  late final AuthenticatedServerClient _client =
-      AuthenticatedServerClient(settingsRepository: _settingsRepository);
+  final AuthenticatedServerClient _client = AuthenticatedServerClient();
 
   Future<List<DownloadTask>> listTasks() async {
     final response = await _client.dio.get<dynamic>(

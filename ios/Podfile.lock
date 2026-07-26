@@ -20,9 +20,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   auto_orientation_v2: 2d9f355fcc48c37d6fa3d37efa96c3ba15719cc0
-  erika_flutter: 01b6cdcd4958c530ef704387a1322d29dca1525f
+  erika_flutter: c69fb6f96dc4de73de80d21c7ad2f2e0c08d62bd
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
 
-PODFILE CHECKSUM: 912e34f102da91123e38965ab4e5b3fb21e195f0
+PODFILE CHECKSUM: e7ef1f6e9f4d94ccdb39e4995ff50b85ebadf1e2
 
 COCOAPODS: 1.16.2

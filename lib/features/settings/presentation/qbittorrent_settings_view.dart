@@ -9,7 +9,6 @@ import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
-import '../data/settings_repository.dart';
 import '../data/authenticated_server_client.dart';
 
 class QBittorrentSettingsView extends StatefulWidget {
@@ -53,8 +52,7 @@ class QBittorrentSettingsPage extends StatelessWidget {
 }
 
 class _QBittorrentSettingsViewState extends State<QBittorrentSettingsView> {
-  final _settings = SettingsRepository();
-  late final _client = AuthenticatedServerClient(settingsRepository: _settings);
+  final _client = AuthenticatedServerClient();
   final _shareRatioSlider = 3.0.obs;
   Map<String, dynamic>? _config;
   final _loading = true.obs;

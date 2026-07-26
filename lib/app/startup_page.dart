@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -65,7 +67,7 @@ class _StartupPageState extends State<StartupPage> {
         serverName: _settingsRepository.getServerName(serverUrl),
       );
       if (mounted) {
-        Get.offAllNamed(HomePage.routeName);
+        unawaited(Get.offAllNamed(HomePage.routeName));
       }
     } catch (error, stackTrace) {
       AppLogger.error(

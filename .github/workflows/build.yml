@@ -13,6 +13,7 @@ on:
       - 'android/**'
       - 'ios/**'
       - 'scripts/**'
+      - 'server/**'
       - '.github/workflows/**'
 
 jobs:
@@ -52,6 +53,34 @@ jobs:
         run: flutter pub get --enforce-lockfile
       - name: Analyze
         run: flutter analyze lib
+      - name: Test
+        run: flutter test
+
+  server-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout source
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+        working-directory: .
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.30"
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Test
+        run: uv run pytest
 
   build-android:
     runs-on: ubuntu-latest

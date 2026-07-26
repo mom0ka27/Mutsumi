@@ -13,6 +13,9 @@ logging:
   retention_days: 7
 storage:
   data_path: ./data
+  # How long directory-size scans are reused for the storage page.
+  # Set to 0 to always rescan; clients can also pass ?refresh=true.
+  status_cache_seconds: 60
 database_url: sqlite+aiosqlite:///./data/mutsumi.db
 updates:
   repository: mom0ka27/Mutsumi

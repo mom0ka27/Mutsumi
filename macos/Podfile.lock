@@ -14,9 +14,9 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
 
 SPEC CHECKSUMS:
-  erika_flutter: 9e5ec3b12d117de03270dd925f9a4bccc2140e9a
+  erika_flutter: 6d35f15e9b475282807ce46dc7f0d0478b059c1a
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
 
-PODFILE CHECKSUM: 9d58f1303fb9dd76dac0ff8a74c5bc2d52e5fdb5
+PODFILE CHECKSUM: 3c79db8fd373d10007bd1a526aeaa7a0eba519e2
 
 COCOAPODS: 1.16.2

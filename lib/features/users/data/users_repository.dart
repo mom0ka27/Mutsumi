@@ -1,14 +1,8 @@
 import '../../../core/network/api_paths.dart';
 import '../../settings/data/authenticated_server_client.dart';
-import '../../settings/data/settings_repository.dart';
 
 class UsersRepository {
-  UsersRepository({SettingsRepository? settingsRepository})
-    : _settings = settingsRepository ?? SettingsRepository();
-
-  final SettingsRepository _settings;
-  late final AuthenticatedServerClient _client =
-      AuthenticatedServerClient(settingsRepository: _settings);
+  final AuthenticatedServerClient _client = AuthenticatedServerClient();
 
   Future<List<ManagedUser>> listUsers() async {
     final response = await _client.dio.get<List<dynamic>>(usersApiPath);

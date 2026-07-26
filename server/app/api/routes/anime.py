@@ -9,12 +9,18 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.auth import get_current_user, get_session, require_admin
+from app.core.auth import (
+    get_current_user,
+    get_session,
+    require_admin,
+    require_download_permission,
+)
 from app.models import Anime, Episode, User, WatchProgress
 from app.schemas import (
     AnimeCreate,
     AnimeMetadataUpdate,
     AnimeRead,
+    AnimeSummaryRead,
     EpisodeRead,
     WatchProgressRead,
     WatchProgressUpdate,
@@ -27,7 +33,7 @@ SUBTITLE_EXTENSIONS = {".ass", ".ssa", ".srt", ".vtt"}
 router = APIRouter(prefix="/anime", tags=["anime"])
 logger = logging.getLogger(__name__)
 
-@router.get("", response_model=list[AnimeRead])
+@router.get("", response_model=list[AnimeSummaryRead])
 async def list_anime(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
@@ -41,13 +47,15 @@ async def list_anime(
         .offset(skip)
         .limit(limit)
     )
-    return await _with_watch_progress(list(result), current_user.id, session)
+    return await _with_watch_progress(
+        list(result), current_user.id, session, AnimeSummaryRead
+    )
 
 
 @router.post("", response_model=AnimeRead, status_code=status.HTTP_201_CREATED)
 async def create_anime(
     payload: AnimeCreate,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_download_permission),
     session: AsyncSession = Depends(get_session),
 ):
     exists = await session.scalar(
@@ -78,7 +86,7 @@ async def create_anime(
 async def update_anime_metadata(
     anime_id: int,
     payload: AnimeMetadataUpdate,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(require_download_permission),
     session: AsyncSession = Depends(get_session),
 ):
     anime = await session.scalar(
@@ -92,7 +100,7 @@ async def update_anime_metadata(
     _apply_metadata(anime, payload)
     await session.commit()
     await session.refresh(anime)
-    return (await _with_watch_progress([anime], _.id, session))[0]
+    return (await _with_watch_progress([anime], current_user.id, session))[0]
 
 
 @router.get("/{anime_id}", response_model=AnimeRead)
@@ -144,7 +152,7 @@ async def delete_anime(
         if _is_bt_hash(torrent_hash):
             await delete_torrent(torrent_hash, delete_files=delete_files)
         elif delete_files:
-            storage_service.delete_local_folder(torrent_hash)
+            await storage_service.delete_local_folder(torrent_hash)
 
     await session.execute(
         delete(WatchProgress).where(WatchProgress.anime_id == anime_id)
@@ -204,8 +212,8 @@ async def stream_episode_video(
     anime, episode = await _get_episode(anime_id, episode_id, session)
 
     file_path = _episode_file_path(anime, episode)
-    logger.info(f"Streaming video from {file_path}")
-    if not file_path or not file_path.is_file():
+    logger.info("Streaming video from %s", file_path)
+    if not await storage_service.is_file(file_path):
         raise HTTPException(status_code=404, detail="Video file not found")
     return FileResponse(file_path)
 
@@ -219,20 +227,18 @@ async def list_episode_subtitles(
 ):
     anime, episode = await _get_episode(anime_id, episode_id, session)
     video_path = _episode_file_path(anime, episode)
-    if not video_path or not video_path.is_file():
+    if not await storage_service.is_file(video_path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
-    subtitles = []
-    for path in sorted(video_path.parent.iterdir()):
-        if not _is_episode_subtitle(path, video_path):
-            continue
-        subtitles.append(
-            {
-                "filename": str(path.relative_to(video_path.parent)),
-                "name": _subtitle_display_name(path, video_path),
-            }
-        )
-    return subtitles
+    siblings = await storage_service.list_sibling_files(video_path)
+    return [
+        {
+            "filename": str(path.relative_to(video_path.parent)),
+            "name": _subtitle_display_name(path, video_path),
+        }
+        for path in siblings
+        if _is_episode_subtitle(path, video_path)
+    ]
 
 
 @router.get("/{anime_id}/episodes/{episode_id}/subtitles/file")
@@ -245,17 +251,17 @@ async def get_episode_subtitle(
 ):
     anime, episode = await _get_episode(anime_id, episode_id, session)
     video_path = _episode_file_path(anime, episode)
-    if not video_path or not video_path.is_file():
+    if not await storage_service.is_file(video_path):
         raise HTTPException(status_code=404, detail="Video file not found")
     subtitle_path = storage_service.episode_file_path(
         anime.download_hash,
         str(Path(episode.filename).parent / filename),
     )
     if (
-        not subtitle_path
-        or not subtitle_path.is_file()
+        subtitle_path is None
         or subtitle_path.parent != video_path.parent
         or not _is_episode_subtitle(subtitle_path, video_path)
+        or not await storage_service.is_file(subtitle_path)
     ):
         raise HTTPException(status_code=404, detail="Subtitle file not found")
     return FileResponse(subtitle_path)
@@ -274,7 +280,7 @@ async def get_episode_file_hash(
         return {"file_hash": episode.file_hash}
 
     file_path = _episode_file_path(anime, episode)
-    if not file_path or not file_path.is_file():
+    if not await storage_service.is_file(file_path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
     file_hash = await asyncio.to_thread(_first_16mb_md5, file_path)
@@ -304,10 +310,10 @@ async def _get_episode(
 @router.post("/local-folder")
 async def create_local_folder(
     bangumi_id: int = Query(...),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_download_permission),
 ):
     try:
-        folder_id = storage_service.create_local_folder(bangumi_id)
+        folder_id = await storage_service.create_local_folder(bangumi_id)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create folder: {e}")
     return {"folder_id": folder_id}
@@ -318,14 +324,16 @@ async def list_local_folder_files(
     folder_id: str,
     _: User = Depends(get_current_user),
 ):
-    return [file.model_dump() for file in storage_service.list_local_files(folder_id)]
+    files = await storage_service.list_local_files(folder_id)
+    return [file.model_dump() for file in files]
 
 
 async def _with_watch_progress(
     animes: list[Anime],
     user_id: int,
     session: AsyncSession,
-) -> list[AnimeRead]:
+    model: type[AnimeRead] | type[AnimeSummaryRead] = AnimeRead,
+) -> list[AnimeRead | AnimeSummaryRead]:
     if not animes:
         return []
 
@@ -340,7 +348,7 @@ async def _with_watch_progress(
 
     reads = []
     for anime in animes:
-        read = AnimeRead.model_validate(anime)
+        read = model.model_validate(anime)
         progress = progress_by_anime_id.get(anime.id)
         if progress:
             read.watch_progress = WatchProgressRead(

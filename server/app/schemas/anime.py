@@ -81,3 +81,27 @@ class AnimeRead(BaseModel):
     download_hash: str | None
     episodes: list[EpisodeRead]
     watch_progress: WatchProgressRead | None = None
+
+
+class AnimeSummaryRead(BaseModel):
+    """Trimmed payload for the library list.
+
+    Drops ``tags``, ``infobox``, ``rank`` and ``platform`` — none of which the
+    list UI renders, and ``infobox`` alone can be several KB per entry. Clients
+    fetch the full :class:`AnimeRead` when opening a detail page.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    bangumi_id: int
+    name: str
+    name_cn: str
+    summary: str
+    image_url: str
+    score: float
+    episode_count: int
+    air_date: str
+    download_hash: str | None
+    episodes: list[EpisodeRead]
+    watch_progress: WatchProgressRead | None = None

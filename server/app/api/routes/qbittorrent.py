@@ -1,3 +1,4 @@
+from http import HTTPStatus
 from pathlib import Path
 
 import asyncio
@@ -56,14 +57,16 @@ async def download_torrent_files(
 ):
     selected_filenames = {filename for filename in payload.filenames if filename}
     if not selected_filenames:
-        raise QBittorrentError(21010, "没有选择下载文件")
+        raise QBittorrentError(21010, "没有选择下载文件", HTTPStatus.BAD_REQUEST)
 
     client = await _qbittorrent_client(timeout=30)
     try:
         metadata = await _wait_for_metadata(client, payload.source)
         files = _metadata_files(metadata)
         if not files:
-            raise QBittorrentError(21005, "种子元数据尚未就绪")
+            raise QBittorrentError(
+                21005, "种子元数据尚未就绪", HTTPStatus.GATEWAY_TIMEOUT
+            )
 
         torrent_hash = _metadata_hash(metadata) or _parse_bt_hash(payload.source) or ""
         save_path = _download_save_path(torrent_hash)
@@ -225,7 +228,9 @@ async def _qbittorrent_client(timeout: float = 10) -> httpx.AsyncClient:
     qbittorrent_config = config["qbittorrent"]
     url = (qbittorrent_config.get("url") or "").rstrip("/")
     if not url:
-        raise QBittorrentError(21001, "qBittorrent 尚未配置")
+        raise QBittorrentError(
+            21001, "qBittorrent 尚未配置", HTTPStatus.SERVICE_UNAVAILABLE
+        )
 
     async with _qbittorrent_cookie_lock:
         cookies = httpx.Cookies(_qbittorrent_cookies)

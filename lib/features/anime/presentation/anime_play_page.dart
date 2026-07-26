@@ -63,16 +63,16 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         position: snapshot.position,
       ),
     );
+    _errorSubscription = controller.errorStream.listen(_showPlayerError);
+    _progressTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _saveProgress(),
+    );
     unawaited(
       _setCurrentEpisode(
         widget.initialEpisode.clamp(0, widget.episodes.length - 1),
         initial: true,
       ),
-    );
-    _errorSubscription = controller.errorStream.listen(_showPlayerError);
-    _progressTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _saveProgress(),
     );
   }
 
@@ -159,7 +159,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       );
       await controller.loadExternalSubtitleTracks(subtitleTracks);
     } catch (error) {
-      _showPlayerError(error);
+      unawaited(_showPlayerError(error));
       return;
     }
     if (_disposed ||
@@ -170,7 +170,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     try {
       await controller.play();
     } catch (error) {
-      _showPlayerError(error);
+      unawaited(_showPlayerError(error));
     }
   }
 
@@ -209,21 +209,23 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       final fullScreen = controller.isFullScreen.value;
       if (fullScreen) {
         return Material(
-          child: ColoredBox(
-            color: Colors.black,
-            child: IndexPlayer(controller),
-          ),
+          color: Colors.transparent,
+          child: IndexPlayer(controller, useOverlay: true),
         );
       }
       return GlassScaffold(
         enableBackgroundSampling: true,
         background: const AppGlassBackground(),
         body: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ColoredBox(
               color: Colors.black,
-              child: SafeArea(bottom: false, child: IndexPlayer(controller)),
+              child: SafeArea(
+                bottom: false,
+                child: IndexPlayer(controller, useOverlay: false),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -271,7 +273,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
                                     ? null
                                     : () async {
                                         await _saveProgress();
-                                        _setCurrentEpisode(index);
+                                        unawaited(_setCurrentEpisode(index));
                                       },
                               ),
                             );

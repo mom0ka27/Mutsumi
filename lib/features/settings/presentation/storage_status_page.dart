@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -9,7 +11,6 @@ import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
-import '../data/settings_repository.dart';
 import '../data/authenticated_server_client.dart';
 
 class StorageStatusPage extends StatefulWidget {
@@ -20,8 +21,7 @@ class StorageStatusPage extends StatefulWidget {
 }
 
 class _StorageStatusPageState extends State<StorageStatusPage> {
-  final _settings = SettingsRepository();
-  late final _client = AuthenticatedServerClient(settingsRepository: _settings);
+  final _client = AuthenticatedServerClient();
   final _loading = true.obs;
   final _forbidden = false.obs;
   final _errorMessage = RxnString();
@@ -34,12 +34,16 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// [refresh] makes the server rescan instead of reusing its cached directory
+  /// sizes — what the user expects after tapping refresh, but wasteful on the
+  /// initial load.
+  Future<void> _load({bool refresh = false}) async {
     _loading.value = true;
     _errorMessage.value = null;
     try {
       final response = await _client.dio.get<Map<String, dynamic>>(
         storageApiPath,
+        queryParameters: refresh ? const {'refresh': true} : null,
       );
       if (!mounted || response.data == null) return;
       setState(() => _status = StorageStatus.fromJson(response.data!));
@@ -93,7 +97,7 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
             iconSize: 20,
             icon: const Icon(Icons.refresh_rounded),
             label: '刷新',
-            onTap: _load,
+            onTap: () => unawaited(_load(refresh: true)),
           ),
         ],
         centerTitle: false,

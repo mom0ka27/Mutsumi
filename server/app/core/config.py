@@ -7,7 +7,11 @@ from typing import Any
 
 import yaml
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config.yaml"
+
+# Overridable so tests (and alternative deployments) can point at their own
+# file instead of writing to the checkout.
+CONFIG_PATH = Path(os.environ.get("MUTSUMI_CONFIG_PATH") or DEFAULT_CONFIG_PATH)
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "server": {
@@ -28,6 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "storage": {
         "data_path": "./data",
+        "status_cache_seconds": 60,
     },
     "database_url": "sqlite+aiosqlite:///./data/mutsumi.db",
     "updates": {

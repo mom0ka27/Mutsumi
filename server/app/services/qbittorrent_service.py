@@ -1,4 +1,5 @@
 import asyncio
+from http import HTTPStatus
 
 import httpx
 
@@ -27,7 +28,9 @@ async def _client() -> httpx.AsyncClient:
     qbittorrent_config = config["qbittorrent"]
     url = (qbittorrent_config.get("url") or "").rstrip("/")
     if not url:
-        raise QBittorrentError(21001, "qBittorrent 尚未配置")
+        raise QBittorrentError(
+            21001, "qBittorrent 尚未配置", HTTPStatus.SERVICE_UNAVAILABLE
+        )
     async with _cookie_lock:
         cookies = httpx.Cookies(_cookies)
     client = httpx.AsyncClient(base_url=url, timeout=10, cookies=cookies)

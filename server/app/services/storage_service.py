@@ -1,5 +1,9 @@
+import asyncio
+import hashlib
 import os
 import shutil
+import threading
+import time
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -9,9 +13,95 @@ from app.schemas import AnimeStorageRead, QBittorrentFileRead, StorageStatusRead
 
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
 
+DEFAULT_STATUS_CACHE_SECONDS = 60
+
+
+class _DirectorySizeCache:
+    """TTL cache for directory walks.
+
+    Scanning the whole data directory costs one ``stat`` per file, so a storage
+    page refresh used to re-walk everything. Entries are keyed by resolved path
+    and shared between the root scan and the per-anime scans.
+    """
+
+    def __init__(self) -> None:
+        self._entries: dict[str, tuple[float, tuple[int, int]]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, path: Path, ttl: float) -> tuple[int, int] | None:
+        if ttl <= 0:
+            return None
+        with self._lock:
+            entry = self._entries.get(str(path))
+        if entry is None:
+            return None
+        stored_at, value = entry
+        if time.monotonic() - stored_at > ttl:
+            return None
+        return value
+
+    def set(self, path: Path, value: tuple[int, int]) -> None:
+        with self._lock:
+            self._entries[str(path)] = (time.monotonic(), value)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
 
 class StorageService:
-    def status(self, anime: list[tuple[int, str, str, str]]) -> StorageStatusRead:
+    def __init__(self) -> None:
+        self._cache = _DirectorySizeCache()
+        self._status_lock = asyncio.Lock()
+
+    async def status(
+        self,
+        anime: list[tuple[int, str, str, str]],
+        refresh: bool = False,
+    ) -> StorageStatusRead:
+        # Serialised so concurrent requests share one walk instead of racing
+        # through the whole data directory in parallel.
+        async with self._status_lock:
+            if refresh:
+                self._cache.clear()
+            return await asyncio.to_thread(self._status, anime)
+
+    async def create_local_folder(self, bangumi_id: int) -> str:
+        folder_id = hashlib.md5(str(bangumi_id).encode()).hexdigest()
+        folder_path = self._resource_dir(folder_id)
+        await asyncio.to_thread(folder_path.mkdir, parents=True, exist_ok=True)
+        return folder_id
+
+    async def list_local_files(self, folder_id: str) -> list[QBittorrentFileRead]:
+        folder_path = self._resource_dir(folder_id)
+        return await asyncio.to_thread(self._list_local_files, folder_path)
+
+    async def delete_local_folder(self, folder_id: str) -> None:
+        folder_path = self._resource_dir(folder_id)
+        await asyncio.to_thread(self._delete_local_folder, folder_path)
+        self._cache.clear()
+
+    async def list_sibling_files(self, path: Path) -> list[Path]:
+        """Files next to ``path``, sorted by name."""
+        return await asyncio.to_thread(self._list_sibling_files, path)
+
+    async def is_file(self, path: Path | None) -> bool:
+        if path is None:
+            return False
+        return await asyncio.to_thread(path.is_file)
+
+    def episode_file_path(
+        self,
+        download_hash: str | None,
+        filename: str | None,
+    ) -> Path | None:
+        if not download_hash or not filename:
+            return None
+        root = self._resource_dir(download_hash)
+        path = (root / filename).resolve()
+        return path if root in path.parents else None
+
+    def _status(self, anime: list[tuple[int, str, str, str]]) -> StorageStatusRead:
         data_path = self._root(create=True)
         stat = os.statvfs(data_path)
         total = stat.f_blocks * stat.f_frsize
@@ -33,15 +123,7 @@ class StorageService:
             anime=anime_storage,
         )
 
-    def create_local_folder(self, bangumi_id: int) -> str:
-        import hashlib
-
-        folder_id = hashlib.md5(str(bangumi_id).encode()).hexdigest()
-        self._resource_dir(folder_id).mkdir(parents=True, exist_ok=True)
-        return folder_id
-
-    def list_local_files(self, folder_id: str) -> list[QBittorrentFileRead]:
-        folder_path = self._resource_dir(folder_id)
+    def _list_local_files(self, folder_path: Path) -> list[QBittorrentFileRead]:
         if not folder_path.is_dir():
             raise HTTPException(status_code=404, detail="Folder not found")
         return [
@@ -53,17 +135,15 @@ class StorageService:
             if entry.is_file() and entry.suffix.lower() in VIDEO_EXTENSIONS
         ]
 
-    def episode_file_path(self, download_hash: str | None, filename: str | None) -> Path | None:
-        if not download_hash or not filename:
-            return None
-        root = self._resource_dir(download_hash)
-        path = (root / filename).resolve()
-        return path if root == path or root in path.parents else None
-
-    def delete_local_folder(self, folder_id: str) -> None:
-        folder_path = self._resource_dir(folder_id)
+    def _delete_local_folder(self, folder_path: Path) -> None:
         if folder_path.is_dir():
             shutil.rmtree(folder_path)
+
+    def _list_sibling_files(self, path: Path) -> list[Path]:
+        parent = path.parent
+        if not parent.is_dir():
+            return []
+        return [entry for entry in sorted(parent.iterdir()) if entry.is_file()]
 
     def _root(self, create: bool = False) -> Path:
         data_path = str(config["storage"].get("data_path") or "").strip()
@@ -77,7 +157,7 @@ class StorageService:
     def _resource_dir(self, resource_id: str) -> Path:
         root = self._root()
         path = (root / resource_id).resolve()
-        if root not in path.parents:
+        if path == root or root not in path.parents:
             raise HTTPException(status_code=400, detail="Invalid folder id")
         return path
 
@@ -98,6 +178,11 @@ class StorageService:
         )
 
     def _directory_size(self, path: Path) -> tuple[int, int]:
+        ttl = self._cache_ttl()
+        cached = self._cache.get(path, ttl)
+        if cached is not None:
+            return cached
+
         size_bytes = 0
         file_count = 0
         for root, directories, files in os.walk(path, followlinks=False):
@@ -111,7 +196,21 @@ class StorageService:
                     file_count += 1
                 except OSError:
                     continue
-        return size_bytes, file_count
+
+        result = (size_bytes, file_count)
+        if ttl > 0:
+            self._cache.set(path, result)
+        return result
+
+    def _cache_ttl(self) -> float:
+        try:
+            return float(
+                config["storage"].get(
+                    "status_cache_seconds", DEFAULT_STATUS_CACHE_SECONDS
+                )
+            )
+        except (TypeError, ValueError):
+            return DEFAULT_STATUS_CACHE_SECONDS
 
 
 storage_service = StorageService()

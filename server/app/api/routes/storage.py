@@ -1,5 +1,4 @@
-import asyncio
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +15,12 @@ router = APIRouter(
 
 
 @router.get("", response_model=StorageStatusRead)
-async def get_storage_status(session: AsyncSession = Depends(get_session)):
+async def get_storage_status(
+    session: AsyncSession = Depends(get_session),
+    refresh: bool = Query(
+        default=False,
+        description="Bypass the directory size cache and rescan.",
+    ),
+):
     anime = (await session.execute(select(Anime.id, Anime.name, Anime.name_cn, Anime.download_hash).order_by(Anime.name_cn, Anime.name))).all()
-    return await asyncio.to_thread(storage_service.status, anime)
+    return await storage_service.status(anime, refresh=refresh)

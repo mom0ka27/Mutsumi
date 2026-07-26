@@ -3,7 +3,13 @@ import 'package:hive_ce/hive.dart';
 import '../../../core/storage/local_storage.dart';
 
 class SettingsRepository {
-  SettingsRepository() : _box = Hive.box(LocalStorage.settingsBoxName);
+  /// Stateless over a Hive box, so every call site shares one instance rather
+  /// than allocating a repository per widget or service.
+  factory SettingsRepository() => _shared;
+
+  SettingsRepository._();
+
+  static final SettingsRepository _shared = SettingsRepository._();
 
   static const _storageKey = 'settings_v2';
   static const _serverUrlKey = 'server_url';
@@ -13,7 +19,10 @@ class SettingsRepository {
   static const _serverNamesKey = 'server_names';
   static const _serverCredentialsKey = 'server_credentials';
   static const _serverTokensKey = 'server_tokens';
-  final Box _box;
+
+  // Looked up per access so the repository can be constructed before (or
+  // across) `LocalStorage.init()`, which matters for tests.
+  Box get _box => Hive.box(LocalStorage.settingsBoxName);
 
   static Future<void> migrate() async {
     final repository = SettingsRepository();

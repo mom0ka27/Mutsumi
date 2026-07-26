@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -58,17 +60,19 @@ Future<void> showLocalAddDialog(
 
             AppDialog.dismiss(context, true);
 
-            Get.to(
-              () => AnimeGardenEpisodeMatchPage(
-                subject: subject,
-                files: files,
-                bangumiEpisodes: bangumiEpisodes,
-                animeListStore: Get.find<AnimeListStore>(),
-                pageTitle: '匹配 Episode',
-                onSave: (episodes) => coordinator.submitLocalAdd(
+            unawaited(
+              Get.to(
+                () => AnimeGardenEpisodeMatchPage(
                   subject: subject,
-                  folderId: id,
-                  episodes: episodes,
+                  files: files,
+                  bangumiEpisodes: bangumiEpisodes,
+                  animeListStore: Get.find<AnimeListStore>(),
+                  pageTitle: '匹配 Episode',
+                  onSave: (episodes) => coordinator.submitLocalAdd(
+                    subject: subject,
+                    folderId: id,
+                    episodes: episodes,
+                  ),
                 ),
               ),
             );

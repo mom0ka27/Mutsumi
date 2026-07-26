@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -90,7 +92,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
       try {
         await _repository.removeServer(url);
         if (_repository.getCurrentAccount() == null) {
-          Get.offAllNamed(StartupPage.routeName);
+          unawaited(Get.offAllNamed(StartupPage.routeName));
         } else {
           _revision.value++;
           await showInfoDialog(title: '删除成功', message: '服务器已删除');
@@ -134,7 +136,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
     try {
       await _repository.removeAccount(account.serverUrl, account.username);
       if (_repository.getCurrentAccount() == null) {
-        Get.offAllNamed(StartupPage.routeName);
+        unawaited(Get.offAllNamed(StartupPage.routeName));
       } else {
         _revision.value++;
         await showInfoDialog(title: '删除成功', message: '账户已删除');
@@ -247,7 +249,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
                             account.serverUrl,
                             account.username,
                           );
-                          Get.offAllNamed(StartupPage.routeName);
+                          unawaited(Get.offAllNamed(StartupPage.routeName));
                         } catch (error) {
                           await showErrorDialog(
                             title: '切换账户失败',

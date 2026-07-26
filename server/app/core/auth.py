@@ -1,10 +1,10 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +22,10 @@ optional_oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/v1/auth/login",
     auto_error=False,
 )
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# bcrypt only hashes the first 72 bytes and newer releases raise instead of
+# truncating, so truncate here to stay compatible with hashes written earlier.
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 async def get_session():
@@ -30,12 +33,31 @@ async def get_session():
         yield session
 
 
+def _encode_password(password: str) -> bytes:
+    return password.encode("utf-8")[:BCRYPT_MAX_PASSWORD_BYTES]
+
+
+def _verify_password_sync(plain_password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(
+            _encode_password(plain_password),
+            password_hash.encode("utf-8"),
+        )
+    except ValueError:
+        # Malformed or unsupported hash in the database.
+        return False
+
+
+def _hash_password_sync(password: str) -> str:
+    return bcrypt.hashpw(_encode_password(password), bcrypt.gensalt()).decode("utf-8")
+
+
 async def verify_password(plain_password: str, password_hash: str) -> bool:
-    return await asyncio.to_thread(pwd_context.verify, plain_password, password_hash)
+    return await asyncio.to_thread(_verify_password_sync, plain_password, password_hash)
 
 
 async def get_password_hash(password: str) -> str:
-    return await asyncio.to_thread(pwd_context.hash, password)
+    return await asyncio.to_thread(_hash_password_sync, password)
 
 
 def create_access_token(subject: str, token_version: int = 0) -> str:

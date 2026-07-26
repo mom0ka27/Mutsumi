@@ -7,11 +7,14 @@ from sqlalchemy import text
 
 from app.api.router import api_router
 from app.core.constants import API_VERSION, SERVER_VERSION
+from app.core.logging import setup_logging
 from app.core.qbittorrent_error import QBittorrentError
 from app.db.session import engine, init_db
 from app.models import User
 
 logger = logging.getLogger(__name__)
+
+setup_logging()
 
 
 @asynccontextmanager
@@ -28,13 +31,17 @@ app.include_router(api_router)
 @app.exception_handler(QBittorrentError)
 async def qbittorrent_error_handler(request: Request, exc: QBittorrentError):
     logger.warning(
-        "qBittorrent business error: %s %s code=%s msg=%s",
+        "qBittorrent business error: %s %s status=%s code=%s msg=%s",
         request.method,
         request.url.path,
+        exc.status_code,
         exc.code,
         exc.msg,
     )
-    return JSONResponse(status_code=200, content={"code": exc.code, "msg": exc.msg})
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.msg, "code": exc.code},
+    )
 
 
 @app.exception_handler(HTTPException)

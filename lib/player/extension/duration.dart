@@ -1,10 +1,13 @@
 extension DurationExtension on Duration {
   String get str {
-    // assert(inHours == 0);
-    if (inHours == 0) {
-      return toString().substring(2, 7);
-    } else {
-      return toString().substring(0, 7);
-    }
+    final totalSeconds = inSeconds.clamp(0, 8640000);
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    final minuteText = minutes.toString().padLeft(2, '0');
+    final secondText = seconds.toString().padLeft(2, '0');
+    return hours > 0
+        ? '${hours.toString().padLeft(2, '0')}:$minuteText:$secondText'
+        : '$minuteText:$secondText';
   }
 }
