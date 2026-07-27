@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../app/startup_page.dart';
 import '../../../core/widgets/app_glass_background.dart';
@@ -188,7 +189,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
         _revision.value;
         final servers = _repository.getServerUrls();
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, Constants.topPadding, 16, 16),
+          padding: context.pageContentPadding(horizontal: 16, bottom: 16),
           itemCount: servers.length,
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
@@ -198,12 +199,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
         return RefreshIndicator(
           onRefresh: _load,
           child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(
-              16,
-              Constants.topPadding,
-              16,
-              16,
-            ),
+            padding: context.pageContentPadding(horizontal: 16, bottom: 16),
             itemCount: _users.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {

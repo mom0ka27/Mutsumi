@@ -16,8 +16,18 @@ import 'package:ns_danmaku/ns_danmaku.dart';
 class IndexPlayer extends StatefulWidget {
   final IndexPlayerController controller;
   final bool useOverlay;
+  final VoidCallback? onNextEpisode;
+  final VoidCallback? onToggleEpisodes;
+  final bool fullscreenLocked;
 
-  const IndexPlayer(this.controller, {super.key, this.useOverlay = false});
+  const IndexPlayer(
+    this.controller, {
+    super.key,
+    this.useOverlay = false,
+    this.onNextEpisode,
+    this.onToggleEpisodes,
+    this.fullscreenLocked = false,
+  });
 
   @override
   State<IndexPlayer> createState() => _IndexPlayerState();
@@ -47,105 +57,132 @@ class _IndexPlayerState extends State<IndexPlayer> {
   @override
   Widget build(BuildContext context) {
     return Obx(
-      () => SizedBox(
-        height: widget.controller.isFullScreen.value
-            ? MediaQuery.of(context).size.height
-            : MediaQuery.of(context).size.width / 16 * 9,
-        child: Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            widget.useOverlay
-                ? ErikaWindowOverlayVideoView(
-                    key: widget.controller.videoKey,
-                    player: widget.controller.player,
-                  )
-                : ErikaVideoView(
-                    key: widget.controller.videoKey,
-                    player: widget.controller.player,
-                  ),
-            Opacity(
-              opacity: widget.controller.enableDanmaku.value ? 1 : 0,
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 25),
-                child: DanmakuView(
-                  createdController: (c) {
-                    _danmakuController = c;
-                    widget.controller.setDanmakuController(c);
-                  },
-                  option: DanmakuOption(strokeWidth: 0.8, duration: 6),
-                ),
-              ),
+      () => widget.controller.isFullScreen.value
+          ? SizedBox(
+              height: MediaQuery.of(context).size.height,
+              child: _buildContent(),
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final maxWidth = constraints.hasBoundedWidth
+                    ? constraints.maxWidth
+                    : MediaQuery.sizeOf(context).width;
+                final maxHeight = constraints.hasBoundedHeight
+                    ? constraints.maxHeight
+                    : double.infinity;
+                final width = maxHeight.isFinite
+                    ? maxWidth.clamp(0.0, maxHeight / 9 * 16).toDouble()
+                    : maxWidth;
+                final height = width / 16 * 9;
+                return SizedBox(
+                  width: width,
+                  height: height,
+                  child: _buildContent(),
+                );
+              },
             ),
-            Listener(
-              onPointerDown: (_) => _interaction.scheduleSuperSpeed(),
-              onPointerUp: (_) => _interaction.cancelSuperSpeed(),
-              onPointerCancel: (_) => _interaction.cancelSuperSpeed(),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _interaction.toggleControls,
-                onDoubleTap: widget.controller.togglePlayback,
-                onHorizontalDragStart: (ignore) {
-                  _interaction.cancelSuperSpeed();
-                  widget.controller.beginSeeking();
-                },
-                onHorizontalDragUpdate: (details) {
-                  final int curSliderPosition =
-                      widget.controller.sliderPostion.value.inMilliseconds;
-                  final double scale = 90000 / MediaQuery.sizeOf(context).width;
-                  final Duration pos = Duration(
-                    milliseconds:
-                        curSliderPosition + (details.delta.dx * scale).round(),
-                  );
+    );
+  }
 
-                  widget.controller.updateSeekingPosition(pos);
-                },
-                onHorizontalDragEnd: (DragEndDetails details) {
-                  widget.controller.endSeeking();
-                },
+  Widget _buildContent() {
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        widget.useOverlay
+            ? ErikaWindowOverlayVideoView(
+                key: widget.controller.videoKey,
+                player: widget.controller.player,
+              )
+            : ErikaVideoView(
+                key: widget.controller.videoKey,
+                player: widget.controller.player,
               ),
+        Opacity(
+          opacity: widget.controller.enableDanmaku.value ? 1 : 0,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 25),
+            child: DanmakuView(
+              createdController: (c) {
+                _danmakuController = c;
+                widget.controller.setDanmakuController(c);
+              },
+              option: DanmakuOption(strokeWidth: 0.8, duration: 6),
             ),
-            _PlayerControlsOverlay(
-              alignment: Alignment.bottomCenter,
-              controller: widget.controller,
-              visible: _interaction.showControls,
-              child: BottomBar(controller: widget.controller),
-            ),
-            _PlayerControlsOverlay(
-              alignment: Alignment.topCenter,
-              controller: widget.controller,
-              visible: _interaction.showControls,
-              child: TopBar(controller: widget.controller),
-            ),
-            _PlayerStatusOverlay(
-              alignment: Alignment(0, -0.8),
-              visible: _interaction.superSpeed,
-              childBuilder: () => const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.fast_forward_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  SizedBox(width: 6),
-                  Text('2.0× 倍速播放', style: TextStyle(color: Colors.white)),
-                ],
-              ),
-            ),
-            _PlayerStatusOverlay(
-              alignment: Alignment(0, -0.8),
-              visible: widget.controller.wantSeeking,
-              childBuilder: () => Text(
-                '${widget.controller.state.position.str}  →  ${widget.controller.sliderPostion.value.str}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        Listener(
+          onPointerDown: (_) => _interaction.scheduleSuperSpeed(),
+          onPointerUp: (_) => _interaction.cancelSuperSpeed(),
+          onPointerCancel: (_) => _interaction.cancelSuperSpeed(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _interaction.toggleControls,
+            onDoubleTap: widget.controller.togglePlayback,
+            onHorizontalDragStart: (ignore) {
+              _interaction.cancelSuperSpeed();
+              widget.controller.beginSeeking();
+            },
+            onHorizontalDragUpdate: (details) {
+              final int curSliderPosition =
+                  widget.controller.sliderPostion.value.inMilliseconds;
+              final double scale = 90000 / MediaQuery.sizeOf(context).width;
+              final Duration pos = Duration(
+                milliseconds:
+                    curSliderPosition + (details.delta.dx * scale).round(),
+              );
+
+              widget.controller.updateSeekingPosition(pos);
+            },
+            onHorizontalDragEnd: (DragEndDetails details) {
+              widget.controller.endSeeking();
+            },
+          ),
+        ),
+        _PlayerControlsOverlay(
+          alignment: Alignment.bottomCenter,
+          controller: widget.controller,
+          visible: _interaction.showControls,
+          child: BottomBar(
+            controller: widget.controller,
+            onNextEpisode: widget.onNextEpisode,
+            onToggleEpisodes: widget.onToggleEpisodes,
+            fullscreenLocked: widget.fullscreenLocked,
+          ),
+        ),
+        _PlayerControlsOverlay(
+          alignment: Alignment.topCenter,
+          controller: widget.controller,
+          visible: _interaction.showControls,
+          child: TopBar(
+            controller: widget.controller,
+            onToggleEpisodes: widget.onToggleEpisodes,
+            fullscreenLocked: widget.fullscreenLocked,
+          ),
+        ),
+        _PlayerStatusOverlay(
+          alignment: Alignment(0, -0.8),
+          visible: _interaction.superSpeed,
+          childBuilder: () => const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.fast_forward_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 6),
+              Text('2.0× 倍速播放', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+        _PlayerStatusOverlay(
+          alignment: Alignment(0, -0.8),
+          visible: widget.controller.wantSeeking,
+          childBuilder: () => Text(
+            '${widget.controller.state.position.str}  →  ${widget.controller.sliderPostion.value.str}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

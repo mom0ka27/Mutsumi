@@ -7,6 +7,7 @@ import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../../core/extensions/build_context.dart';
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
 import '../../auth/presentation/current_user_controller.dart';
@@ -170,12 +171,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
       final colors = Theme.of(context).colorScheme;
       final glassSettings = AppGlassSettings.standard(context);
       return ListView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          Constants.homeTopPadding,
-          20,
-          Constants.bottomPadding,
-        ),
+        padding: context.homeContentPadding(),
         children: [
           GlassCard(
             useOwnLayer: true,

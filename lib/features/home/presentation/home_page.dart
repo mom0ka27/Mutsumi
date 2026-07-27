@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../anime/data/anime_list_store.dart';
@@ -60,44 +61,50 @@ class _HomePageState extends State<HomePage> {
 
     return Obx(() {
       final selectedIndex = _selectedIndex.value;
-      final useSidebar = MediaQuery.sizeOf(context).width >= 600;
+      final useSidebar = context.useSidebarNavigation;
 
       return GlassScaffold(
         extendBody: true,
         resizeToAvoidBottomInset: false,
-        body: Row(
-          children: [
-            if (useSidebar)
-              _HomeSidebar(
-                selectedIndex: selectedIndex,
-                onSelected: _onTabSelected,
-                expanded: MediaQuery.sizeOf(context).width >= 900,
+        // 横屏时刘海占据的是左右安全区。在这里一次性消化掉，各标签页的
+        // homeContentPadding 就只需要关心自己的基础留白。
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: Row(
+            children: [
+              if (useSidebar)
+                _HomeSidebar(
+                  selectedIndex: selectedIndex,
+                  onSelected: _onTabSelected,
+                  expanded: context.useExpandedSidebar,
+                ),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: _onPageChanged,
+                  children: [
+                    HeroMode(
+                      enabled: selectedIndex == 0,
+                      child: AnimeHomeView(store: _animeListStore),
+                    ),
+                    HeroMode(
+                      enabled: selectedIndex == 1,
+                      child: BangumiSearchView(store: _animeListStore),
+                    ),
+                    HeroMode(
+                      enabled: selectedIndex == 2,
+                      child: DownloadProgressView(isActive: selectedIndex == 2),
+                    ),
+                    HeroMode(
+                      enabled: selectedIndex == 3,
+                      child: const SettingsHomeView(),
+                    ),
+                  ],
+                ),
               ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: _onPageChanged,
-                children: [
-                  HeroMode(
-                    enabled: selectedIndex == 0,
-                    child: AnimeHomeView(store: _animeListStore),
-                  ),
-                  HeroMode(
-                    enabled: selectedIndex == 1,
-                    child: BangumiSearchView(store: _animeListStore),
-                  ),
-                  HeroMode(
-                    enabled: selectedIndex == 2,
-                    child: DownloadProgressView(isActive: selectedIndex == 2),
-                  ),
-                  HeroMode(
-                    enabled: selectedIndex == 3,
-                    child: const SettingsHomeView(),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         statusBarStyle: GlassStatusBarStyle.auto,
         background: const AppGlassBackground(),
@@ -113,7 +120,9 @@ class _HomePageState extends State<HomePage> {
                   GlassTab(icon: Icon(Icons.settings_rounded), label: '设置'),
                 ],
                 settings: LiquidGlassSettings.figma(
-                  glassColor: Colors.white.withAlpha(100),
+                  glassColor: colorScheme.brightness == Brightness.dark
+                      ? Colors.black.withAlpha(100)
+                      : Colors.white.withAlpha(100),
                   refraction: 80,
                   depth: 24,
                   dispersion: 8,
@@ -141,13 +150,22 @@ class _HomeSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final safeArea = MediaQuery.paddingOf(context);
+    // 横屏时状态栏安全区为 0，标题图标也就没必要留出竖屏那么高的空隙。
+    final compact = context.isCompactHeight;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        safeArea.top + 8,
+        12,
+        safeArea.bottom + 16,
+      ),
       child: GlassCard(
+        useOwnLayer: true,
         width: expanded ? 224 : 76,
         padding: EdgeInsets.symmetric(
           horizontal: expanded ? 12 : 8,
-          vertical: 16,
+          vertical: compact ? 12 : 16,
         ),
         settings: AppGlassSettings.standard(context),
         child: Column(
@@ -157,7 +175,7 @@ class _HomeSidebar extends StatelessWidget {
               size: 28,
               color: colorScheme.primary,
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: compact ? 12 : 24),
             Expanded(
               child: ListView.separated(
                 itemCount: _HomePageState._titles.length,

@@ -5,6 +5,7 @@ import 'package:mutsumi/constants.dart';
 
 import '../../../core/widgets/media_summary_card.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../../core/extensions/build_context.dart';
 import '../../anime/data/anime_list_store.dart';
 import '../../anime/data/anime_service.dart';
 import '../../anime/presentation/anime_detail_page.dart';
@@ -33,17 +34,19 @@ class _BangumiSearchViewState extends State<BangumiSearchView>
       BangumiSearchController(animeListStore: widget.store),
     );
 
+    final padding = context.homeContentPadding();
+
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(20, Constants.homeTopPadding, 20, 16),
+          padding: padding.copyWith(bottom: 16),
           sliver: SliverToBoxAdapter(
             child: _SearchHeader(controller: controller),
           ),
         ),
         Obx(() {
           return SliverPadding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, Constants.bottomPadding),
+            padding: padding.copyWith(top: 0),
             sliver: SliverList.separated(
               itemBuilder: (context, index) {
                 final subject = controller.results[index];

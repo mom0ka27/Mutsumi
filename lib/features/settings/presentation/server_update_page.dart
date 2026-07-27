@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/network/app_network_error.dart';
@@ -252,7 +252,7 @@ class _ServerUpdatePageState extends State<ServerUpdatePage> {
   Widget _buildBody(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
+        padding: context.pageContentPadding(),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: UpdateInfoCard(

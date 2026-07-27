@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
+import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_form_widgets.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
@@ -48,7 +49,7 @@ class ConnectServerPage extends StatelessWidget {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 24),
+          padding: context.pageContentPadding(horizontal: 24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: GlassCard(
