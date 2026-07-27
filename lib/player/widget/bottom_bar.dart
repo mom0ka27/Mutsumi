@@ -10,14 +10,14 @@ class BottomBar extends StatelessWidget {
   final IndexPlayerController controller;
   final VoidCallback? onNextEpisode;
   final VoidCallback? onToggleEpisodes;
-  final bool fullscreenLocked;
+  final bool allowFullscreenToggle;
 
   const BottomBar({
     super.key,
     required this.controller,
     this.onNextEpisode,
     this.onToggleEpisodes,
-    this.fullscreenLocked = false,
+    this.allowFullscreenToggle = false,
   });
 
   @override
@@ -213,7 +213,7 @@ class BottomBar extends StatelessWidget {
                   ),
                 );
               }),
-              if (!fullscreenLocked)
+              if (allowFullscreenToggle)
                 IconButton(
                   icon: Obx(
                     () => Icon(

@@ -3,10 +3,12 @@ import 'dart:ui';
 import 'package:mutsumi/constants.dart';
 
 import 'extension/duration.dart';
+import 'model/episode_menu.dart';
 import 'widget/top_bar.dart';
 import 'controller.dart';
 import 'player_interaction_state.dart';
 import 'widget/bottom_bar.dart';
+import 'widget/episode_panel.dart';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -16,17 +18,17 @@ import 'package:ns_danmaku/ns_danmaku.dart';
 class IndexPlayer extends StatefulWidget {
   final IndexPlayerController controller;
   final bool useOverlay;
-  final VoidCallback? onNextEpisode;
-  final VoidCallback? onToggleEpisodes;
-  final bool fullscreenLocked;
+  final PlayerEpisodeMenu? episodeMenu;
+  final bool allowFullscreenToggle;
+  final bool closePageOnBack;
 
   const IndexPlayer(
     this.controller, {
     super.key,
     this.useOverlay = false,
-    this.onNextEpisode,
-    this.onToggleEpisodes,
-    this.fullscreenLocked = false,
+    this.episodeMenu,
+    this.allowFullscreenToggle = false,
+    this.closePageOnBack = false,
   });
 
   @override
@@ -35,23 +37,67 @@ class IndexPlayer extends StatefulWidget {
   static void init() {}
 }
 
-class _IndexPlayerState extends State<IndexPlayer> {
+class _IndexPlayerState extends State<IndexPlayer>
+    with SingleTickerProviderStateMixin {
   late final PlayerInteractionState _interaction;
+  late final AnimationController _episodePanelController;
+  late final Animation<Offset> _episodePanelOffset;
   DanmakuController? _danmakuController;
+  bool _episodePanelVisible = false;
 
   @override
   void initState() {
     super.initState();
     _interaction = PlayerInteractionState(widget.controller);
+    _episodePanelController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      reverseDuration: const Duration(milliseconds: 240),
+      animationBehavior: AnimationBehavior.preserve,
+    );
+    _episodePanelOffset =
+        Tween<Offset>(begin: const Offset(1.08, 0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _episodePanelController,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          ),
+        );
   }
 
   @override
   void dispose() {
     _interaction.dispose();
+    _episodePanelController.dispose();
     if (_danmakuController != null) {
       widget.controller.clearDanmakuController(_danmakuController!);
     }
     super.dispose();
+  }
+
+  void _toggleEpisodePanel() {
+    if (_episodePanelVisible) {
+      _closeEpisodePanel();
+      return;
+    }
+    setState(() => _episodePanelVisible = true);
+    _episodePanelController.forward(from: 0);
+  }
+
+  void _closeEpisodePanel() {
+    if (!_episodePanelVisible) {
+      return;
+    }
+    setState(() => _episodePanelVisible = false);
+    _episodePanelController.reverse();
+  }
+
+  Future<void> _selectEpisode(int index) async {
+    final menu = widget.episodeMenu;
+    if (menu == null || index == menu.selectedIndex) {
+      return;
+    }
+    await menu.onSelected(index);
   }
 
   @override
@@ -85,6 +131,7 @@ class _IndexPlayerState extends State<IndexPlayer> {
   }
 
   Widget _buildContent() {
+    final episodeMenu = widget.episodeMenu;
     return Stack(
       alignment: Alignment.topCenter,
       children: [
@@ -144,9 +191,13 @@ class _IndexPlayerState extends State<IndexPlayer> {
           visible: _interaction.showControls,
           child: BottomBar(
             controller: widget.controller,
-            onNextEpisode: widget.onNextEpisode,
-            onToggleEpisodes: widget.onToggleEpisodes,
-            fullscreenLocked: widget.fullscreenLocked,
+            onNextEpisode:
+                episodeMenu != null &&
+                    episodeMenu.selectedIndex < episodeMenu.items.length - 1
+                ? () => _selectEpisode(episodeMenu.selectedIndex + 1)
+                : null,
+            onToggleEpisodes: episodeMenu == null ? null : _toggleEpisodePanel,
+            allowFullscreenToggle: widget.allowFullscreenToggle,
           ),
         ),
         _PlayerControlsOverlay(
@@ -155,8 +206,7 @@ class _IndexPlayerState extends State<IndexPlayer> {
           visible: _interaction.showControls,
           child: TopBar(
             controller: widget.controller,
-            onToggleEpisodes: widget.onToggleEpisodes,
-            fullscreenLocked: widget.fullscreenLocked,
+            closePageOnBack: widget.closePageOnBack,
           ),
         ),
         _PlayerStatusOverlay(
@@ -182,6 +232,31 @@ class _IndexPlayerState extends State<IndexPlayer> {
             ),
           ),
         ),
+        if (episodeMenu != null && !_episodePanelVisible)
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 24,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: (details) {
+                if ((details.primaryVelocity ?? 0) < -200) {
+                  _toggleEpisodePanel();
+                }
+              },
+            ),
+          ),
+        if (episodeMenu != null)
+          PlayerEpisodePanel(
+            visible: _episodePanelVisible,
+            position: _episodePanelOffset,
+            menu: episodeMenu,
+            playingStream: widget.controller.playingStream,
+            initiallyPlaying: widget.controller.state.playing,
+            onSelected: (index) => _selectEpisode(index),
+            onClose: _closeEpisodePanel,
+          ),
       ],
     );
   }

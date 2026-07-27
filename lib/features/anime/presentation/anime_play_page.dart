@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,10 +6,13 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../../../core/logging/app_logger.dart';
+import '../../../core/platform/app_platform.dart';
 import '../../../core/widgets/app_glass_background.dart';
+import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../player/controller.dart';
+import '../../../player/model/episode_menu.dart';
 import '../../../player/model/video.dart';
 import '../../../player/model/danmaku.dart';
 import '../../../player/player.dart';
@@ -22,34 +24,18 @@ class AnimePlayPage extends StatefulWidget {
     required this.anime,
     required this.episodes,
     required this.initialEpisode,
-    this.windowPreparedExternally = false,
   });
 
   final AnimeRead anime;
   final List<AnimeEpisodeRead> episodes;
   final int initialEpisode;
-  final bool windowPreparedExternally;
-
-  static const _windowChannel = MethodChannel('mutsumi/window');
-
-  static Future<void> preparePlaybackWindow() async {
-    if (Platform.isMacOS) {
-      await _windowChannel.invokeMethod<void>('setPlaybackAspectRatio');
-    }
-  }
-
-  static Future<void> restorePlaybackWindow() async {
-    if (Platform.isMacOS) {
-      await _windowChannel.invokeMethod<void>('clearPlaybackAspectRatio');
-    }
-  }
 
   @override
   State<AnimePlayPage> createState() => _AnimePlayPageState();
 }
 
 class _AnimePlayPageState extends State<AnimePlayPage>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver {
   final _animeService = AnimeService();
   final controller = IndexPlayerController();
   final currentIndex = 0.obs;
@@ -58,10 +44,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   late final _WatchProgressSyncer _progressSyncer;
   bool _disposed = false;
   bool _showingError = false;
-  bool _fullscreenLocked = false;
-  bool _episodePanelVisible = false;
-  late final AnimationController _episodePanelController;
-  late final Animation<Offset> _episodePanelOffset;
+  bool _landscapeFullscreenRequested = false;
   // AnimeEpisodeRead? _activeEpisode;
   var _episodeLoadGeneration = 0;
 
@@ -70,26 +53,8 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   @override
   void initState() {
     super.initState();
-    _episodePanelController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-      reverseDuration: const Duration(milliseconds: 240),
-      animationBehavior: AnimationBehavior.preserve,
-    );
-    _episodePanelOffset =
-        Tween<Offset>(begin: const Offset(1.08, 0), end: Offset.zero).animate(
-          CurvedAnimation(
-            parent: _episodePanelController,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeInCubic,
-          ),
-        );
-    if (Platform.isMacOS) {
-      _fullscreenLocked = true;
+    if (AppPlatform.isMacOS) {
       unawaited(controller.enterFullscreen());
-      if (!widget.windowPreparedExternally) {
-        unawaited(AnimePlayPage.preparePlaybackWindow());
-      }
     }
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -124,9 +89,6 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   @override
   void dispose() {
     _disposed = true;
-    if (Platform.isMacOS && !widget.windowPreparedExternally) {
-      unawaited(AnimePlayPage.restorePlaybackWindow());
-    }
     _progressTimer?.cancel();
     _errorSubscription?.cancel();
     unawaited(_saveProgress());
@@ -135,7 +97,6 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     }
     controller.pause();
     controller.dispose();
-    _episodePanelController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -236,47 +197,35 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     _showingError = false;
   }
 
-  Future<void> _playNextEpisode() async {
-    final nextIndex = currentIndex.value + 1;
-    if (nextIndex >= widget.episodes.length) {
+  void _enterFullscreenForLandscape() {
+    if (_disposed || controller.isFullScreen.value) {
       return;
     }
-    await _saveProgress();
-    await _setCurrentEpisode(nextIndex);
+    unawaited(controller.enterFullscreen());
   }
 
-  void _lockFullscreenForLandscape() {
-    if (_disposed || _fullscreenLocked) {
-      return;
-    }
-    setState(() => _fullscreenLocked = true);
-    if (!controller.isFullScreen.value) {
-      unawaited(controller.enterFullscreen());
-    }
-  }
-
-  void _toggleEpisodePanel() {
-    if (_episodePanelVisible) {
-      _closeEpisodePanel();
-      return;
-    }
-    setState(() => _episodePanelVisible = true);
-    _episodePanelController.forward(from: 0);
-  }
-
-  void _closeEpisodePanel() {
-    if (_episodePanelVisible) {
-      setState(() => _episodePanelVisible = false);
-      _episodePanelController.reverse();
-    }
-  }
-
-  Future<void> _selectEpisodeFromPanel(int index) async {
+  Future<void> _selectEpisode(int index) async {
     if (index == currentIndex.value) {
       return;
     }
     await _saveProgress();
     await _setCurrentEpisode(index);
+  }
+
+  PlayerEpisodeMenu _playerEpisodeMenu() {
+    return PlayerEpisodeMenu(
+      title: widget.anime.displayName,
+      items: widget.episodes
+          .map(
+            (episode) => PlayerEpisodeItem(
+              number: episode.index,
+              title: episode.displayName,
+            ),
+          )
+          .toList(growable: false),
+      selectedIndex: currentIndex.value,
+      onSelected: _selectEpisode,
+    );
   }
 
   Future<void> _saveProgress() async {
@@ -308,20 +257,27 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       if (widget.episodes.isEmpty) {
         return const Center(child: Text('暂无剧集'));
       }
-      final mobile = Platform.isAndroid || Platform.isIOS;
-      final requiresLockedFullscreen = mobile && context.isLandscape;
-      if (requiresLockedFullscreen && !_fullscreenLocked) {
+      final mobile = AppPlatform.isMobile;
+      final landscape = context.isLandscape;
+      if (mobile && !landscape) {
+        _landscapeFullscreenRequested = false;
+      }
+      if (mobile && landscape && !_landscapeFullscreenRequested) {
+        _landscapeFullscreenRequested = true;
         WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _lockFullscreenForLandscape(),
+          (_) => _enterFullscreenForLandscape(),
         );
       }
       final fullScreen = controller.isFullScreen.value;
       if (fullScreen) {
         return PopScope(
-          canPop: !_episodePanelVisible,
+          canPop: !mobile,
           onPopInvokedWithResult: (didPop, _) {
-            if (!didPop && _episodePanelVisible) {
-              _closeEpisodePanel();
+            if (didPop) {
+              return;
+            }
+            if (mobile) {
+              unawaited(controller.exitFullscreen());
             }
           },
           child: Material(
@@ -332,30 +288,11 @@ class _AnimePlayPageState extends State<AnimePlayPage>
                   child: IndexPlayer(
                     controller,
                     useOverlay: true,
-                    fullscreenLocked: _fullscreenLocked,
-                    onToggleEpisodes: _toggleEpisodePanel,
-                    onNextEpisode:
-                        currentIndex.value < widget.episodes.length - 1
-                        ? () => unawaited(_playNextEpisode())
-                        : null,
+                    allowFullscreenToggle: mobile,
+                    closePageOnBack: !mobile,
+                    episodeMenu: _playerEpisodeMenu(),
                   ),
                 ),
-                if (!_episodePanelVisible)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    width: 24,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragEnd: (details) {
-                        if ((details.primaryVelocity ?? 0) < -200) {
-                          _toggleEpisodePanel();
-                        }
-                      },
-                    ),
-                  ),
-                _episodePanel(context),
               ],
             ),
           ),
@@ -364,171 +301,10 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       return GlassScaffold(
         enableBackgroundSampling: true,
         background: const AppGlassBackground(),
+        settings: AppGlassSettings.standard(context),
         body: _portraitBody(context),
       );
     });
-  }
-
-  Widget _episodePanel(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final safeArea = MediaQuery.viewPaddingOf(context);
-    final compact = size.height < 500;
-    final panelInset = Platform.isMacOS ? 16.0 : 10.0;
-    final availableWidth = size.width - safeArea.left - safeArea.right;
-    final width = (availableWidth * (Platform.isMacOS ? 0.4 : 0.42)).clamp(
-      300.0,
-      Platform.isMacOS ? 400.0 : 360.0,
-    );
-    return Positioned.fill(
-      child: IgnorePointer(
-        ignoring: !_episodePanelVisible,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: (_) => _closeEpisodePanel(),
-                child: AnimatedOpacity(
-                  opacity: _episodePanelVisible ? 1 : 0,
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                ),
-              ),
-            ),
-            Positioned(
-              top: panelInset,
-              right: panelInset,
-              bottom: panelInset,
-              width: width,
-              child: SlideTransition(
-                position: _episodePanelOffset,
-                child: SafeArea(
-                  left: false,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.82),
-                              Colors.black.withValues(alpha: 0.68),
-                            ],
-                          ),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.14),
-                          ),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            compact ? 16 : 20,
-                            compact ? 14 : 18,
-                            compact ? 16 : 20,
-                            compact ? 14 : 18,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.18),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Icon(
-                                      Icons.video_library_rounded,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '选集  ${currentIndex.value + 1} / ${widget.episodes.length}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          widget.anime.displayName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(color: Colors.white60),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: _toggleEpisodePanel,
-                                    icon: const Icon(
-                                      Icons.close_rounded,
-                                      color: Colors.white70,
-                                    ),
-                                    tooltip: '关闭',
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: compact ? 12 : 16),
-                              Divider(
-                                height: 1,
-                                color: Colors.white.withValues(alpha: 0.1),
-                              ),
-                              SizedBox(height: compact ? 10 : 14),
-                              Expanded(child: _episodePanelList()),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _episodePanelList() {
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: widget.episodes.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => Obx(
-        () => _EpisodeTile(
-          episode: widget.episodes[index],
-          selected: index == currentIndex.value,
-          onTap: index == currentIndex.value
-              ? null
-              : () => unawaited(_selectEpisodeFromPanel(index)),
-        ),
-      ),
-    );
   }
 
   /// 竖屏：画面在上、信息和选集在下，选集横向滚动。
@@ -542,7 +318,11 @@ class _AnimePlayPageState extends State<AnimePlayPage>
           color: Colors.black,
           child: SafeArea(
             bottom: false,
-            child: IndexPlayer(controller, useOverlay: false),
+            child: IndexPlayer(
+              controller,
+              useOverlay: false,
+              allowFullscreenToggle: AppPlatform.isMobile,
+            ),
           ),
         ),
         Padding(
@@ -552,7 +332,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
             children: [
               _episodeHeader(context),
               const SizedBox(height: 18),
-              _episodeSelector(vertical: false),
+              Obx(() => _portraitEpisodeSelector(context)),
             ],
           ),
         ),
@@ -586,51 +366,65 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     });
   }
 
-  Widget _episodeSelector({required bool vertical}) {
-    return Obx(() {
-      final selectedIndex = currentIndex.value;
-
-      Widget tileAt(int index, {double? width}) {
-        final selected = index == selectedIndex;
-        return _EpisodeTile(
-          episode: widget.episodes[index],
-          selected: selected,
-          width: width,
-          onTap: selected
-              ? null
-              : () async {
-                  await _saveProgress();
-                  unawaited(_setCurrentEpisode(index));
-                },
-        );
-      }
-
-      if (vertical) {
-        // 纵向时铺满右栏宽度。
-        return ListView.separated(
-          padding: EdgeInsets.zero,
-          itemCount: widget.episodes.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
-          itemBuilder: (context, index) => tileAt(index),
-        );
-      }
-
-      // 横向滚动条的高度取决于内容，用 Row 而不是 ListView 才能自适应高度。
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(
-            widget.episodes.length,
-            (index) => Padding(
-              padding: EdgeInsets.only(
-                right: index == widget.episodes.length - 1 ? 0 : 10,
-              ),
-              child: tileAt(index, width: 160),
+  Widget _portraitEpisodeSelector(BuildContext context) {
+    final selectedIndex = currentIndex.value;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(widget.episodes.length, (index) {
+          final episode = widget.episodes[index];
+          final selected = index == selectedIndex;
+          return Padding(
+            padding: EdgeInsets.only(
+              right: index == widget.episodes.length - 1 ? 0 : 10,
             ),
-          ),
-        ),
-      );
-    });
+            child: GlassCard(
+              width: 160,
+              padding: EdgeInsets.zero,
+              shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+              child: InkWell(
+                onTap: selected ? null : () => unawaited(_selectEpisode(index)),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 11,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '第 ${episode.index} 集',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                              fontWeight: selected ? FontWeight.w700 : null,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        episode.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontWeight: selected ? FontWeight.w700 : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
   }
 }
 
@@ -692,164 +486,5 @@ class _WatchProgressSyncer {
     } finally {
       _draining = null;
     }
-  }
-}
-
-class _EpisodeTile extends StatelessWidget {
-  const _EpisodeTile({
-    required this.episode,
-    required this.selected,
-    required this.onTap,
-    this.width,
-  });
-
-  final AnimeEpisodeRead episode;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  /// 为空表示铺满可用宽度。
-  final double? width;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final foreground = selected ? colorScheme.onPrimaryContainer : Colors.white;
-    return SizedBox(
-      width: width,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          hoverColor: Colors.white.withValues(alpha: 0.08),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              color: selected
-                  ? colorScheme.primaryContainer.withValues(alpha: 0.88)
-                  : Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected
-                    ? colorScheme.primary.withValues(alpha: 0.55)
-                    : Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-            child: Row(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: 3,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: selected ? colorScheme.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '第 ${episode.index} 集',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: selected ? foreground : Colors.white60,
-                              fontWeight: selected ? FontWeight.w700 : null,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        episode.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: foreground,
-                          fontWeight: selected ? FontWeight.w700 : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                selected
-                    ? _PlayingIndicator(color: colorScheme.primary)
-                    : const Icon(
-                        Icons.play_arrow_rounded,
-                        size: 20,
-                        color: Colors.white38,
-                      ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlayingIndicator extends StatefulWidget {
-  const _PlayingIndicator({required this.color});
-
-  final Color color;
-
-  @override
-  State<_PlayingIndicator> createState() => _PlayingIndicatorState();
-}
-
-class _PlayingIndicatorState extends State<_PlayingIndicator>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-      animationBehavior: AnimationBehavior.preserve,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 20,
-      height: 20,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final phase = _controller.value * 3;
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(3, (index) {
-              final value = (phase + index * 0.72) % 3;
-              final normalized = value <= 1.5 ? value / 1.5 : (3 - value) / 1.5;
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: Container(
-                  width: 3,
-                  height: 5 + normalized * 12,
-                  decoration: BoxDecoration(
-                    color: widget.color,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              );
-            }),
-          );
-        },
-      ),
-    );
   }
 }

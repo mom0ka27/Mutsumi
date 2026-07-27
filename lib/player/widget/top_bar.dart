@@ -6,14 +6,12 @@ import 'advanced_options_sheet.dart';
 
 class TopBar extends StatelessWidget {
   final IndexPlayerController controller;
-  final VoidCallback? onToggleEpisodes;
-  final bool fullscreenLocked;
+  final bool closePageOnBack;
 
   const TopBar({
     super.key,
     required this.controller,
-    this.onToggleEpisodes,
-    this.fullscreenLocked = false,
+    this.closePageOnBack = false,
   });
 
   @override
@@ -40,7 +38,7 @@ class TopBar extends StatelessWidget {
         children: [
           IconButton(
             onPressed: () async {
-              if (fullscreenLocked) {
+              if (closePageOnBack) {
                 Get.back();
               } else if (controller.isFullScreen.value) {
                 await controller.exitFullscreen();
@@ -65,15 +63,6 @@ class TopBar extends StatelessWidget {
               ),
             ),
           ),
-          if (onToggleEpisodes != null)
-            IconButton(
-              onPressed: onToggleEpisodes,
-              icon: const Icon(
-                Icons.video_library_rounded,
-                color: Colors.white,
-              ),
-              tooltip: '选集',
-            ),
           IconButton(
             onPressed: () {
               showModalBottomSheet(
