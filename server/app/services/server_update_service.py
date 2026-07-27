@@ -32,6 +32,15 @@ class UpdateCandidate:
 
 class ServerUpdateService:
     _repository_pattern = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+    _required_files = (
+        "app",
+        "migrations",
+        "alembic.ini",
+        "run.py",
+        "pyproject.toml",
+        "uv.lock",
+        ".python-version",
+    )
     _update_lock = asyncio.Lock()
     _build_info_path = Path(__file__).resolve().parents[2] / ".build-info"
     _status = UpdateStatus.RUNNING
@@ -220,7 +229,7 @@ class ServerUpdateService:
             with zipfile.ZipFile(archive) as zip_file:
                 self._extract_safely(zip_file, extracted)
             source = self._source_root(extracted)
-            required = ("app", "run.py", "pyproject.toml", "uv.lock", ".python-version")
+            required = self._required_files
             if any(not (source / name).exists() for name in required):
                 raise RuntimeError("更新包缺少必要服务端文件")
             backup = Path(temp_dir) / "backup"

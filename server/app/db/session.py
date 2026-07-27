@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = config["database_url"]
 
-ALEMBIC_INI_PATH = Path(__file__).resolve().parent.parent.parent / "alembic.ini"
+SERVER_ROOT = Path(__file__).resolve().parents[2]
+ALEMBIC_INI_PATH = SERVER_ROOT / "alembic.ini"
+MIGRATIONS_PATH = SERVER_ROOT / "migrations"
 INITIAL_REVISION = "0001_initial"
 
 engine_kwargs = {}
@@ -43,7 +45,13 @@ class Base(DeclarativeBase):
 
 
 def alembic_config() -> Config:
-    return Config(str(ALEMBIC_INI_PATH))
+    if not ALEMBIC_INI_PATH.is_file():
+        raise RuntimeError(f"Alembic config is missing: {ALEMBIC_INI_PATH}")
+    if not (MIGRATIONS_PATH / "env.py").is_file():
+        raise RuntimeError(f"Alembic migrations are missing: {MIGRATIONS_PATH}")
+    alembic_cfg = Config(str(ALEMBIC_INI_PATH))
+    alembic_cfg.set_main_option("script_location", str(MIGRATIONS_PATH))
+    return alembic_cfg
 
 
 def _upgrade_to_head(connection: Connection) -> None:

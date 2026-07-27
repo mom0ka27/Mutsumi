@@ -3,6 +3,7 @@ Alembic existed have to be adopted rather than re-created."""
 
 import sqlite3
 
+import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.db import session as session_module
@@ -89,4 +90,20 @@ async def test_migrating_twice_is_a_no_op(tmp_path):
 def test_alembic_config_points_at_the_migrations_directory():
     config = session_module.alembic_config()
     script_location = config.get_main_option("script_location")
-    assert script_location and script_location.endswith("migrations")
+    assert script_location == str(session_module.MIGRATIONS_PATH)
+
+
+def test_alembic_config_reports_a_missing_config(monkeypatch, tmp_path):
+    missing_config = tmp_path / "alembic.ini"
+    monkeypatch.setattr(session_module, "ALEMBIC_INI_PATH", missing_config)
+
+    with pytest.raises(RuntimeError, match="Alembic config is missing"):
+        session_module.alembic_config()
+
+
+def test_alembic_config_reports_missing_migrations(monkeypatch, tmp_path):
+    migrations = tmp_path / "migrations"
+    monkeypatch.setattr(session_module, "MIGRATIONS_PATH", migrations)
+
+    with pytest.raises(RuntimeError, match="Alembic migrations are missing"):
+        session_module.alembic_config()
