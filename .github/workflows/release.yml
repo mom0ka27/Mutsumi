@@ -25,11 +25,11 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/flutter
-          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
       - name: Download Flutter
         if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
-          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision))' "$FLUTTER_REVISION")"
           curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
           unzip -q flutter.zip
       - name: Add Flutter to PATH
@@ -79,7 +79,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/flutter
-          key: v1-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
       - name: Download Flutter
         if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
         run: |
@@ -122,6 +122,131 @@ jobs:
           path: build/ios/ipa/Runner.ipa
           if-no-files-found: error
 
+  build-macos-arm64:
+    runs-on: macos-latest
+    env:
+      FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+      ARTIFACT_NAME: Mutsumi-${{ github.ref_name }}
+      ASSET_NAME: mutsumi-${{ github.ref_name }}-macos-arm64.zip
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+      - name: Verify ARM64 runner
+        run: test "$(uname -m)" = "arm64"
+      - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
+        run: |
+          archive="$(curl --fail --silent --show-error https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json | python3 -c 'import json, sys; releases = json.load(sys.stdin); revision = sys.argv[1]; print(next(item["archive"] for item in releases["releases"] if item["hash"] == revision and "arm64" in item["archive"]))' "$FLUTTER_REVISION")"
+          curl --fail --silent --show-error --location "https://storage.googleapis.com/flutter_infra_release/releases/${archive}" --output flutter.zip
+          unzip -q flutter.zip
+      - name: Add Flutter to PATH
+        run: echo "$GITHUB_WORKSPACE/flutter/bin" >> "$GITHUB_PATH"
+      - name: Restore Pub cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.pub-cache
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
+      - name: Restore CocoaPods cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            macos/Pods
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-macos-pods-${{ hashFiles('pubspec.lock', 'macos/Podfile.lock') }}
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build macOS ARM64
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
+        run: flutter build macos --release --dart-define=DANDANPLAY_APP_ID="$DANDANPLAY_APP_ID" --dart-define=DANDANPLAY_APP_SECRET="$DANDANPLAY_APP_SECRET"
+      - name: Package macOS ARM64
+        run: |
+          set -euo pipefail
+          app="build/macos/Build/Products/Release/mutsumi.app"
+          test -d "$app"
+          test "$(lipo -archs "$app/Contents/MacOS/mutsumi")" = "arm64"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$ASSET_NAME"
+      - name: Upload macOS ARM64
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-macos-arm64
+          path: ${{ env.ASSET_NAME }}
+          if-no-files-found: error
+
+  build-windows-x64:
+    runs-on: windows-latest
+    env:
+      FLUTTER_REVISION: c9a6c484230f8b5e408ec57be1ef71dee1e77020
+      ARTIFACT_NAME: Mutsumi-${{ github.ref_name }}
+      ASSET_NAME: mutsumi-${{ github.ref_name }}-windows-x64.zip
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        shell: pwsh
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${env:GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin $env:GITHUB_SHA
+          git checkout --detach FETCH_HEAD
+      - name: Install Flutter
+        id: flutter-sdk-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/flutter
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-sdk-${{ env.FLUTTER_REVISION }}
+      - name: Download Flutter
+        if: steps.flutter-sdk-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $releases = Invoke-RestMethod https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json
+          $archive = ($releases.releases | Where-Object hash -eq $env:FLUTTER_REVISION | Select-Object -First 1).archive
+          if (-not $archive) { throw "Flutter revision not found: $env:FLUTTER_REVISION" }
+          Invoke-WebRequest "https://storage.googleapis.com/flutter_infra_release/releases/$archive" -OutFile flutter.zip
+          Expand-Archive flutter.zip -DestinationPath .
+      - name: Add Flutter to PATH
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE\flutter\bin"
+      - name: Restore Pub cache
+        uses: actions/cache@v6
+        with:
+          path: ~\AppData\Local\Pub\Cache
+          key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-pub-${{ hashFiles('pubspec.lock') }}
+      - name: Get dependencies
+        shell: pwsh
+        run: flutter pub get --enforce-lockfile
+      - name: Build Windows x64
+        shell: pwsh
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
+        run: flutter build windows --release --target-platform=windows-x64 --dart-define=DANDANPLAY_APP_ID="$env:DANDANPLAY_APP_ID" --dart-define=DANDANPLAY_APP_SECRET="$env:DANDANPLAY_APP_SECRET"
+      - name: Package Windows x64
+        shell: pwsh
+        run: |
+          $bundle = "build/windows/x64/runner/Release"
+          if (-not (Test-Path "$bundle/mutsumi.exe")) { throw "Windows Release bundle not found: $bundle" }
+          Compress-Archive -Path "$bundle/*" -DestinationPath $env:ASSET_NAME
+      - name: Upload Windows x64
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-windows-x64
+          path: ${{ env.ASSET_NAME }}
+          if-no-files-found: error
+
   package-server:
     runs-on: ubuntu-latest
     env:
@@ -152,7 +277,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build-android, build-ios, package-server]
+    needs: [build-android, build-ios, build-macos-arm64, build-windows-x64, package-server]
     runs-on: ubuntu-latest
     env:
       ARTIFACT_NAME: Mutsumi-${{ github.ref_name }}
@@ -171,6 +296,14 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-server
+      - name: Download macOS ARM64
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-macos-arm64
+      - name: Download Windows x64
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-windows-x64
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,6 +312,8 @@ jobs:
           apk_asset="mutsumi-${GITHUB_REF_NAME}.apk"
           ipa_asset="mutsumi-${GITHUB_REF_NAME}.ipa"
           server_asset="mutsumi-server-${GITHUB_REF_NAME}.zip"
+          macos_asset="mutsumi-${GITHUB_REF_NAME}-macos-arm64.zip"
+          windows_asset="mutsumi-${GITHUB_REF_NAME}-windows-x64.zip"
           mv app-arm64-v8a-release.apk "${apk_asset}"
           mv Runner.ipa "${ipa_asset}"
           gh release create "$GITHUB_REF_NAME" \
@@ -186,4 +321,6 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             "${apk_asset}" \
             "${ipa_asset}" \
+            "${macos_asset}" \
+            "${windows_asset}" \
             "${server_asset}"
