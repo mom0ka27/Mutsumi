@@ -49,6 +49,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
         }
 
         return GlassScaffold(
+          topEdgeFade: true,
+          bottomEdgeFade: false,
           background: MediaDetailBackground(
             imageUrl: anime.imageUrl,
             blurSigma: 24,

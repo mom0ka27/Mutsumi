@@ -55,6 +55,8 @@ class AppearanceSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Get.find<AppearanceController>();
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       extendBody: true,
       background: const AppGlassBackground(),

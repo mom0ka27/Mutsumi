@@ -214,6 +214,8 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         );
       }
       return GlassScaffold(
+        topEdgeFade: true,
+        bottomEdgeFade: false,
         enableBackgroundSampling: true,
         background: const AppGlassBackground(),
         body: Column(

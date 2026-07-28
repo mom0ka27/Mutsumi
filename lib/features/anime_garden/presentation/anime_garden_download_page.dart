@@ -26,6 +26,8 @@ class AnimeGardenDownloadPage extends StatelessWidget {
     final controller = Get.put(AnimeGardenDownloadController(subject: subject));
 
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       extendBody: true,
       background: const AppGlassBackground(),

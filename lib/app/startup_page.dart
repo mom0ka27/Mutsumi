@@ -93,6 +93,8 @@ class _StartupPageState extends State<StartupPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       background: const AppGlassBackground(),
       body: Center(

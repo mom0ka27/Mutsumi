@@ -27,6 +27,8 @@ class QBittorrentSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       extendBody: true,
       background: const AppGlassBackground(),

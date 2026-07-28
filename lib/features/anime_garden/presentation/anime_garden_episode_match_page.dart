@@ -45,6 +45,8 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
       ),
     );
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       extendBody: true,
       background: const AppGlassBackground(),

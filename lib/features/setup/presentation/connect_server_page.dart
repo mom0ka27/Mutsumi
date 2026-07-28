@@ -28,6 +28,8 @@ class ConnectServerPage extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       extendBody: true,
       background: const AppGlassBackground(),

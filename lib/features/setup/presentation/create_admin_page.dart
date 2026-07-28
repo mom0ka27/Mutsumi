@@ -109,6 +109,8 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       enableBackgroundSampling: true,
       background: const AppGlassBackground(),
       appBar: GlassAppBar(

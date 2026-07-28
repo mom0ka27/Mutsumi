@@ -57,12 +57,13 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
     return Obx(() {
       final selectedIndex = _selectedIndex.value;
       final useSidebar = MediaQuery.sizeOf(context).width >= 600;
 
       return GlassScaffold(
+        topEdgeFade: true,
+        bottomEdgeFade: false,
         extendBody: true,
         resizeToAvoidBottomInset: false,
         body: Row(

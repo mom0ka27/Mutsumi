@@ -62,6 +62,8 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
           _showDetailError(snapshot.error!);
         }
         return GlassScaffold(
+          topEdgeFade: true,
+          bottomEdgeFade: false,
           background: MediaDetailBackground(
             imageUrl: subject.imageUrl,
             blurSigma: 16,

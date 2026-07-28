@@ -99,6 +99,8 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return GlassScaffold(
+      topEdgeFade: true,
+      bottomEdgeFade: false,
       extendBody: true,
       enableBackgroundSampling: true,
       background: const AppGlassBackground(),
