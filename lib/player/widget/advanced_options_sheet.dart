@@ -16,9 +16,7 @@ class AdvancedOptionsSheet extends StatefulWidget {
 }
 
 class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
-  PlayerInfo? _playerInfo;
   DanmakuCacheInfo? _cacheInfo;
-  bool _loading = true;
   bool _isRefreshing = false;
 
   @override
@@ -28,14 +26,9 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
   }
 
   Future<void> _loadData() async {
-    final playerFuture = widget.controller.getPlayerInfo();
     final repo = Get.find<DandanPlayRepository>();
     final episodeId = widget.controller.danmakuEpisodeId.value;
     _cacheInfo = episodeId == null ? null : repo.getCacheInfo(episodeId);
-    _playerInfo = await playerFuture;
-    if (mounted) {
-      setState(() => _loading = false);
-    }
   }
 
   Future<void> _clearDanmakuCache() async {
@@ -51,13 +44,16 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
     final episodeId = widget.controller.danmakuEpisodeId.value;
     if (episodeId == null) return;
     setState(() => _isRefreshing = true);
-    await Get.find<DandanPlayRepository>().clearEpisodeCache(episodeId);
-    await widget.controller.refreshDanmaku();
-    if (mounted) {
-      setState(() {
-        _isRefreshing = false;
-        _cacheInfo = Get.find<DandanPlayRepository>().getCacheInfo(episodeId);
-      });
+    try {
+      await Get.find<DandanPlayRepository>().clearEpisodeCache(episodeId);
+      await widget.controller.refreshDanmaku();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+          _cacheInfo = Get.find<DandanPlayRepository>().getCacheInfo(episodeId);
+        });
+      }
     }
   }
 
@@ -75,6 +71,10 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
       fontWeight: FontWeight.w600,
     );
     final dandanPlayConfigured = Get.find<DandanPlayRepository>().isConfigured;
+    final provider = widget.controller.video.value?.danmakuProvider;
+    final fileHash = provider is DandanPlayDanmakuProvider
+        ? provider.fileHash
+        : null;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
@@ -107,78 +107,34 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
                   ),
                 ),
               ),
-              _sectionHeader('播放器信息', sectionStyle),
-              const SizedBox(height: 12),
-              if (_loading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else ...[
-                _infoRow(
-                  '视频编码',
-                  _playerInfo?.videoCodec ?? '-',
-                  labelStyle,
-                  valueStyle,
+              Obx(
+                () => SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('调试 HUD'),
+                  subtitle: const Text('在视频画面上显示 Erika 实时诊断信息'),
+                  value: widget.controller.debugHudEnabled.value,
+                  secondary: widget.controller.debugHudUpdating.value
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.monitor_heart_outlined),
+                  onChanged: widget.controller.debugHudUpdating.value
+                      ? null
+                      : (enabled) async {
+                          try {
+                            await widget.controller.setDebugHudEnabled(enabled);
+                          } catch (error) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('调试 HUD 切换失败：$error')),
+                              );
+                            }
+                          }
+                        },
                 ),
-                _infoRow(
-                  '分辨率',
-                  _playerInfo?.resolution ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '像素格式',
-                  _playerInfo?.pixelFormat ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '视频格式',
-                  _playerInfo?.videoFormat ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '帧率',
-                  _playerInfo?.frameRate ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '视频码率',
-                  _playerInfo?.videoBitrate ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '音频编码',
-                  _playerInfo?.audioCodec ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '音频码率',
-                  _playerInfo?.audioBitrate ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '硬件解码',
-                  _playerInfo?.hwDecoder ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-                _infoRow(
-                  '分离器',
-                  _playerInfo?.demuxer ?? '-',
-                  labelStyle,
-                  valueStyle,
-                ),
-              ],
-              const SizedBox(height: 24),
+              ),
+              const SizedBox(height: 16),
               _sectionHeader('弹幕缓存', sectionStyle),
               const SizedBox(height: 12),
               _infoRow(
@@ -187,15 +143,7 @@ class _AdvancedOptionsSheetState extends State<AdvancedOptionsSheet> {
                 labelStyle,
                 valueStyle,
               ),
-              _infoRow(
-                'Hash',
-                (widget.controller.video.value?.danmakuProvider
-                            as DandanPlayDanmakuProvider)
-                        .fileHash ??
-                    '-',
-                labelStyle,
-                valueStyle,
-              ),
+              _infoRow('Hash', fileHash ?? '-', labelStyle, valueStyle),
               _infoRow(
                 'Episode ID',
                 widget.controller.danmakuEpisodeId.value?.toString() ?? '未匹配',

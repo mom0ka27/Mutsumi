@@ -56,12 +56,14 @@ class MainFlutterWindow: NSWindow {
           ))
           return
         }
-        if self.frameBeforePlayback == nil {
-          self.frameBeforePlayback = self.frame
+        if !self.styleMask.contains(.fullScreen) {
+          if self.frameBeforePlayback == nil {
+            self.frameBeforePlayback = self.frame
+          }
+          let size = self.contentView?.bounds.size ?? self.frame.size
+          self.setContentSize(NSSize(width: size.width, height: size.width / aspectRatio))
+          self.contentAspectRatio = NSSize(width: aspectRatio, height: 1)
         }
-        let size = self.contentView?.bounds.size ?? self.frame.size
-        self.setContentSize(NSSize(width: size.width, height: size.width / aspectRatio))
-        self.contentAspectRatio = NSSize(width: aspectRatio, height: 1)
         let token = UUID().uuidString
         self.playbackToken = token
         result(["status": "supported", "token": token])

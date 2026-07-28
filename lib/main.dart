@@ -8,6 +8,7 @@ import 'core/appearance/appearance_settings_repository.dart';
 import 'core/logging/app_logger.dart';
 import 'core/storage/local_storage.dart';
 import 'core/widgets/app_glass_background.dart';
+import 'features/anime/presentation/anime_player_font.dart';
 import 'features/auth/presentation/current_user_controller.dart';
 import 'features/settings/data/settings_repository.dart';
 import 'player/model/dandanplay_repository.dart';
@@ -20,6 +21,7 @@ Future<void> main() async {
   IndexPlayer.init();
   packageInfo = await PackageInfo.fromPlatform();
   await LocalStorage.init();
+  await initializeAnimePlayerFont(LocalStorage.applicationSupportPath);
   await SettingsRepository.migrate();
   await AppearanceSettingsRepository.migrateBackgroundImagePath(
     LocalStorage.applicationSupportPath,

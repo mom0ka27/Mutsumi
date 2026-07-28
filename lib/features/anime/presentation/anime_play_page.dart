@@ -17,6 +17,7 @@ import '../../../player/model/video.dart';
 import '../../../player/model/danmaku.dart';
 import '../../../player/player.dart';
 import '../data/anime_service.dart';
+import 'anime_player_font.dart';
 
 class AnimePlayPage extends StatefulWidget {
   const AnimePlayPage({
@@ -47,12 +48,14 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   bool _landscapeFullscreenRequested = false;
   // AnimeEpisodeRead? _activeEpisode;
   var _episodeLoadGeneration = 0;
+  late final Future<void> _playerFontReady;
 
   AnimeEpisodeRead get _episode => widget.episodes[currentIndex.value];
 
   @override
   void initState() {
     super.initState();
+    _playerFontReady = configureAnimePlayerFont(controller.player);
     if (AppPlatform.isMacOS) {
       unawaited(controller.enterFullscreen());
     }
@@ -116,6 +119,10 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   }
 
   Future<void> _setCurrentEpisode(int index, {bool initial = false}) async {
+    if (_disposed || controller.disposed) {
+      return;
+    }
+    await _playerFontReady;
     if (_disposed || controller.disposed) {
       return;
     }
@@ -282,18 +289,12 @@ class _AnimePlayPageState extends State<AnimePlayPage>
           },
           child: Material(
             type: MaterialType.transparency,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: IndexPlayer(
-                    controller,
-                    useOverlay: true,
-                    allowFullscreenToggle: mobile,
-                    closePageOnBack: !mobile,
-                    episodeMenu: _playerEpisodeMenu(),
-                  ),
-                ),
-              ],
+            child: IndexPlayer(
+              controller,
+              useOverlay: true,
+              allowFullscreenToggle: mobile,
+              closePageOnBack: !mobile,
+              episodeMenu: _playerEpisodeMenu(),
             ),
           ),
         );

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:auto_orientation_v2/auto_orientation_v2.dart';
 import 'package:erika_flutter/erika_flutter.dart';
@@ -7,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../core/platform/app_platform.dart';
 import 'model/danmaku.dart';
@@ -57,6 +55,8 @@ class IndexPlayerController {
   final Rx<bool> wantSeeking = false.obs;
   final Rx<Duration> sliderPostion = Rx(Duration.zero);
   final Rx<bool> isFullScreen = false.obs;
+  final Rx<bool> debugHudEnabled = false.obs;
+  final Rx<bool> debugHudUpdating = false.obs;
   final Rx<models.Video?> _video = Rx(null);
 
   StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
@@ -172,10 +172,11 @@ class IndexPlayerController {
       }
     }
     if (generation != _videoGeneration || _disposed) return;
-    if (start != null && start > Duration.zero) await _player.seek(start);
-    if (generation != _videoGeneration || _disposed) return;
+    if (start != null && start > Duration.zero) {
+      await _player.seek(start);
+    }
     if (video.subtitleUri != null) {
-      await _player.addExternalSubtitle(video.subtitleUri!);
+      unawaited(_player.addExternalSubtitle(video.subtitleUri!));
     }
     final provider = video.danmakuProvider;
     if (provider != null) {
@@ -371,23 +372,22 @@ class IndexPlayerController {
 
   bool get _supportsOrientationFullscreen => AppPlatform.isMobile;
 
-  Future<PlayerInfo> getPlayerInfo() async {
-    final event = await eventStream.firstWhere(
-      (event) => event.video.width > 0,
-    );
-    return PlayerInfo(
-      videoCodec: event.decoder?.codec ?? '-',
-      width: event.video.width,
-      height: event.video.height,
-      pixelFormat: event.decoder?.pixelFormat ?? '-',
-      hwDecoder: event.decoder?.activeBackend ?? '-',
-    );
+  Future<void> setDebugHudEnabled(bool enabled) async {
+    if (_disposed ||
+        debugHudUpdating.value ||
+        debugHudEnabled.value == enabled) {
+      return;
+    }
+    debugHudUpdating.value = true;
+    try {
+      await _player.setDebugHudEnabled(enabled);
+      if (!_disposed) debugHudEnabled.value = enabled;
+    } finally {
+      if (!_disposed) debugHudUpdating.value = false;
+    }
   }
 
   void _resetDanmakuSecond() => _lastDanmakuSecond = null;
-
-  Future<Directory> prepareSubtitleFont() async =>
-      getApplicationSupportDirectory();
 
   Future<void> dispose() async {
     if (_disposed) return;
@@ -400,30 +400,6 @@ class IndexPlayerController {
     _danmakuController?.clear();
     _danmakuController = null;
   }
-}
-
-class PlayerInfo {
-  const PlayerInfo({
-    required this.videoCodec,
-    required this.width,
-    required this.height,
-    required this.pixelFormat,
-    required this.hwDecoder,
-  });
-
-  final String videoCodec;
-  final int width;
-  final int height;
-  final String pixelFormat;
-  final String hwDecoder;
-
-  String get resolution => width > 0 && height > 0 ? '${width}x$height' : '-';
-  String get videoBitrate => '-';
-  String get audioCodec => '-';
-  String get audioBitrate => '-';
-  String get frameRate => '-';
-  String get demuxer => 'Erika';
-  String get videoFormat => 'Erika';
 }
 
 class SubtitleTrack {
