@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../core/platform/app_platform.dart';
 import 'model/danmaku.dart';
 import 'model/option.dart';
 import 'model/video.dart' as models;
@@ -336,7 +337,9 @@ class IndexPlayerController {
     if (_disposed || !isFullScreen.value || _fullscreenTransition != null) {
       return;
     }
-    if (!Platform.isMacOS) await AutoOrientation.landscapeAutoMode();
+    if (_supportsOrientationFullscreen) {
+      await AutoOrientation.landscapeAutoMode();
+    }
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
@@ -344,7 +347,9 @@ class IndexPlayerController {
     isFullScreen.value = true;
     try {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      if (!Platform.isMacOS) await AutoOrientation.landscapeAutoMode();
+      if (_supportsOrientationFullscreen) {
+        await AutoOrientation.landscapeAutoMode();
+      }
     } finally {
       _fullscreenTransition = null;
     }
@@ -353,12 +358,18 @@ class IndexPlayerController {
   Future<void> _exitFullscreen() async {
     try {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      if (!Platform.isMacOS) await AutoOrientation.portraitAutoMode();
+      // 退出全屏只该解除全屏时的横屏锁定，而不是把设备按回竖屏——
+      // 应用本身是支持横屏的，锁回去会让横屏用户被强行转向。
+      if (_supportsOrientationFullscreen) {
+        await AutoOrientation.fullAutoMode();
+      }
       isFullScreen.value = false;
     } finally {
       _fullscreenTransition = null;
     }
   }
+
+  bool get _supportsOrientationFullscreen => AppPlatform.isMobile;
 
   Future<PlayerInfo> getPlayerInfo() async {
     final event = await eventStream.firstWhere(

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:mutsumi/constants.dart';
 import 'package:mutsumi/player/extension/duration.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
+import '../../../core/window/playback_window.dart';
 import '../../../core/widgets/media_detail_overview.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../data/anime_service.dart';
@@ -108,12 +109,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           body: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  Constants.topPadding,
-                  20,
-                  120,
-                ),
+                padding: context.pageContentPadding(bottom: 120),
                 sliver: SliverToBoxAdapter(
                   child: MediaDetailOverview(
                     data: _overviewData(anime),
@@ -132,13 +128,18 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
               ? null
               : FloatingActionButton.extended(
                   onPressed: () async {
-                    await Get.to(
-                      () => AnimePlayPage(
-                        anime: anime,
-                        episodes: anime.episodes,
-                        initialEpisode: _initialEpisode(anime),
-                      ),
-                    );
+                    final windowLease = await PlaybackWindow.enter();
+                    try {
+                      await Get.to(
+                        () => AnimePlayPage(
+                          anime: anime,
+                          episodes: anime.episodes,
+                          initialEpisode: _initialEpisode(anime),
+                        ),
+                      );
+                    } finally {
+                      await windowLease.release();
+                    }
                     setState(() {});
                   },
                   label: Text("播放"),

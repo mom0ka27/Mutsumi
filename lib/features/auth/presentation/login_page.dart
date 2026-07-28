@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:mutsumi/constants.dart';
 
+import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_form_widgets.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
@@ -116,42 +116,46 @@ class _LoginPageState extends State<LoginPage> {
         ),
         centerTitle: false,
       ),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(24, Constants.topPadding, 24, 24),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('登录', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 8),
-              Text(
-                '服务器已初始化，请使用账号密码登录。',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '服务器：${widget.serverUrl}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 24),
-              AppTextField(controller: _usernameController, label: '账号'),
-              const SizedBox(height: 12),
-              AppTextField(
-                controller: _passwordController,
-                obscureText: true,
-                label: '密码',
-              ),
-              const SizedBox(height: 12),
-              Obx(
-                () => AsyncFilledButton(
-                  busy: _loggingIn.value,
-                  onPressed: _login,
-                  icon: Icons.login,
-                  label: '登录',
-                  busyLabel: '正在登录...',
+      body: Center(
+        child: SingleChildScrollView(
+          padding: context.pageContentPadding(horizontal: 24),
+          child: ConstrainedBox(
+            // 表单本身不需要占满宽度；横屏和桌面上限制宽度比拉成一条更好读。
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('登录', style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: 8),
+                Text(
+                  '服务器已初始化，请使用账号密码登录。',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  '服务器：${widget.serverUrl}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 24),
+                AppTextField(controller: _usernameController, label: '账号'),
+                const SizedBox(height: 12),
+                AppTextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  label: '密码',
+                ),
+                const SizedBox(height: 12),
+                Obx(
+                  () => AsyncFilledButton(
+                    busy: _loggingIn.value,
+                    onPressed: _login,
+                    icon: Icons.login,
+                    label: '登录',
+                    busyLabel: '正在登录...',
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/media_detail_overview.dart';
 import '../../../core/widgets/error_dialog.dart';
@@ -85,12 +86,7 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
           body: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  Constants.topPadding,
-                  20,
-                  120,
-                ),
+                padding: context.pageContentPadding(bottom: 120),
                 sliver: SliverToBoxAdapter(
                   child: MediaDetailOverview(
                     data: _overviewData(subject, detail),

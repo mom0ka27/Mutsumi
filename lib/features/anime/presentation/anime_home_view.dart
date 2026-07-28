@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:mutsumi/constants.dart';
 
 import '../../../player/extension/duration.dart';
+import '../../../core/extensions/build_context.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/media_summary_card.dart';
@@ -60,21 +60,9 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
       return RefreshIndicator(
         onRefresh: _refresh,
         child: store.animes.isEmpty
-            ? ListView(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  Constants.homeTopPadding,
-                  24,
-                  Constants.bottomPadding,
-                ),
-              )
+            ? ListView(padding: context.homeContentPadding(horizontal: 24))
             : ListView.separated(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  Constants.homeTopPadding,
-                  20,
-                  Constants.bottomPadding,
-                ),
+                padding: context.homeContentPadding(),
                 itemBuilder: (context, index) =>
                     _AnimeCard(anime: store.animes[index], refresh: _refresh),
                 separatorBuilder: (_, _) => const SizedBox(height: 14),

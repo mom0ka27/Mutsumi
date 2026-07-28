@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
@@ -48,12 +49,7 @@ class AnimeGardenDownloadPage extends StatelessWidget {
         controller: controller.scrollController,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              20,
-              Constants.topPadding,
-              20,
-              16,
-            ),
+            padding: context.pageContentPadding(bottom: 16),
             sliver: SliverToBoxAdapter(
               child: _SearchCard(controller: controller),
             ),

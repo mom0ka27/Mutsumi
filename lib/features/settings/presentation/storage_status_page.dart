@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/network/api_paths.dart';
 import '../../../core/network/app_network_error.dart';
@@ -116,7 +117,7 @@ class _StorageStatusPageState extends State<StorageStatusPage> {
           return const SizedBox.shrink();
         }
         return ListView(
-          padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
+          padding: context.pageContentPadding(),
           children: [
             Text('服务器存储', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
@@ -247,7 +248,7 @@ class _AccessDenied extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 24),
+    padding: context.pageContentPadding(),
     children: [
       GlassCard(
         useOwnLayer: true,

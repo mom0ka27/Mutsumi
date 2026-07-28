@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
@@ -84,7 +85,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
       ),
       body: Obx(() {
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(20, Constants.topPadding, 20, 120),
+          padding: context.pageContentPadding(bottom: 120),
           itemBuilder: (context, index) {
             return _EpisodeMatchCard(controller: controller, index: index);
           },

@@ -24,6 +24,8 @@ class AuthSession {
       certificateFingerprint: certificateFingerprint,
       serverName: serverName,
     );
-    Get.find<CurrentUserController>().setPermissionGroup(result.permissionGroup);
+    Get.find<CurrentUserController>().setPermissionGroup(
+      result.permissionGroup,
+    );
   }
 }

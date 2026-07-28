@@ -6,15 +6,27 @@ import 'advanced_options_sheet.dart';
 
 class TopBar extends StatelessWidget {
   final IndexPlayerController controller;
+  final bool closePageOnBack;
 
-  const TopBar({super.key, required this.controller});
+  const TopBar({
+    super.key,
+    required this.controller,
+    this.closePageOnBack = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final safeArea = MediaQuery.viewPaddingOf(context);
+    final horizontalPadding = controller.isFullScreen.value
+        ? EdgeInsets.only(
+            left: safeArea.left.clamp(40.0, double.infinity).toDouble(),
+            right: safeArea.right.clamp(40.0, double.infinity).toDouble(),
+            top: safeArea.top.clamp(8.0, double.infinity).toDouble(),
+            bottom: 8,
+          )
+        : const EdgeInsets.symmetric(horizontal: 4, vertical: 4);
     return Container(
-      padding: controller.isFullScreen.value
-          ? EdgeInsets.symmetric(horizontal: 40, vertical: 8)
-          : EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: horizontalPadding,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -26,7 +38,9 @@ class TopBar extends StatelessWidget {
         children: [
           IconButton(
             onPressed: () async {
-              if (controller.isFullScreen.value) {
+              if (closePageOnBack) {
+                Get.back();
+              } else if (controller.isFullScreen.value) {
                 await controller.exitFullscreen();
               } else {
                 Get.back();
@@ -54,6 +68,7 @@ class TopBar extends StatelessWidget {
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
+                useSafeArea: true,
                 backgroundColor: Colors.transparent,
                 builder: (_) => AdvancedOptionsSheet(controller: controller),
               );

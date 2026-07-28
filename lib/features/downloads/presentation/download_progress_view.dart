@@ -8,6 +8,7 @@ import 'package:mutsumi/constants.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/app_glass_settings.dart';
+import '../../../core/extensions/build_context.dart';
 
 import '../data/download_repository.dart';
 
@@ -131,12 +132,7 @@ class _DownloadProgressViewState extends State<DownloadProgressView>
           )
           .toList();
       return ListView.separated(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          Constants.homeTopPadding,
-          20,
-          Constants.bottomPadding,
-        ),
+        padding: context.homeContentPadding(),
         itemCount: tasks.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {

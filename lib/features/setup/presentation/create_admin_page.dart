@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_form_widgets.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
@@ -125,41 +126,44 @@ class _CreateAdminPageState extends State<CreateAdminPage> {
         ),
       ),
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '创建管理员账户',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '服务器未初始化\n请设置服务器名称并创建第一个管理员账户。',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 24),
-              AppTextField(controller: _serverNameController, label: '服务器名称'),
-              const SizedBox(height: 12),
-              AppTextField(controller: _usernameController, label: '管理员账号'),
-              const SizedBox(height: 12),
-              AppTextField(
-                controller: _passwordController,
-                obscureText: true,
-                label: '管理员密码',
-              ),
-              const SizedBox(height: 12),
-              Obx(
-                () => AsyncFilledButton(
-                  busy: _initializing.value,
-                  onPressed: _initializeServer,
-                  icon: Icons.admin_panel_settings,
-                  label: '初始化服务器',
-                  busyLabel: '正在初始化...',
+        child: SingleChildScrollView(
+          padding: context.pageContentPadding(horizontal: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '创建管理员账户',
+                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  '服务器未初始化\n请设置服务器名称并创建第一个管理员账户。',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 24),
+                AppTextField(controller: _serverNameController, label: '服务器名称'),
+                const SizedBox(height: 12),
+                AppTextField(controller: _usernameController, label: '管理员账号'),
+                const SizedBox(height: 12),
+                AppTextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  label: '管理员密码',
+                ),
+                const SizedBox(height: 12),
+                Obx(
+                  () => AsyncFilledButton(
+                    busy: _initializing.value,
+                    onPressed: _initializeServer,
+                    icon: Icons.admin_panel_settings,
+                    label: '初始化服务器',
+                    busyLabel: '正在初始化...',
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

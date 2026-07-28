@@ -8,17 +8,33 @@ import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 
 class BottomBar extends StatelessWidget {
   final IndexPlayerController controller;
+  final VoidCallback? onNextEpisode;
+  final VoidCallback? onToggleEpisodes;
+  final bool allowFullscreenToggle;
 
-  const BottomBar({super.key, required this.controller});
+  const BottomBar({
+    super.key,
+    required this.controller,
+    this.onNextEpisode,
+    this.onToggleEpisodes,
+    this.allowFullscreenToggle = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final accentColor = Theme.of(context).colorScheme.primaryFixed;
     final dandanPlayConfigured = Get.find<DandanPlayRepository>().isConfigured;
+    final safeArea = MediaQuery.viewPaddingOf(context);
+    final horizontalPadding = controller.isFullScreen.value
+        ? EdgeInsets.only(
+            left: safeArea.left.clamp(40.0, double.infinity).toDouble(),
+            right: safeArea.right.clamp(40.0, double.infinity).toDouble(),
+            top: 8,
+            bottom: safeArea.bottom.clamp(8.0, double.infinity).toDouble(),
+          )
+        : const EdgeInsets.symmetric(horizontal: 4, vertical: 4);
     return Container(
-      padding: controller.isFullScreen.value
-          ? EdgeInsets.symmetric(horizontal: 40, vertical: 8)
-          : EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: horizontalPadding,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -83,7 +99,8 @@ class BottomBar extends StatelessWidget {
               controller.isFullScreen.value
                   ? IconButton(
                       icon: Icon(Icons.skip_next, color: Colors.white),
-                      onPressed: () {},
+                      onPressed: onNextEpisode,
+                      tooltip: '下一集',
                     )
                   : SizedBox(),
               const SizedBox(width: 10),
@@ -139,6 +156,15 @@ class BottomBar extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 8),
+              if (onToggleEpisodes != null)
+                IconButton(
+                  onPressed: onToggleEpisodes,
+                  icon: const Icon(
+                    Icons.video_library_rounded,
+                    color: Colors.white,
+                  ),
+                  tooltip: '选集',
+                ),
               Obx(() {
                 controller.revision;
                 final tracks = controller.state.subtitles;
@@ -187,23 +213,24 @@ class BottomBar extends StatelessWidget {
                   ),
                 );
               }),
-              IconButton(
-                icon: Obx(
-                  () => Icon(
-                    controller.isFullScreen.value
-                        ? Icons.fullscreen_exit
-                        : Icons.fullscreen,
-                    color: Colors.white,
+              if (allowFullscreenToggle)
+                IconButton(
+                  icon: Obx(
+                    () => Icon(
+                      controller.isFullScreen.value
+                          ? Icons.fullscreen_exit
+                          : Icons.fullscreen,
+                      color: Colors.white,
+                    ),
                   ),
+                  onPressed: () async {
+                    if (controller.isFullScreen.value) {
+                      await controller.exitFullscreen();
+                    } else {
+                      await controller.enterFullscreen();
+                    }
+                  },
                 ),
-                onPressed: () async {
-                  if (controller.isFullScreen.value) {
-                    await controller.exitFullscreen();
-                  } else {
-                    await controller.enterFullscreen();
-                  }
-                },
-              ),
             ],
           ),
         ],
