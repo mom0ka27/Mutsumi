@@ -8,6 +8,7 @@ class AnimeListStore extends GetxController {
 
   final AnimeService _animeService;
   final animes = <AnimeRead>[].obs;
+  final series = <SeriesRead>[].obs;
   final isLoading = true.obs;
   final animeMap = <int, AnimeRead>{};
 
@@ -21,12 +22,28 @@ class AnimeListStore extends GetxController {
   Future<void> refresh() async {
     isLoading.value = true;
     try {
-      animes.value = await _animeService.listAnimes();
+      final results = await Future.wait([
+        _animeService.listAnimes(),
+        _animeService.listSeries(),
+      ]);
+      animes.value = results[0] as List<AnimeRead>;
+      series.value = results[1] as List<SeriesRead>;
       _rebuildMap();
     } finally {
       isLoading.value = false;
     }
   }
+
+  Future<void> createSeries({
+    required String name,
+    required List<int> animeIds,
+  }) async {
+    await _animeService.createSeries(name: name, animeIds: animeIds);
+    await refresh();
+  }
+
+  List<AnimeRead> get ungroupedAnimes =>
+      animes.where((anime) => anime.seriesId == null).toList();
 
   void _rebuildMap() {
     animeMap.clear();

@@ -76,6 +76,8 @@ class AnimeRead {
     required this.downloadHash,
     required this.episodes,
     required this.watchProgress,
+    this.mediaType = 'unknown',
+    this.seriesId,
   });
 
   factory AnimeRead.fromJson(Map<String, dynamic> json) {
@@ -111,6 +113,8 @@ class AnimeRead {
       watchProgress: progress is Map<String, dynamic>
           ? WatchProgressRead.fromJson(progress)
           : null,
+      mediaType: json['media_type'] as String? ?? 'unknown',
+      seriesId: json['series_id'] as int?,
     );
   }
 
@@ -130,6 +134,8 @@ class AnimeRead {
   final String? downloadHash;
   final List<AnimeEpisodeRead> episodes;
   WatchProgressRead? watchProgress;
+  final String mediaType;
+  final int? seriesId;
 
   String get displayName => nameCn.isEmpty ? name : nameCn;
 
@@ -151,6 +157,28 @@ class AnimeRead {
       infobox: infobox,
     );
   }
+}
+
+class SeriesRead {
+  const SeriesRead({required this.id, required this.name, required this.animes});
+
+  factory SeriesRead.fromJson(Map<String, dynamic> json) {
+    final animes = json['animes'];
+    return SeriesRead(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      animes: animes is List
+          ? animes
+                .whereType<Map<String, dynamic>>()
+                .map(AnimeRead.fromJson)
+                .toList()
+          : const [],
+    );
+  }
+
+  final int id;
+  final String name;
+  final List<AnimeRead> animes;
 }
 
 class QBittorrentFile {

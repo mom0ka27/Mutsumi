@@ -50,26 +50,163 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
     _showingError = false;
   }
 
+  Future<void> _showCreateSeriesDialog() async {
+    final nameController = TextEditingController();
+    final selectedIds = <int>{};
+    try {
+      final created = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('新建 Series'),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Series 名称'),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: store.ungroupedAnimes.map((anime) {
+                        return CheckboxListTile(
+                          value: selectedIds.contains(anime.id),
+                          title: Text(anime.displayName),
+                          subtitle: anime.originalName.isEmpty
+                              ? null
+                              : Text(anime.originalName),
+                          onChanged: (selected) => setDialogState(() {
+                            if (selected == true) {
+                              selectedIds.add(anime.id);
+                            } else {
+                              selectedIds.remove(anime.id);
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: Get.back, child: const Text('取消')),
+              FilledButton(
+                onPressed: selectedIds.length < 2
+                    ? null
+                    : () async {
+                        final name = nameController.text.trim();
+                        if (name.isEmpty) return;
+                        try {
+                          await store.createSeries(
+                            name: name,
+                            animeIds: selectedIds.toList(),
+                          );
+                          if (context.mounted) Get.back(result: true);
+                        } catch (error) {
+                          if (context.mounted) Get.back(result: false);
+                          unawaited(_showErrorDialog(error));
+                        }
+                      },
+                child: const Text('新建'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (created == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Series 已新建')),
+        );
+      }
+    } finally {
+      nameController.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Obx(() {
-      if (store.isLoading.value) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        child: store.animes.isEmpty
-            ? ListView(padding: context.homeContentPadding(horizontal: 24))
-            : ListView.separated(
-                padding: context.homeContentPadding(),
-                itemBuilder: (context, index) =>
-                    _AnimeCard(anime: store.animes[index], refresh: _refresh),
-                separatorBuilder: (_, _) => const SizedBox(height: 14),
-                itemCount: store.animes.length,
+      final ungrouped = store.ungroupedAnimes;
+      final itemCount = store.series.length + ungrouped.length;
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          automaticallyImplyLeading: false,
+          title: Text('库内容 ${store.animes.length}'),
+          actions: [
+            IconButton(
+              tooltip: '新建 Series',
+              onPressed: ungrouped.length < 2 ? null : _showCreateSeriesDialog,
+              icon: const Icon(Icons.create_new_folder_outlined),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: store.isLoading.value
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: itemCount == 0
+                    ? ListView(
+                        padding: context.homeContentPadding(horizontal: 24),
+                      )
+                    : ListView.separated(
+                        padding: context.homeContentPadding(),
+                        itemBuilder: (context, index) {
+                          if (index < store.series.length) {
+                            return _SeriesCard(
+                              series: store.series[index],
+                              refresh: _refresh,
+                            );
+                          }
+                          return _AnimeCard(
+                            anime: ungrouped[index - store.series.length],
+                            refresh: _refresh,
+                          );
+                        },
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemCount: itemCount,
+                      ),
               ),
       );
     });
+  }
+}
+
+class _SeriesCard extends StatelessWidget {
+  const _SeriesCard({required this.series, required this.refresh});
+
+  final SeriesRead series;
+  final Future<void> Function() refresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        leading: const Icon(Icons.video_library_outlined),
+        title: Text(series.name),
+        subtitle: Text('${series.animes.length} 部作品'),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        children: series.animes
+            .map(
+              (anime) => Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _AnimeCard(anime: anime, refresh: refresh),
+              ),
+            )
+            .toList(),
+      ),
+    );
   }
 }
 
@@ -95,6 +232,10 @@ class _AnimeCard extends StatelessWidget {
       subtitle: anime.originalName,
       summary: anime.summary,
       chips: [
+        MediaInfoChip(
+          icon: Icons.live_tv_outlined,
+          label: _mediaTypeLabel(anime.mediaType),
+        ),
         if (anime.score > 0)
           MediaInfoChip(
             icon: Icons.star_rounded,
@@ -121,4 +262,16 @@ class _AnimeCard extends StatelessWidget {
       },
     );
   }
+}
+
+String _mediaTypeLabel(String value) {
+  return switch (value.toLowerCase()) {
+    'tv' => 'TV',
+    'movie' => '剧场版',
+    'ova' => 'OVA',
+    'ona' => 'ONA',
+    'special' => '特别篇',
+    'unknown' || '' => '未知类型',
+    _ => value,
+  };
 }

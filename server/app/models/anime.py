@@ -18,13 +18,29 @@ class Anime(Base):
     air_date: Mapped[str] = mapped_column(String(32), default="")
     rank: Mapped[int] = mapped_column(Integer, default=0)
     platform: Mapped[str] = mapped_column(String(128), default="")
+    media_type: Mapped[str] = mapped_column(String(32), default="unknown")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     infobox: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     download_hash: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    series_id: Mapped[int | None] = mapped_column(
+        ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     episodes: Mapped[list["Episode"]] = relationship(
         back_populates="anime",
         cascade="all, delete-orphan",
+    )
+    series: Mapped["Series | None"] = relationship(back_populates="animes")
+
+
+class Series(Base):
+    __tablename__ = "series"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    animes: Mapped[list[Anime]] = relationship(
+        back_populates="series",
+        order_by="Anime.id",
     )
 
 

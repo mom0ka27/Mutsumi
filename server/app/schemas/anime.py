@@ -42,6 +42,7 @@ class AnimeCreate(BaseModel):
     air_date: str = ""
     rank: int = 0
     platform: str = ""
+    media_type: str = "unknown"
     tags: list[str] = Field(default_factory=list)
     infobox: list[BangumiInfoItem] = Field(default_factory=list)
     download_hash: str | None = None
@@ -58,6 +59,7 @@ class AnimeMetadataUpdate(BaseModel):
     air_date: str = ""
     rank: int = 0
     platform: str = ""
+    media_type: str = "unknown"
     tags: list[str] = Field(default_factory=list)
     infobox: list[BangumiInfoItem] = Field(default_factory=list)
 
@@ -76,6 +78,8 @@ class AnimeRead(BaseModel):
     air_date: str
     rank: int
     platform: str
+    media_type: str
+    series_id: int | None
     tags: list[str]
     infobox: list[BangumiInfoItem]
     download_hash: str | None
@@ -102,6 +106,21 @@ class AnimeSummaryRead(BaseModel):
     score: float
     episode_count: int
     air_date: str
+    media_type: str
+    series_id: int | None
     download_hash: str | None
     episodes: list[EpisodeRead]
     watch_progress: WatchProgressRead | None = None
+
+
+class SeriesCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    anime_ids: list[int] = Field(min_length=1)
+
+
+class SeriesRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    animes: list[AnimeSummaryRead]

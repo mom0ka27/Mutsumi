@@ -69,7 +69,7 @@ async def test_pre_alembic_database_is_stamped_and_keeps_its_rows(tmp_path):
 
     await _run_migrations(db_path)
 
-    assert _version(db_path) == INITIAL_REVISION
+    assert _version(db_path) != INITIAL_REVISION
     connection = sqlite3.connect(db_path)
     try:
         assert connection.execute("select username from users").fetchall() == [

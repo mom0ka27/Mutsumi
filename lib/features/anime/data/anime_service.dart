@@ -32,6 +32,35 @@ class AnimeService {
     });
   }
 
+  Future<List<SeriesRead>> listSeries() async {
+    return _request('获取 Series 列表', () async {
+      final response = await _serverDio().get<List<dynamic>>(
+        '$animeApiPath/series',
+      );
+      return (response.data ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(SeriesRead.fromJson)
+          .toList();
+    });
+  }
+
+  Future<SeriesRead> createSeries({
+    required String name,
+    required List<int> animeIds,
+  }) async {
+    return _request('新建 Series', () async {
+      final response = await _serverDio().post<Map<String, dynamic>>(
+        '$animeApiPath/series',
+        data: {'name': name, 'anime_ids': animeIds},
+      );
+      final data = response.data;
+      if (data == null) {
+        throw StateError('服务器返回了空 Series');
+      }
+      return SeriesRead.fromJson(data);
+    });
+  }
+
   Future<AnimeRead> getAnime(int id) async {
     return _request('获取 Anime 详情 id=$id', () async {
       final response = await _serverDio().get<Map<String, dynamic>>(
@@ -309,6 +338,9 @@ class _AnimeCreatePayload {
       'platform': subject is BangumiSubjectDetail
           ? (subject as BangumiSubjectDetail).platform
           : '',
+      'media_type': subject is BangumiSubjectDetail
+          ? _mediaTypeOf((subject as BangumiSubjectDetail).platform)
+          : 'unknown',
       'tags': subject is BangumiSubjectDetail
           ? (subject as BangumiSubjectDetail).tags
           : <String>[],
@@ -343,6 +375,9 @@ class _AnimeMetadataPayload {
       'platform': subject is BangumiSubjectDetail
           ? (subject as BangumiSubjectDetail).platform
           : '',
+      'media_type': subject is BangumiSubjectDetail
+          ? _mediaTypeOf((subject as BangumiSubjectDetail).platform)
+          : 'unknown',
       'tags': subject is BangumiSubjectDetail
           ? (subject as BangumiSubjectDetail).tags
           : <String>[],
@@ -353,4 +388,14 @@ class _AnimeMetadataPayload {
           : <Map<String, String>>[],
     };
   }
+}
+
+String _mediaTypeOf(String platform) {
+  final value = platform.trim().toLowerCase();
+  if (value.contains('tv')) return 'tv';
+  if (value.contains('剧场') || value.contains('movie')) return 'movie';
+  if (value.contains('ova')) return 'ova';
+  if (value.contains('ona') || value.contains('web')) return 'ona';
+  if (value.contains('special') || value.contains('sp')) return 'special';
+  return value.isEmpty ? 'unknown' : value;
 }

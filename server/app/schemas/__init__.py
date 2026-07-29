@@ -6,6 +6,8 @@ from app.schemas.anime import (
     BangumiInfoItem,
     EpisodeCreate,
     EpisodeRead,
+    SeriesCreate,
+    SeriesRead,
     WatchProgressRead,
     WatchProgressUpdate,
 )
@@ -36,6 +38,8 @@ __all__ = [
     "BangumiInfoItem",
     "EpisodeCreate",
     "EpisodeRead",
+    "SeriesCreate",
+    "SeriesRead",
     "QBittorrentConfigRead",
     "QBittorrentConfigUpdate",
     "QBittorrentFileRead",

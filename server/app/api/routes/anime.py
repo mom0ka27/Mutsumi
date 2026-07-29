@@ -15,13 +15,15 @@ from app.core.auth import (
     require_admin,
     require_download_permission,
 )
-from app.models import Anime, Episode, User, WatchProgress
+from app.models import Anime, Episode, Series, User, WatchProgress
 from app.schemas import (
     AnimeCreate,
     AnimeMetadataUpdate,
     AnimeRead,
     AnimeSummaryRead,
     EpisodeRead,
+    SeriesCreate,
+    SeriesRead,
     WatchProgressRead,
     WatchProgressUpdate,
 )
@@ -32,6 +34,54 @@ SUBTITLE_EXTENSIONS = {".ass", ".ssa", ".srt", ".vtt"}
 
 router = APIRouter(prefix="/anime", tags=["anime"])
 logger = logging.getLogger(__name__)
+
+
+@router.get("/series", response_model=list[SeriesRead])
+async def list_series(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.scalars(
+        select(Series)
+        .options(selectinload(Series.animes).selectinload(Anime.episodes))
+        .order_by(Series.id)
+    )
+    series_list = list(result)
+    reads = []
+    for series in series_list:
+        animes = await _with_watch_progress(
+            list(series.animes), current_user.id, session, AnimeSummaryRead
+        )
+        reads.append(SeriesRead(id=series.id, name=series.name, animes=animes))
+    return reads
+
+
+@router.post("/series", response_model=SeriesRead, status_code=status.HTTP_201_CREATED)
+async def create_series(
+    payload: SeriesCreate,
+    current_user: User = Depends(require_download_permission),
+    session: AsyncSession = Depends(get_session),
+):
+    anime_ids = list(dict.fromkeys(payload.anime_ids))
+    animes = list(
+        await session.scalars(
+            select(Anime)
+            .options(selectinload(Anime.episodes))
+            .where(Anime.id.in_(anime_ids))
+            .order_by(Anime.id)
+        )
+    )
+    if len(animes) != len(anime_ids):
+        raise HTTPException(status_code=404, detail="Anime not found")
+    if any(anime.series_id is not None for anime in animes):
+        raise HTTPException(status_code=409, detail="Anime already belongs to a series")
+    series = Series(name=payload.name.strip(), animes=animes)
+    session.add(series)
+    await session.commit()
+    reads = await _with_watch_progress(
+        animes, current_user.id, session, AnimeSummaryRead
+    )
+    return SeriesRead(id=series.id, name=series.name, animes=reads)
 
 @router.get("", response_model=list[AnimeSummaryRead])
 async def list_anime(
@@ -373,6 +423,7 @@ def _apply_metadata(anime: Anime, payload: AnimeCreate | AnimeMetadataUpdate) ->
     anime.air_date = payload.air_date
     anime.rank = payload.rank
     anime.platform = payload.platform
+    anime.media_type = payload.media_type
     anime.tags = payload.tags
     anime.infobox = [item.model_dump() for item in payload.infobox]
 
