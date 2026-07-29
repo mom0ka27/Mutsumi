@@ -10,6 +10,7 @@ import 'package:ns_danmaku/ns_danmaku.dart';
 import '../core/platform/app_platform.dart';
 import 'model/danmaku.dart';
 import 'model/option.dart';
+import 'model/playlist.dart';
 import 'model/video.dart' as models;
 
 class PlayerState {
@@ -40,11 +41,14 @@ class PlayerSubtitleTrack {
 class IndexPlayerController {
   final _player = ErikaPlayer();
   final IndexPlayerOptions options;
+  final PlayerPlaylist playlist;
+  final Future<void> Function(PlayerPlaybackSnapshot snapshot)? onItemLeaving;
   final _state = PlayerState();
   final _revision = 0.obs;
   final _playing = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
   final _events = StreamController<ErikaPlayerEvent>.broadcast();
+  final _completed = StreamController<void>.broadcast();
   final GlobalKey _videoKey = GlobalKey();
 
   DanmakuController? _danmakuController;
@@ -57,7 +61,11 @@ class IndexPlayerController {
   final Rx<bool> isFullScreen = false.obs;
   final Rx<bool> debugHudEnabled = false.obs;
   final Rx<bool> debugHudUpdating = false.obs;
+  final Rx<double> playbackSpeed = 1.0.obs;
+  final Rx<double> volume = 1.0.obs;
   final Rx<models.Video?> _video = Rx(null);
+  final RxnInt selectedIndex = RxnInt();
+  final RxnInt loadingIndex = RxnInt();
 
   StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
   Future<void>? _fullscreenTransition;
@@ -65,10 +73,15 @@ class IndexPlayerController {
   bool _seeking = false;
   int? _lastDanmakuSecond;
   int _videoGeneration = 0;
-  double _currentRate = 1.0;
+  bool _playbackCompleted = false;
+  bool _resumeAfterSeek = false;
   Completer<Duration>? _durationCompleter;
 
-  IndexPlayerController({this.options = const IndexPlayerOptions()}) {
+  IndexPlayerController({
+    required this.playlist,
+    this.options = const IndexPlayerOptions(),
+    this.onItemLeaving,
+  }) {
     _eventSubscription = _player.events.listen(_handleEvent);
   }
 
@@ -81,7 +94,25 @@ class IndexPlayerController {
   Stream<bool> get playingStream => _playing.stream;
   Stream<String> get errorStream => _errors.stream;
   Stream<ErikaPlayerEvent> get eventStream => _events.stream;
+  Stream<void> get completedStream => _completed.stream;
   int get revision => _revision.value;
+  bool get hasNext =>
+      selectedIndex.value != null &&
+      selectedIndex.value! < playlist.items.length - 1;
+  PlayerPlaylistItem? get selectedItem {
+    final index = selectedIndex.value;
+    return index == null ? null : playlist.items[index];
+  }
+
+  PlayerPlaybackSnapshot? get currentSnapshot {
+    final index = selectedIndex.value;
+    if (index == null) return null;
+    return PlayerPlaybackSnapshot(
+      itemId: playlist.items[index].id,
+      index: index,
+      position: _state.position,
+    );
+  }
 
   void _handleEvent(ErikaPlayerEvent event) {
     if (_disposed) return;
@@ -99,7 +130,8 @@ class IndexPlayerController {
     _state.buffering = event.buffering;
     if (event.state == ErikaPlaybackState.playing) {
       _state.playing = true;
-    } else if (event.state == ErikaPlaybackState.paused) {
+    } else if (event.state == ErikaPlaybackState.paused ||
+        event.state == ErikaPlaybackState.stopped) {
       _state.playing = false;
     }
     if (event.kind == ErikaEventKind.tracksChanged ||
@@ -112,25 +144,34 @@ class IndexPlayerController {
     if (event.error != null && event.error!.isNotEmpty) {
       _errors.add(event.error!);
     }
+    if (event.state == ErikaPlaybackState.stopped &&
+        !_playbackCompleted &&
+        _state.duration > Duration.zero &&
+        _state.position >=
+            _state.duration - const Duration(milliseconds: 500)) {
+      _playbackCompleted = true;
+      _completed.add(null);
+    }
     _pushDanmaku(event.position);
   }
 
   void _updateTracks(List<ErikaTrackInfo> tracks, int? selectedId) {
-    final subtitles = tracks
-        .where((track) => track.kind == ErikaTrackKind.subtitle)
-        .map(
-          (track) => PlayerSubtitleTrack(
-            id: track.id,
-            title: track.title,
-            language: track.language,
-            disabled: !track.selected && selectedId == null,
+    final subtitles = [
+      const PlayerSubtitleTrack(id: -1, disabled: true),
+      ...tracks
+          .where((track) => track.kind == ErikaTrackKind.subtitle)
+          .map(
+            (track) => PlayerSubtitleTrack(
+              id: track.id,
+              title: track.title,
+              language: track.language,
+            ),
           ),
-        )
-        .toList(growable: false);
+    ];
     _state.subtitles = subtitles;
-    _state.subtitle = subtitles.cast<PlayerSubtitleTrack?>().firstWhere(
-      (track) => track?.id == selectedId,
-      orElse: () => null,
+    _state.subtitle = subtitles.firstWhere(
+      (track) => track.id == (selectedId ?? -1),
+      orElse: () => subtitles.first,
     );
   }
 
@@ -145,10 +186,58 @@ class IndexPlayerController {
     _danmakuController!.addItems(_danmakuList?.getDanmakus(second) ?? []);
   }
 
-  Future<void> setVideo(models.Video video, {Duration? start}) async {
-    if (_disposed) return;
+  Future<void> selectIndex(int index) async {
+    if (_disposed || index < 0 || index >= playlist.items.length) return;
+    if (index == selectedIndex.value || index == loadingIndex.value) return;
     final generation = ++_videoGeneration;
+    final snapshot = currentSnapshot;
+    loadingIndex.value = index;
+    if (snapshot != null && snapshot.position > Duration.zero) {
+      await onItemLeaving?.call(snapshot);
+      if (_disposed || generation != _videoGeneration) return;
+    }
+    try {
+      final item = playlist.items[index];
+      final media = await item.load();
+      if (_disposed || generation != _videoGeneration) return;
+      selectedIndex.value = null;
+      await _openMedia(media, generation, start: item.initialPosition);
+      if (_disposed || generation != _videoGeneration) return;
+      selectedIndex.value = index;
+      await play();
+    } catch (error) {
+      if (!_disposed && generation == _videoGeneration) {
+        _errors.add(error.toString());
+      }
+    } finally {
+      if (!_disposed && generation == _videoGeneration) {
+        loadingIndex.value = null;
+      }
+    }
+  }
+
+  Future<void> next() async {
+    final index = selectedIndex.value;
+    if (index != null && index < playlist.items.length - 1) {
+      await selectIndex(index + 1);
+    }
+  }
+
+  Future<void> previous() async {
+    final index = selectedIndex.value;
+    if (index != null && index > 0) {
+      await selectIndex(index - 1);
+    }
+  }
+
+  Future<void> _openMedia(
+    PlayerMedia media,
+    int generation, {
+    Duration? start,
+  }) async {
+    final video = media.video;
     this.video.value = video;
+    _playbackCompleted = false;
     _resetPlaybackState();
     _resetDanmakuSecond();
     _danmakuList = null;
@@ -176,7 +265,16 @@ class IndexPlayerController {
       await _player.seek(start);
     }
     if (video.subtitleUri != null) {
-      unawaited(_player.addExternalSubtitle(video.subtitleUri!));
+      await _player.addExternalSubtitle(video.subtitleUri!);
+      if (generation != _videoGeneration || _disposed) return;
+    }
+    for (final path in media.externalSubtitlePaths) {
+      await _player.addExternalSubtitle(path);
+      if (generation != _videoGeneration || _disposed) return;
+    }
+    if (media.externalSubtitlePaths.isNotEmpty) {
+      await _selectPreferredExternalSubtitle();
+      if (generation != _videoGeneration || _disposed) return;
     }
     final provider = video.danmakuProvider;
     if (provider != null) {
@@ -220,9 +318,10 @@ class IndexPlayerController {
   Future<void> refreshDanmaku() async {
     final provider = _video.value?.danmakuProvider;
     if (_disposed || provider == null) return;
+    final generation = _videoGeneration;
     _danmakuController?.clear();
     final result = await provider.getDanmakuList();
-    if (!_disposed) {
+    if (!_disposed && generation == _videoGeneration) {
       _danmakuList = result.list;
       danmakuCount.value = result.count;
       danmakuEpisodeId.value = result.episodeId;
@@ -246,6 +345,7 @@ class IndexPlayerController {
 
   void beginSeeking() {
     if (!_disposed) {
+      _resumeAfterSeek = _state.playing;
       _seeking = true;
       wantSeeking.value = true;
     }
@@ -270,14 +370,42 @@ class IndexPlayerController {
     _seeking = true;
     wantSeeking.value = false;
     await _player.seek(position < Duration.zero ? Duration.zero : position);
+    if (_resumeAfterSeek) await _player.play();
+    _resumeAfterSeek = false;
     _seeking = false;
     _resetDanmakuSecond();
   }
 
+  Future<void> seekBy(Duration offset) async {
+    if (_disposed) return;
+    final target = _state.position + offset;
+    final position = target < Duration.zero
+        ? Duration.zero
+        : target > _state.duration
+        ? _state.duration
+        : target;
+    await _player.seek(position);
+    _resetDanmakuSecond();
+  }
+
+  Future<void> adjustVolume(double delta) async {
+    if (_disposed) return;
+    final previous = volume.value;
+    final value = (volume.value + delta).clamp(0.0, 1.0).toDouble();
+    if (value == previous) return;
+    volume.value = value;
+    try {
+      await _player.setVolume(value);
+    } catch (_) {
+      if (!_disposed && volume.value == value) volume.value = previous;
+      rethrow;
+    }
+  }
+
   Future<void> setSpeed(double rate) async {
-    if (_disposed || _currentRate == rate) return;
-    _currentRate = rate;
+    if (_disposed || playbackSpeed.value == rate) return;
     await _player.setPlaybackRate(rate);
+    if (!_disposed) playbackSpeed.value = rate;
   }
 
   Future<void> setSubtitleTrack(PlayerSubtitleTrack track) async {
@@ -286,13 +414,7 @@ class IndexPlayerController {
     }
   }
 
-  Future<void> loadExternalSubtitleTracks(List<SubtitleTrack> tracks) async {
-    for (final track in tracks) {
-      if (_disposed) {
-        return;
-      }
-      await _player.addExternalSubtitle(track.path!);
-    }
+  Future<void> _selectPreferredExternalSubtitle() async {
     final available = await _player.tracks();
     final candidates = available.where(
       (track) => track.kind == ErikaTrackKind.subtitle,
@@ -397,13 +519,8 @@ class IndexPlayerController {
     await _playing.close();
     await _errors.close();
     await _events.close();
+    await _completed.close();
     _danmakuController?.clear();
     _danmakuController = null;
   }
-}
-
-class SubtitleTrack {
-  const SubtitleTrack({required this.path});
-
-  final String? path;
 }

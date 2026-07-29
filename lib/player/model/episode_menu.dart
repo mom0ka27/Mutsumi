@@ -2,8 +2,13 @@ import 'package:flutter/foundation.dart';
 
 @immutable
 class PlayerEpisodeItem {
-  const PlayerEpisodeItem({required this.number, required this.title});
+  const PlayerEpisodeItem({
+    required this.id,
+    required this.number,
+    required this.title,
+  });
 
+  final Object id;
   final int number;
   final String title;
 }
@@ -14,11 +19,9 @@ class PlayerEpisodeMenu {
     required this.title,
     required this.items,
     required this.selectedIndex,
-    required this.onSelected,
   });
 
   final String title;
   final List<PlayerEpisodeItem> items;
   final int selectedIndex;
-  final Future<void> Function(int index) onSelected;
 }

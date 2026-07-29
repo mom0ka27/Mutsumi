@@ -12,7 +12,7 @@ import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../player/controller.dart';
-import '../../../player/model/episode_menu.dart';
+import '../../../player/model/playlist.dart';
 import '../../../player/model/video.dart';
 import '../../../player/model/danmaku.dart';
 import '../../../player/player.dart';
@@ -38,23 +38,44 @@ class AnimePlayPage extends StatefulWidget {
 class _AnimePlayPageState extends State<AnimePlayPage>
     with WidgetsBindingObserver {
   final _animeService = AnimeService();
-  final controller = IndexPlayerController();
-  final currentIndex = 0.obs;
+  late final IndexPlayerController controller;
   Timer? _progressTimer;
   StreamSubscription<String>? _errorSubscription;
   late final _WatchProgressSyncer _progressSyncer;
   bool _disposed = false;
   bool _showingError = false;
   bool _landscapeFullscreenRequested = false;
-  // AnimeEpisodeRead? _activeEpisode;
-  var _episodeLoadGeneration = 0;
   late final Future<void> _playerFontReady;
 
-  AnimeEpisodeRead get _episode => widget.episodes[currentIndex.value];
+  int get _currentIndex =>
+      controller.selectedIndex.value ??
+      controller.loadingIndex.value ??
+      widget.initialEpisode.clamp(0, widget.episodes.length - 1);
+  AnimeEpisodeRead get _episode => widget.episodes[_currentIndex];
 
   @override
   void initState() {
     super.initState();
+    controller = IndexPlayerController(
+      playlist: PlayerPlaylist(
+        title: widget.anime.displayName,
+        items: widget.episodes
+            .map(
+              (episode) => PlayerPlaylistItem(
+                id: episode.id,
+                number: episode.index,
+                title: episode.displayName,
+                initialPosition:
+                    widget.anime.watchProgress?.episodeId == episode.id
+                    ? widget.anime.watchProgress?.position
+                    : null,
+                load: () => _loadEpisodeMedia(episode),
+              ),
+            )
+            .toList(growable: false),
+      ),
+      onItemLeaving: _syncProgress,
+    );
     _playerFontReady = configureAnimePlayerFont(controller.player);
     if (AppPlatform.isMacOS) {
       unawaited(controller.enterFullscreen());
@@ -82,9 +103,8 @@ class _AnimePlayPageState extends State<AnimePlayPage>
       (_) => _saveProgress(),
     );
     unawaited(
-      _setCurrentEpisode(
+      controller.selectIndex(
         widget.initialEpisode.clamp(0, widget.episodes.length - 1),
-        initial: true,
       ),
     );
   }
@@ -118,80 +138,53 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     }
   }
 
-  Future<void> _setCurrentEpisode(int index, {bool initial = false}) async {
-    if (_disposed || controller.disposed) {
-      return;
-    }
+  Future<PlayerMedia> _loadEpisodeMedia(AnimeEpisodeRead episode) async {
     await _playerFontReady;
-    if (_disposed || controller.disposed) {
-      return;
-    }
-    currentIndex.value = index;
-    final loadGeneration = ++_episodeLoadGeneration;
-    final episode = _episode;
-    final shouldResume =
-        initial && widget.anime.watchProgress?.episodeId == episode.id;
+    final fileHash = await _animeService.fetchEpisodeFileHash(
+      widget.anime.id,
+      episode.id,
+    );
+    final subtitlePaths = <String>[];
     try {
-      final fileHash = await _animeService.fetchEpisodeFileHash(
+      final subtitles = await _animeService.listEpisodeSubtitles(
         widget.anime.id,
         episode.id,
       );
-      final subtitleTracks = <SubtitleTrack>[];
-      try {
-        final subtitles = await _animeService.listEpisodeSubtitles(
-          widget.anime.id,
-          episode.id,
+      for (final subtitle in subtitles) {
+        final subtitlePath = await _animeService.downloadEpisodeSubtitle(
+          animeId: widget.anime.id,
+          episodeId: episode.id,
+          filename: subtitle.filename,
         );
-        for (final subtitle in subtitles) {
-          final subtitlePath = await _animeService.downloadEpisodeSubtitle(
-            animeId: widget.anime.id,
-            episodeId: episode.id,
-            filename: subtitle.filename,
-          );
-          if (subtitlePath != null) {
-            subtitleTracks.add(SubtitleTrack(path: subtitlePath));
-          }
+        if (subtitlePath != null) {
+          subtitlePaths.add(subtitlePath);
         }
-      } catch (error, stackTrace) {
-        AppLogger.error(
-          '搜索字幕失败，将继续播放视频',
-          tag: 'AnimePlayer',
-          error: error,
-          stackTrace: stackTrace,
-        );
       }
-      await controller.setVideo(
-        NetworkVideo(
-          index: episode.index,
-          uri: _animeService.episodeVideoUrl(
-            animeId: widget.anime.id,
-            episodeId: episode.id,
-          ),
-          title: episode.displayName,
-          httpHeaders: _animeService.authHeaders(),
-          danmakuProvider: DandanPlayDanmakuProvider(
-            fileHash: fileHash,
-            fileName: episode.filename,
-            airDate: widget.anime.airDate,
-          ),
-        ),
-        start: shouldResume ? widget.anime.watchProgress?.position : null,
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        '搜索字幕失败，将继续播放视频',
+        tag: 'AnimePlayer',
+        error: error,
+        stackTrace: stackTrace,
       );
-      await controller.loadExternalSubtitleTracks(subtitleTracks);
-    } catch (error) {
-      unawaited(_showPlayerError(error));
-      return;
     }
-    if (_disposed ||
-        controller.disposed ||
-        loadGeneration != _episodeLoadGeneration) {
-      return;
-    }
-    try {
-      await controller.play();
-    } catch (error) {
-      unawaited(_showPlayerError(error));
-    }
+    return PlayerMedia(
+      video: NetworkVideo(
+        index: episode.index,
+        uri: _animeService.episodeVideoUrl(
+          animeId: widget.anime.id,
+          episodeId: episode.id,
+        ),
+        title: episode.displayName,
+        httpHeaders: _animeService.authHeaders(),
+        danmakuProvider: DandanPlayDanmakuProvider(
+          fileHash: fileHash,
+          fileName: episode.filename,
+          airDate: widget.anime.airDate,
+        ),
+      ),
+      externalSubtitlePaths: subtitlePaths,
+    );
   }
 
   Future<void> _showPlayerError(Object error) async {
@@ -211,50 +204,21 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     unawaited(controller.enterFullscreen());
   }
 
-  Future<void> _selectEpisode(int index) async {
-    if (index == currentIndex.value) {
-      return;
-    }
-    await _saveProgress();
-    await _setCurrentEpisode(index);
-  }
-
-  PlayerEpisodeMenu _playerEpisodeMenu() {
-    return PlayerEpisodeMenu(
-      title: widget.anime.displayName,
-      items: widget.episodes
-          .map(
-            (episode) => PlayerEpisodeItem(
-              number: episode.index,
-              title: episode.displayName,
-            ),
-          )
-          .toList(growable: false),
-      selectedIndex: currentIndex.value,
-      onSelected: _selectEpisode,
-    );
-  }
-
   Future<void> _saveProgress() async {
-    if (controller.disposed) {
-      return;
-    }
-    if (widget.episodes.isEmpty ||
-        currentIndex.value >= widget.episodes.length) {
-      return;
-    }
-    final episode = _episode;
+    final snapshot = controller.currentSnapshot;
+    if (controller.disposed || snapshot == null) return;
+    await _syncProgress(snapshot);
+  }
 
-    final position = controller.state.position;
-    if (position == Duration.zero) {
-      return;
-    }
+  Future<void> _syncProgress(PlayerPlaybackSnapshot snapshot) async {
+    if (snapshot.position == Duration.zero) return;
+    final episodeId = snapshot.itemId as int;
     await _progressSyncer.enqueue(
-      _WatchProgressSnapshot(episodeId: episode.id, position: position),
+      _WatchProgressSnapshot(episodeId: episodeId, position: snapshot.position),
     );
     widget.anime.watchProgress = WatchProgressRead(
-      episodeId: episode.id,
-      position: position,
+      episodeId: episodeId,
+      position: snapshot.position,
     );
   }
 
@@ -294,7 +258,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
               useOverlay: true,
               allowFullscreenToggle: mobile,
               closePageOnBack: !mobile,
-              episodeMenu: _playerEpisodeMenu(),
+              autoplayNextEpisode: true,
             ),
           ),
         );
@@ -323,6 +287,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
               controller,
               useOverlay: false,
               allowFullscreenToggle: AppPlatform.isMobile,
+              autoplayNextEpisode: true,
             ),
           ),
         ),
@@ -368,13 +333,15 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   }
 
   Widget _portraitEpisodeSelector(BuildContext context) {
-    final selectedIndex = currentIndex.value;
+    final selectedIndex = controller.selectedIndex.value;
+    final loadingIndex = controller.loadingIndex.value;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: List.generate(widget.episodes.length, (index) {
           final episode = widget.episodes[index];
           final selected = index == selectedIndex;
+          final loading = index == loadingIndex;
           return Padding(
             padding: EdgeInsets.only(
               right: index == widget.episodes.length - 1 ? 0 : 10,
@@ -384,7 +351,9 @@ class _AnimePlayPageState extends State<AnimePlayPage>
               padding: EdgeInsets.zero,
               shape: const LiquidRoundedSuperellipse(borderRadius: 16),
               child: InkWell(
-                onTap: selected ? null : () => unawaited(_selectEpisode(index)),
+                onTap: selected || loading
+                    ? null
+                    : () => unawaited(controller.selectIndex(index)),
                 borderRadius: BorderRadius.circular(16),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(

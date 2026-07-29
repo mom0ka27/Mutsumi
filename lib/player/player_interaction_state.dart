@@ -22,33 +22,44 @@ class PlayerInteractionState {
   Timer? _superSpeedTimer;
   StreamSubscription<bool>? _showControlsSubscription;
   var _superSpeedActive = false;
+  double? _speedBeforeSuperSpeed;
 
   void toggleControls() => showControls.toggle();
 
   void hideControls() => showControls.value = false;
 
+  void showControlsTemporarily() {
+    showControls.value = true;
+    _autoHideControls?.cancel();
+    _autoHideControls = Timer(const Duration(seconds: 5), hideControls);
+  }
+
   void scheduleSuperSpeed() {
     _superSpeedTimer?.cancel();
-    _superSpeedTimer = Timer(const Duration(milliseconds: 200), () {
+    _superSpeedTimer = Timer(const Duration(milliseconds: 150), () {
       if (_controller.disposed) {
         return;
       }
       _superSpeedActive = true;
+      _speedBeforeSuperSpeed = _controller.playbackSpeed.value;
       superSpeed.value = true;
       _controller.setSpeed(2);
       HapticFeedback.mediumImpact();
     });
   }
 
-  void cancelSuperSpeed() {
+  bool cancelSuperSpeed() {
     _superSpeedTimer?.cancel();
     _superSpeedTimer = null;
     if (!_superSpeedActive) {
-      return;
+      return false;
     }
     _superSpeedActive = false;
     superSpeed.value = false;
-    _controller.setSpeed(1);
+    final speed = _speedBeforeSuperSpeed ?? 1;
+    _speedBeforeSuperSpeed = null;
+    _controller.setSpeed(speed);
+    return true;
   }
 
   void dispose() {
