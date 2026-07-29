@@ -1,6 +1,7 @@
 import '../extension/duration.dart';
 import '../controller.dart';
 import '../model/dandanplay_repository.dart';
+import '../../core/platform/app_platform.dart';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -25,6 +26,12 @@ class BottomBar extends StatelessWidget {
     final accentColor = Theme.of(context).colorScheme.primaryFixed;
     final dandanPlayConfigured = Get.find<DandanPlayRepository>().isConfigured;
     final safeArea = MediaQuery.viewPaddingOf(context);
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final mobilePortrait = AppPlatform.isMobile && !landscape;
+    final controlGap = AppPlatform.isDesktop ? 10.0 : 2.0;
+    final compactControlGap = AppPlatform.isDesktop ? 4.0 : 0.0;
+    final progressPadding = AppPlatform.isDesktop ? 8.0 : 4.0;
     final horizontalPadding = controller.isFullScreen.value
         ? EdgeInsets.only(
             left: safeArea.left.clamp(40.0, double.infinity).toDouble(),
@@ -46,7 +53,7 @@ class BottomBar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: EdgeInsets.symmetric(horizontal: progressPadding),
             child: Obx(() {
               controller.revision;
               return ProgressBar(
@@ -103,7 +110,7 @@ class BottomBar extends StatelessWidget {
                       tooltip: '下一集',
                     )
                   : SizedBox(),
-              const SizedBox(width: 10),
+              SizedBox(width: controlGap),
               Obx(() {
                 controller.revision;
                 final duration = controller.state.duration;
@@ -155,8 +162,57 @@ class BottomBar extends StatelessWidget {
                   ),
                 ),
               ),
-              SizedBox(width: 8),
-              if (onToggleEpisodes != null)
+              SizedBox(width: controlGap),
+              Builder(
+                builder: (buttonContext) => Obx(
+                  () => Tooltip(
+                    message: '播放速度',
+                    child: IconButton(
+                      onPressed: () =>
+                          _showSpeedPicker(buttonContext, accentColor),
+                      icon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.speed_rounded, color: Colors.white),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${controller.playbackSpeed.value.toStringAsFixed(controller.playbackSpeed.value % 1 == 0 ? 0 : 2)}×',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: compactControlGap),
+              Obx(() {
+                controller.revision;
+                final tracks = controller.state.subtitles;
+                final selected = controller.state.subtitle;
+                return Builder(
+                  builder: (buttonContext) => IconButton(
+                    tooltip: '选择字幕',
+                    onPressed: tracks.length > 1
+                        ? () => _showSubtitlePicker(buttonContext, accentColor)
+                        : null,
+                    icon: Icon(
+                      selected?.disabled == true
+                          ? Icons.closed_caption_disabled_outlined
+                          : Icons.closed_caption_rounded,
+                      color: selected?.disabled == true
+                          ? Colors.white70
+                          : Colors.white,
+                    ),
+                  ),
+                );
+              }),
+              SizedBox(width: controlGap),
+              if (onToggleEpisodes != null && !mobilePortrait)
                 IconButton(
                   onPressed: onToggleEpisodes,
                   icon: const Icon(
@@ -165,54 +221,7 @@ class BottomBar extends StatelessWidget {
                   ),
                   tooltip: '选集',
                 ),
-              Obx(() {
-                controller.revision;
-                final tracks = controller.state.subtitles;
-                final selected = controller.state.subtitle;
-                return PopupMenuButton<PlayerSubtitleTrack>(
-                  tooltip: '选择字幕',
-                  enabled: tracks.isNotEmpty,
-                  color: Colors.black.withValues(alpha: 0.9),
-                  position: PopupMenuPosition.over,
-                  onSelected: controller.setSubtitleTrack,
-                  itemBuilder: (context) => tracks
-                      .map(
-                        (track) => PopupMenuItem(
-                          value: track,
-                          child: Row(
-                            children: [
-                              Icon(
-                                selected == track
-                                    ? Icons.check_rounded
-                                    : Icons.closed_caption_outlined,
-                                color: selected == track
-                                    ? accentColor
-                                    : Colors.white70,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Flexible(
-                                child: Text(
-                                  _subtitleLabel(track),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  icon: Icon(
-                    selected?.disabled == true
-                        ? Icons.closed_caption_disabled_outlined
-                        : Icons.closed_caption_rounded,
-                    color: selected?.disabled == true
-                        ? Colors.white70
-                        : Colors.white,
-                  ),
-                );
-              }),
+              if (!mobilePortrait) SizedBox(width: controlGap),
               if (allowFullscreenToggle)
                 IconButton(
                   icon: Obx(
@@ -253,5 +262,137 @@ class BottomBar extends StatelessWidget {
       return language;
     }
     return '字幕 ${track.id}';
+  }
+
+  Future<void> _showSpeedPicker(BuildContext context, Color accentColor) {
+    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    return _showPicker<double>(
+      context: context,
+      accentColor: accentColor,
+      items: speeds.map((speed) {
+        final selected = controller.playbackSpeed.value == speed;
+        return PopupMenuItem(
+          value: speed,
+          child: _PlayerMenuOption(
+            selected: selected,
+            accentColor: accentColor,
+            leading: Icon(
+              Icons.speed_rounded,
+              color: selected ? accentColor : Colors.white70,
+            ),
+            label: '${speed.toStringAsFixed(2)}×',
+          ),
+        );
+      }).toList(),
+      onSelected: controller.setSpeed,
+    );
+  }
+
+  Future<void> _showSubtitlePicker(BuildContext context, Color accentColor) {
+    return _showPicker<PlayerSubtitleTrack>(
+      context: context,
+      accentColor: accentColor,
+      items: controller.state.subtitles.map((track) {
+        final selected = controller.state.subtitle?.id == track.id;
+        return PopupMenuItem(
+          value: track,
+          child: _PlayerMenuOption(
+            selected: selected,
+            accentColor: accentColor,
+            leading: Icon(
+              track.disabled
+                  ? Icons.closed_caption_disabled_outlined
+                  : Icons.subtitles_rounded,
+              color: selected ? accentColor : Colors.white70,
+            ),
+            label: _subtitleLabel(track),
+          ),
+        );
+      }).toList(),
+      onSelected: controller.setSubtitleTrack,
+    );
+  }
+
+  Future<void> _showPicker<T>({
+    required BuildContext context,
+    required Color accentColor,
+    required List<PopupMenuEntry<T>> items,
+    required Future<void> Function(T value) onSelected,
+  }) async {
+    final selected = await showMenu<T>(
+      context: context,
+      position: _menuPosition(context),
+      color: const Color(0xFF19191D),
+      elevation: 12,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      items: items,
+    );
+    if (selected != null) await onSelected(selected);
+  }
+
+  RelativeRect _menuPosition(BuildContext context) {
+    final button = context.findRenderObject()! as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final position = button.localToGlobal(Offset.zero, ancestor: overlay);
+    return RelativeRect.fromRect(
+      position & button.size,
+      Offset.zero & overlay.size,
+    );
+  }
+}
+
+class _PlayerMenuOption extends StatelessWidget {
+  const _PlayerMenuOption({
+    required this.selected,
+    required this.accentColor,
+    required this.leading,
+    required this.label,
+  });
+
+  final bool selected;
+  final Color accentColor;
+  final Widget leading;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected
+              ? accentColor.withValues(alpha: 0.16)
+              : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              SizedBox(width: 28, child: Center(child: leading)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? Colors.white : Colors.white70,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_circle_rounded, color: accentColor, size: 21),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -39,6 +39,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     with WidgetsBindingObserver {
   final _animeService = AnimeService();
   late final IndexPlayerController controller;
+  final _episodeScrollController = ScrollController();
   Timer? _progressTimer;
   StreamSubscription<String>? _errorSubscription;
   late final _WatchProgressSyncer _progressSyncer;
@@ -98,6 +99,11 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     if (widget.episodes.isEmpty) {
       return;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_disposed && AppPlatform.isMobile) {
+        unawaited(_scrollToInitialEpisode());
+      }
+    });
     _progressTimer = Timer.periodic(
       const Duration(seconds: 10),
       (_) => _saveProgress(),
@@ -114,6 +120,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     _disposed = true;
     _progressTimer?.cancel();
     _errorSubscription?.cancel();
+    _episodeScrollController.dispose();
     unawaited(_saveProgress());
     if (controller.isFullScreen.value) {
       unawaited(controller.exitFullscreen());
@@ -222,6 +229,25 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     );
   }
 
+  Future<void> _scrollToInitialEpisode() async {
+    if (!_episodeScrollController.hasClients || widget.episodes.isEmpty) return;
+    final index = widget.initialEpisode.clamp(0, widget.episodes.length - 1);
+    final viewportWidth = _episodeScrollController.position.viewportDimension;
+    final target = (index * 170 + 80 - viewportWidth / 2)
+        .clamp(0.0, _episodeScrollController.position.maxScrollExtent)
+        .toDouble();
+    final distance = (target - _episodeScrollController.offset).abs();
+    if (distance < 1) return;
+    final duration = Duration(
+      milliseconds: (240 + distance * 0.22).round().clamp(280, 850),
+    );
+    await _episodeScrollController.animateTo(
+      target,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -291,16 +317,15 @@ class _AnimePlayPageState extends State<AnimePlayPage>
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _episodeHeader(context),
-              const SizedBox(height: 18),
-              Obx(() => _portraitEpisodeSelector(context)),
-            ],
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: _episodeHeader(context),
+            ),
+            Obx(() => _portraitEpisodeSelector(context)),
+          ],
         ),
       ],
     );
@@ -336,63 +361,103 @@ class _AnimePlayPageState extends State<AnimePlayPage>
     final selectedIndex = controller.selectedIndex.value;
     final loadingIndex = controller.loadingIndex.value;
     return SingleChildScrollView(
+      controller: _episodeScrollController,
       scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        children: List.generate(widget.episodes.length, (index) {
-          final episode = widget.episodes[index];
-          final selected = index == selectedIndex;
-          final loading = index == loadingIndex;
-          return Padding(
-            padding: EdgeInsets.only(
-              right: index == widget.episodes.length - 1 ? 0 : 10,
-            ),
-            child: GlassCard(
-              width: 160,
-              padding: EdgeInsets.zero,
-              shape: const LiquidRoundedSuperellipse(borderRadius: 16),
-              child: InkWell(
-                onTap: selected || loading
-                    ? null
-                    : () => unawaited(controller.selectIndex(index)),
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 11,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '第 ${episode.index} 集',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: selected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(
-                                      context,
-                                    ).colorScheme.onSurfaceVariant,
-                              fontWeight: selected ? FontWeight.w700 : null,
+        children: [
+          SizedBox(width: 20),
+          ...List.generate(widget.episodes.length, (index) {
+            final episode = widget.episodes[index];
+            final selected = index == selectedIndex;
+            final loading = index == loadingIndex;
+            return Padding(
+              padding: EdgeInsets.only(
+                right: index == widget.episodes.length - 1 ? 0 : 10,
+              ),
+              child: GlassCard(
+                width: 160,
+                padding: EdgeInsets.zero,
+                shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+                child: InkWell(
+                  onTap: selected || loading
+                      ? null
+                      : () => unawaited(controller.selectIndex(index)),
+                  borderRadius: BorderRadius.circular(16),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.18)
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.transparent,
+                        width: selected ? 1.5 : 0,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '第 ${episode.index} 集',
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(
+                                      color: selected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                      fontWeight: selected
+                                          ? FontWeight.w800
+                                          : null,
+                                    ),
+                              ),
                             ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        episode.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontWeight: selected ? FontWeight.w700 : null,
+                            if (selected)
+                              Icon(
+                                Icons.play_circle_fill_rounded,
+                                size: 17,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          episode.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: selected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: selected ? FontWeight.w800 : null,
+                              ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+          SizedBox(width: 20),
+        ],
       ),
     );
   }

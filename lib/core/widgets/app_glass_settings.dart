@@ -8,7 +8,7 @@ class AppGlassSettings {
     final colors = Theme.of(context).colorScheme;
     return LiquidGlassSettings.figma(
       refraction: 50,
-      depth: 24,
+      depth: 18,
       dispersion: 8,
       frost: 6,
       glassColor: colors.surface.withValues(alpha: 0.2),

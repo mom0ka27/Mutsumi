@@ -253,7 +253,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-macos-arm64
-          path: "build/macos/Build/Products/Release/mutsumi.app"
+          path: "build/macos/Build/Products/Release"
           if-no-files-found: error
 
   build-windows-x64:
