@@ -126,6 +126,16 @@ jobs:
           key: v2-${{ runner.os }}-${{ runner.arch }}-flutter-${{ env.FLUTTER_REVISION }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts') }}
       - name: Get dependencies
         run: flutter pub get --enforce-lockfile
+      - name: Install Android NDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "ndk;29.0.14206865"
+          ndk_path="$ANDROID_SDK_ROOT/ndk/29.0.14206865"
+          libclang_path="$(find "$ndk_path/toolchains/llvm/prebuilt/linux-x86_64" -type f -name 'libclang.so*' -print -quit)"
+          test -n "$libclang_path"
+          echo "ANDROID_NDK_HOME=$ndk_path" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ndk_path" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(dirname "$libclang_path")" >> "$GITHUB_ENV"
       - name: Build Android ARM64 APK
         env:
           DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
@@ -249,11 +259,14 @@ jobs:
           DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
           DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
         run: flutter build macos --release --dart-define=DANDANPLAY_APP_ID="$DANDANPLAY_APP_ID" --dart-define=DANDANPLAY_APP_SECRET="$DANDANPLAY_APP_SECRET"
+      - name: Pack macOS ARM64
+        run: |
+          mkdir target && mv build/macos/Build/Products/Release/mutsumi.app target
       - name: Upload macOS ARM64
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}-macos-arm64
-          path: "build/macos/Build/Products/Release"
+          path: target
           if-no-files-found: error
 
   build-windows-x64:
