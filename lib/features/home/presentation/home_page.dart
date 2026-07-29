@@ -84,6 +84,7 @@ class _HomePageState extends State<HomePage> {
                 child: PageView(
                   controller: _pageController,
                   onPageChanged: _onPageChanged,
+                  physics: const NeverScrollableScrollPhysics(),
                   children: [
                     HeroMode(
                       enabled: selectedIndex == 0,

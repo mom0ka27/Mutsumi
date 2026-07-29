@@ -160,25 +160,41 @@ class AnimeRead {
 }
 
 class SeriesRead {
-  const SeriesRead({required this.id, required this.name, required this.animes});
+  const SeriesRead({
+    required this.id,
+    required this.name,
+    required this.animes,
+  });
 
   factory SeriesRead.fromJson(Map<String, dynamic> json) {
     final animes = json['animes'];
+    final parsedAnimes = animes is List
+        ? animes
+              .whereType<Map<String, dynamic>>()
+              .map(AnimeRead.fromJson)
+              .toList()
+        : <AnimeRead>[];
+    parsedAnimes.sort((left, right) {
+      final leftYear = _airYear(left.airDate);
+      final rightYear = _airYear(right.airDate);
+      final yearComparison = leftYear.compareTo(rightYear);
+      return yearComparison != 0 ? yearComparison : left.id.compareTo(right.id);
+    });
     return SeriesRead(
       id: json['id'] as int? ?? 0,
       name: json['name'] as String? ?? '',
-      animes: animes is List
-          ? animes
-                .whereType<Map<String, dynamic>>()
-                .map(AnimeRead.fromJson)
-                .toList()
-          : const [],
+      animes: parsedAnimes,
     );
   }
 
   final int id;
   final String name;
   final List<AnimeRead> animes;
+}
+
+int _airYear(String airDate) {
+  final year = int.tryParse(airDate.split('-').first);
+  return year == null || year <= 0 ? 9999 : year;
 }
 
 class QBittorrentFile {
