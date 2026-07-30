@@ -10,25 +10,11 @@ import 'settings_repository.dart';
 /// the whole app. The access token is read per request instead of being baked
 /// into the client, so refreshing it does not force a rebuild.
 class AuthenticatedServerClient {
-  factory AuthenticatedServerClient({
+  AuthenticatedServerClient({
     SettingsRepository? settingsRepository,
     TokenRefresher? tokenRefresher,
-  }) {
-    if (settingsRepository == null && tokenRefresher == null) {
-      return _shared;
-    }
-    return AuthenticatedServerClient._(
-      settingsRepository ?? SettingsRepository(),
-      tokenRefresher ?? TokenRefresher(),
-    );
-  }
-
-  AuthenticatedServerClient._(this._settings, this._tokenRefresher);
-
-  static final AuthenticatedServerClient _shared = AuthenticatedServerClient._(
-    SettingsRepository(),
-    TokenRefresher(),
-  );
+  }) : _settings = settingsRepository ?? SettingsRepository(),
+       _tokenRefresher = tokenRefresher ?? TokenRefresher();
 
   final SettingsRepository _settings;
   final TokenRefresher _tokenRefresher;

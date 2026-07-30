@@ -1,155 +1,17 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 import '../../../core/extensions/build_context.dart';
 
-import '../../../app/startup_page.dart';
 import '../../../core/widgets/app_glass_background.dart';
-import '../../../core/widgets/app_dialog.dart';
-import '../../../core/widgets/error_dialog.dart';
-import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../setup/presentation/connect_server_page.dart';
-import '../data/settings_repository.dart';
+import '../../setup/presentation/connect_server_binding.dart';
+import 'saved_servers_controller.dart';
 
-class SavedServersPage extends StatefulWidget {
+class SavedServersPage extends GetView<SavedServersController> {
   const SavedServersPage({super.key});
-
-  @override
-  State<SavedServersPage> createState() => _SavedServersPageState();
-}
-
-class _SavedServersPageState extends State<SavedServersPage> {
-  final _repository = SettingsRepository();
-  final _revision = 0.obs;
-
-  Future<void> _rename(String url) async {
-    var serverName = _repository.getServerName(url);
-    final confirmed = await showAppDialog<bool>(
-      AlertDialog(
-        title: const Text('重命名服务器'),
-        content: TextFormField(
-          initialValue: serverName,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: '服务器名称'),
-          onChanged: (value) => serverName = value,
-        ),
-        actions: [
-          Builder(
-            builder: (context) => TextButton(
-              onPressed: () => AppDialog.dismiss(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          Builder(
-            builder: (context) => FilledButton(
-              onPressed: () => AppDialog.dismiss(context, true),
-              child: const Text('保存'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      try {
-        await _repository.renameServer(url, serverName);
-        _revision.value++;
-        await showInfoDialog(title: '重命名成功', message: '服务器名称已更新');
-      } catch (error) {
-        await showErrorDialog(
-          title: '重命名失败',
-          message: errorMessageOf(error),
-          error: error,
-        );
-      }
-    }
-  }
-
-  Future<void> _removeServer(String url) async {
-    final confirmed = await showAppDialog<bool>(
-      AlertDialog(
-        title: const Text('删除服务器'),
-        content: Text('将删除“${_repository.getServerName(url)}”及其所有本地账户信息。'),
-        actions: [
-          Builder(
-            builder: (context) => TextButton(
-              onPressed: () => AppDialog.dismiss(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          Builder(
-            builder: (context) => FilledButton(
-              onPressed: () => AppDialog.dismiss(context, true),
-              child: const Text('删除'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      try {
-        await _repository.removeServer(url);
-        if (_repository.getCurrentAccount() == null) {
-          unawaited(Get.offAllNamed(StartupPage.routeName));
-        } else {
-          _revision.value++;
-          await showInfoDialog(title: '删除成功', message: '服务器已删除');
-        }
-      } catch (error) {
-        await showErrorDialog(
-          title: '删除失败',
-          message: errorMessageOf(error),
-          error: error,
-        );
-      }
-    }
-  }
-
-  Future<void> _removeAccount(ServerAccount account) async {
-    final confirmed = await showAppDialog<bool>(
-      AlertDialog(
-        title: const Text('删除账户'),
-        content: Text(
-          '确定删除“${account.username}”吗？\n\n只会删除此设备保存的登录信息，不会删除服务器上的用户。',
-        ),
-        actions: [
-          Builder(
-            builder: (context) => TextButton(
-              onPressed: () => AppDialog.dismiss(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          Builder(
-            builder: (context) => FilledButton(
-              onPressed: () => AppDialog.dismiss(context, true),
-              child: const Text('删除'),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      return;
-    }
-    try {
-      await _repository.removeAccount(account.serverUrl, account.username);
-      if (_repository.getCurrentAccount() == null) {
-        unawaited(Get.offAllNamed(StartupPage.routeName));
-      } else {
-        _revision.value++;
-        await showInfoDialog(title: '删除成功', message: '账户已删除');
-      }
-    } catch (error) {
-      await showErrorDialog(
-        title: '删除失败',
-        message: errorMessageOf(error),
-        error: error,
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,21 +44,22 @@ class _SavedServersPageState extends State<SavedServersPage> {
                 prefillLastServer: false,
                 showBackButton: true,
               ),
+              binding: ConnectServerBinding(prefillLastServer: false),
             ),
           ),
         ],
         centerTitle: false,
       ),
       body: Obx(() {
-        _revision.value;
-        final servers = _repository.getServerUrls();
+        controller.revision.value;
+        final servers = controller.serverUrls;
         return ListView.separated(
           padding: context.pageContentPadding(horizontal: 16, bottom: 16),
           itemCount: servers.length,
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final url = servers[index];
-            final accounts = _repository.getAccounts(url);
+            final accounts = controller.accounts(url);
             return GlassCard(
               useOwnLayer: true,
               padding: const EdgeInsets.all(16),
@@ -216,7 +79,7 @@ class _SavedServersPageState extends State<SavedServersPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _repository.getServerName(url),
+                              controller.serverName(url),
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             Text(
@@ -227,11 +90,11 @@ class _SavedServersPageState extends State<SavedServersPage> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () => _rename(url),
+                        onPressed: () => controller.rename(url),
                         icon: const Icon(Icons.edit_outlined),
                       ),
                       IconButton(
-                        onPressed: () => _removeServer(url),
+                        onPressed: () => controller.removeServer(url),
                         icon: const Icon(Icons.delete_outline_rounded),
                       ),
                     ],
@@ -243,24 +106,10 @@ class _SavedServersPageState extends State<SavedServersPage> {
                       leading: const Icon(Icons.account_circle_outlined),
                       title: Text(account.username),
                       trailing: IconButton(
-                        onPressed: () => _removeAccount(account),
+                        onPressed: () => controller.removeAccount(account),
                         icon: const Icon(Icons.close_rounded),
                       ),
-                      onTap: () async {
-                        try {
-                          await _repository.setCurrentAccount(
-                            account.serverUrl,
-                            account.username,
-                          );
-                          unawaited(Get.offAllNamed(StartupPage.routeName));
-                        } catch (error) {
-                          await showErrorDialog(
-                            title: '切换账户失败',
-                            message: errorMessageOf(error),
-                            error: error,
-                          );
-                        }
-                      },
+                      onTap: () => controller.selectAccount(account),
                     ),
                   ),
                 ],

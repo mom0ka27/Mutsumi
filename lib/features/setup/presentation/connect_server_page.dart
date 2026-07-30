@@ -19,13 +19,9 @@ class ConnectServerPage extends StatelessWidget {
   final bool prefillLastServer;
   final bool showBackButton;
 
-  static const routeName = '/setup';
-
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(
-      ConnectServerController(prefillLastServer: prefillLastServer),
-    );
+    final controller = Get.find<ConnectServerController>();
     final colorScheme = Theme.of(context).colorScheme;
 
     return GlassScaffold(

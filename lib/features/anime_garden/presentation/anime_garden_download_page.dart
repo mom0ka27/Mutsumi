@@ -24,7 +24,7 @@ class AnimeGardenDownloadPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(AnimeGardenDownloadController(subject: subject));
+    final controller = Get.find<AnimeGardenDownloadController>();
 
     return GlassScaffold(
       topEdgeFade: true,

@@ -256,7 +256,7 @@ class _IndexPlayerState extends State<IndexPlayer>
               },
               onHorizontalDragUpdate: (details) {
                 final int curSliderPosition =
-                    widget.controller.sliderPostion.value.inMilliseconds;
+                    widget.controller.sliderPosition.value.inMilliseconds;
                 final double scale = 90000 / MediaQuery.sizeOf(context).width;
                 final Duration pos = Duration(
                   milliseconds:
@@ -276,6 +276,10 @@ class _IndexPlayerState extends State<IndexPlayer>
             visible: _interaction.showControls,
             child: BottomBar(
               controller: widget.controller,
+              onPreviousEpisode:
+                  episodeMenu != null && episodeMenu.selectedIndex > 0
+                  ? () => widget.controller.previous()
+                  : null,
               onNextEpisode:
                   episodeMenu != null &&
                       episodeMenu.selectedIndex < episodeMenu.items.length - 1
@@ -299,12 +303,19 @@ class _IndexPlayerState extends State<IndexPlayer>
           _PlayerStatusOverlay(
             alignment: Alignment(0, -0.8),
             visible: _interaction.superSpeed,
-            childBuilder: () => const Row(
+            childBuilder: () => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.fast_forward_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 6),
-                Text('2.0× 倍速播放', style: TextStyle(color: Colors.white)),
+                const Icon(
+                  Icons.fast_forward_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${widget.controller.options.longPressSpeed.toStringAsFixed(1)}× 倍速播放',
+                  style: const TextStyle(color: Colors.white),
+                ),
               ],
             ),
           ),
@@ -312,7 +323,7 @@ class _IndexPlayerState extends State<IndexPlayer>
             alignment: Alignment(0, -0.8),
             visible: widget.controller.wantSeeking,
             childBuilder: () => Text(
-              '${widget.controller.state.position.str}  →  ${widget.controller.sliderPostion.value.str}',
+              '${widget.controller.state.position.str}  →  ${widget.controller.sliderPosition.value.str}',
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
@@ -339,8 +350,7 @@ class _IndexPlayerState extends State<IndexPlayer>
               visible: _episodePanelVisible,
               position: _episodePanelOffset,
               menu: episodeMenu,
-              playingStream: widget.controller.playingStream,
-              initiallyPlaying: widget.controller.state.playing,
+              controller: widget.controller,
               onSelected: (index) => _selectEpisode(index),
               onClose: _closeEpisodePanel,
             ),

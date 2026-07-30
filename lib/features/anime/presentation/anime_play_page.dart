@@ -1,23 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-import '../../../core/logging/app_logger.dart';
 import '../../../core/platform/app_platform.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
-import '../../../core/widgets/error_dialog.dart';
-import '../../../core/network/app_network_error.dart';
-import '../../../player/controller.dart';
-import '../../../player/model/playlist.dart';
-import '../../../player/model/video.dart';
-import '../../../player/model/danmaku.dart';
 import '../../../player/player.dart';
 import '../data/anime_service.dart';
-import 'anime_player_font.dart';
+import 'anime_play_controller.dart';
 
 class AnimePlayPage extends StatefulWidget {
   const AnimePlayPage({
@@ -37,65 +29,17 @@ class AnimePlayPage extends StatefulWidget {
 
 class _AnimePlayPageState extends State<AnimePlayPage>
     with WidgetsBindingObserver {
-  final _animeService = AnimeService();
-  late final IndexPlayerController controller;
+  final _controller = Get.find<AnimePlayController>();
   final _episodeScrollController = ScrollController();
-  Timer? _progressTimer;
-  StreamSubscription<String>? _errorSubscription;
-  late final _WatchProgressSyncer _progressSyncer;
   bool _disposed = false;
-  bool _showingError = false;
   bool _landscapeFullscreenRequested = false;
-  late final Future<void> _playerFontReady;
 
-  int get _currentIndex =>
-      controller.selectedIndex.value ??
-      controller.loadingIndex.value ??
-      widget.initialEpisode.clamp(0, widget.episodes.length - 1);
-  AnimeEpisodeRead get _episode => widget.episodes[_currentIndex];
+  AnimePlayController get controller => _controller;
 
   @override
   void initState() {
     super.initState();
-    controller = IndexPlayerController(
-      playlist: PlayerPlaylist(
-        title: widget.anime.displayName,
-        items: widget.episodes
-            .map(
-              (episode) => PlayerPlaylistItem(
-                id: episode.id,
-                number: episode.index,
-                title: episode.displayName,
-                initialPosition:
-                    widget.anime.watchProgress?.episodeId == episode.id
-                    ? widget.anime.watchProgress?.position
-                    : null,
-                load: () => _loadEpisodeMedia(episode),
-              ),
-            )
-            .toList(growable: false),
-      ),
-      onItemLeaving: _syncProgress,
-    );
-    _playerFontReady = configureAnimePlayerFont(controller.player);
-    if (AppPlatform.isMacOS) {
-      unawaited(controller.enterFullscreen());
-    }
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-    );
     WidgetsBinding.instance.addObserver(this);
-    _progressSyncer = _WatchProgressSyncer(
-      onSync: (snapshot) => _animeService.updateWatchProgress(
-        animeId: widget.anime.id,
-        episodeId: snapshot.episodeId,
-        position: snapshot.position,
-      ),
-    );
-    _errorSubscription = controller.errorStream.listen(_showPlayerError);
     if (widget.episodes.isEmpty) {
       return;
     }
@@ -104,129 +48,26 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         unawaited(_scrollToInitialEpisode());
       }
     });
-    _progressTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _saveProgress(),
-    );
-    unawaited(
-      controller.selectIndex(
-        widget.initialEpisode.clamp(0, widget.episodes.length - 1),
-      ),
-    );
   }
 
   @override
   void dispose() {
     _disposed = true;
-    _progressTimer?.cancel();
-    _errorSubscription?.cancel();
-    _episodeScrollController.dispose();
-    unawaited(_saveProgress());
-    if (controller.isFullScreen.value) {
-      unawaited(controller.exitFullscreen());
-    }
-    controller.pause();
-    controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
+    _episodeScrollController.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      unawaited(_saveProgress());
-    }
-    if (state == AppLifecycleState.resumed &&
-        controller.isFullScreen.value &&
-        !controller.disposed) {
-      controller.restoreFullscreenOrientation();
-    }
-  }
-
-  Future<PlayerMedia> _loadEpisodeMedia(AnimeEpisodeRead episode) async {
-    await _playerFontReady;
-    final fileHash = await _animeService.fetchEpisodeFileHash(
-      widget.anime.id,
-      episode.id,
-    );
-    final subtitlePaths = <String>[];
-    try {
-      final subtitles = await _animeService.listEpisodeSubtitles(
-        widget.anime.id,
-        episode.id,
-      );
-      for (final subtitle in subtitles) {
-        final subtitlePath = await _animeService.downloadEpisodeSubtitle(
-          animeId: widget.anime.id,
-          episodeId: episode.id,
-          filename: subtitle.filename,
-        );
-        if (subtitlePath != null) {
-          subtitlePaths.add(subtitlePath);
-        }
-      }
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        '搜索字幕失败，将继续播放视频',
-        tag: 'AnimePlayer',
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-    return PlayerMedia(
-      video: NetworkVideo(
-        index: episode.index,
-        uri: _animeService.episodeVideoUrl(
-          animeId: widget.anime.id,
-          episodeId: episode.id,
-        ),
-        title: episode.displayName,
-        httpHeaders: _animeService.authHeaders(),
-        danmakuProvider: DandanPlayDanmakuProvider(
-          fileHash: fileHash,
-          fileName: episode.filename,
-          airDate: widget.anime.airDate,
-        ),
-      ),
-      externalSubtitlePaths: subtitlePaths,
-    );
-  }
-
-  Future<void> _showPlayerError(Object error) async {
-    final message = errorMessageOf(error);
-    if (_disposed || _showingError || message.trim().isEmpty) {
-      return;
-    }
-    _showingError = true;
-    await showErrorDialog(title: '播放出错', message: message, error: error);
-    _showingError = false;
+    _controller.handleAppLifecycleState(state);
   }
 
   void _enterFullscreenForLandscape() {
-    if (_disposed || controller.isFullScreen.value) {
+    if (_disposed) {
       return;
     }
-    unawaited(controller.enterFullscreen());
-  }
-
-  Future<void> _saveProgress() async {
-    final snapshot = controller.currentSnapshot;
-    if (controller.disposed || snapshot == null) return;
-    await _syncProgress(snapshot);
-  }
-
-  Future<void> _syncProgress(PlayerPlaybackSnapshot snapshot) async {
-    if (snapshot.position == Duration.zero) return;
-    final episodeId = snapshot.itemId as int;
-    await _progressSyncer.enqueue(
-      _WatchProgressSnapshot(episodeId: episodeId, position: snapshot.position),
-    );
-    widget.anime.watchProgress = WatchProgressRead(
-      episodeId: episodeId,
-      position: snapshot.position,
-    );
+    unawaited(_controller.enterFullscreenForLandscape());
   }
 
   Future<void> _scrollToInitialEpisode() async {
@@ -265,7 +106,8 @@ class _AnimePlayPageState extends State<AnimePlayPage>
           (_) => _enterFullscreenForLandscape(),
         );
       }
-      final fullScreen = controller.isFullScreen.value;
+      final playerController = controller.playerController;
+      final fullScreen = playerController.isFullScreen.value;
       if (fullScreen) {
         return PopScope(
           canPop: !mobile,
@@ -274,13 +116,13 @@ class _AnimePlayPageState extends State<AnimePlayPage>
               return;
             }
             if (mobile) {
-              unawaited(controller.exitFullscreen());
+              unawaited(playerController.exitFullscreen());
             }
           },
           child: Material(
             type: MaterialType.transparency,
             child: IndexPlayer(
-              controller,
+              playerController,
               useOverlay: true,
               allowFullscreenToggle: mobile,
               closePageOnBack: !mobile,
@@ -310,7 +152,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
           child: SafeArea(
             bottom: false,
             child: IndexPlayer(
-              controller,
+              controller.playerController,
               useOverlay: false,
               allowFullscreenToggle: AppPlatform.isMobile,
               autoplayNextEpisode: true,
@@ -333,7 +175,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
 
   Widget _episodeHeader(BuildContext context) {
     return Obx(() {
-      final episode = _episode;
+      final episode = controller.episode;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -358,8 +200,9 @@ class _AnimePlayPageState extends State<AnimePlayPage>
   }
 
   Widget _portraitEpisodeSelector(BuildContext context) {
-    final selectedIndex = controller.selectedIndex.value;
-    final loadingIndex = controller.loadingIndex.value;
+    final playerController = controller.playerController;
+    final selectedIndex = playerController.selectedIndex.value;
+    final loadingIndex = playerController.loadingIndex.value;
     return SingleChildScrollView(
       controller: _episodeScrollController,
       scrollDirection: Axis.horizontal,
@@ -382,7 +225,7 @@ class _AnimePlayPageState extends State<AnimePlayPage>
                 child: InkWell(
                   onTap: selected || loading
                       ? null
-                      : () => unawaited(controller.selectIndex(index)),
+                      : () => unawaited(playerController.selectIndex(index)),
                   borderRadius: BorderRadius.circular(16),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
@@ -460,66 +303,5 @@ class _AnimePlayPageState extends State<AnimePlayPage>
         ],
       ),
     );
-  }
-}
-
-class _WatchProgressSnapshot {
-  const _WatchProgressSnapshot({
-    required this.episodeId,
-    required this.position,
-  });
-
-  final int episodeId;
-  final Duration position;
-
-  @override
-  bool operator ==(Object other) {
-    return other is _WatchProgressSnapshot &&
-        episodeId == other.episodeId &&
-        position.inSeconds == other.position.inSeconds;
-  }
-
-  @override
-  int get hashCode => Object.hash(episodeId, position.inSeconds);
-}
-
-class _WatchProgressSyncer {
-  _WatchProgressSyncer({required this.onSync});
-
-  final Future<void> Function(_WatchProgressSnapshot snapshot) onSync;
-  _WatchProgressSnapshot? _pending;
-  _WatchProgressSnapshot? _lastSynced;
-  Future<void>? _draining;
-
-  Future<void> enqueue(_WatchProgressSnapshot snapshot) {
-    if (snapshot.position == Duration.zero ||
-        snapshot == _pending ||
-        snapshot == _lastSynced) {
-      return _draining ?? Future.value();
-    }
-    _pending = snapshot;
-    return _draining ??= _drain();
-  }
-
-  Future<void> _drain() async {
-    try {
-      while (_pending != null) {
-        final snapshot = _pending!;
-        _pending = null;
-        try {
-          await onSync(snapshot);
-          _lastSynced = snapshot;
-        } catch (error, stackTrace) {
-          AppLogger.error(
-            '播放进度同步失败',
-            tag: 'Anime',
-            error: error,
-            stackTrace: stackTrace,
-          );
-        }
-      }
-    } finally {
-      _draining = null;
-    }
   }
 }

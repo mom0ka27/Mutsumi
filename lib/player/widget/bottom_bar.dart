@@ -9,6 +9,7 @@ import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 
 class BottomBar extends StatelessWidget {
   final IndexPlayerController controller;
+  final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
   final VoidCallback? onToggleEpisodes;
   final bool allowFullscreenToggle;
@@ -16,6 +17,7 @@ class BottomBar extends StatelessWidget {
   const BottomBar({
     super.key,
     required this.controller,
+    this.onPreviousEpisode,
     this.onNextEpisode,
     this.onToggleEpisodes,
     this.allowFullscreenToggle = false,
@@ -55,9 +57,8 @@ class BottomBar extends StatelessWidget {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: progressPadding),
             child: Obx(() {
-              controller.revision;
               return ProgressBar(
-                progress: controller.sliderPostion.value,
+                progress: controller.sliderPosition.value,
                 total: controller.state.duration,
                 baseBarColor: Colors.white.withValues(alpha: 0.2),
                 bufferedBarColor: Colors.white.withValues(alpha: 0.35),
@@ -80,10 +81,8 @@ class BottomBar extends StatelessWidget {
           ),
           Row(
             children: [
-              StreamBuilder<bool>(
-                stream: controller.playingStream,
-                initialData: controller.state.playing,
-                builder: (c, v) => controller.seeking
+              Obx(
+                () => controller.seeking
                     ? Padding(
                         padding: EdgeInsets.symmetric(horizontal: 15),
                         child: SizedBox(
@@ -98,24 +97,30 @@ class BottomBar extends StatelessWidget {
                     : IconButton(
                         onPressed: controller.togglePlayback,
                         icon: Icon(
-                          v.data == false ? Icons.play_arrow : Icons.pause,
+                          controller.state.playing
+                              ? Icons.pause
+                              : Icons.play_arrow,
                           color: Colors.white,
                         ),
                       ),
               ),
-              controller.isFullScreen.value
-                  ? IconButton(
-                      icon: Icon(Icons.skip_next, color: Colors.white),
-                      onPressed: onNextEpisode,
-                      tooltip: '下一集',
-                    )
-                  : SizedBox(),
+              if (controller.isFullScreen.value)
+                IconButton(
+                  icon: const Icon(Icons.skip_previous, color: Colors.white),
+                  onPressed: onPreviousEpisode,
+                  tooltip: '上一集',
+                ),
+              if (controller.isFullScreen.value)
+                IconButton(
+                  icon: const Icon(Icons.skip_next, color: Colors.white),
+                  onPressed: onNextEpisode,
+                  tooltip: '下一集',
+                ),
               SizedBox(width: controlGap),
               Obx(() {
-                controller.revision;
                 final duration = controller.state.duration;
                 return Text(
-                  "${controller.sliderPostion.value.str} / ${duration > Duration.zero ? duration.str : '--:--'}",
+                  "${controller.sliderPosition.value.str} / ${duration > Duration.zero ? duration.str : '--:--'}",
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Colors.white,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -191,7 +196,6 @@ class BottomBar extends StatelessWidget {
               ),
               SizedBox(width: compactControlGap),
               Obx(() {
-                controller.revision;
                 final tracks = controller.state.subtitles;
                 final selected = controller.state.subtitle;
                 return Builder(
@@ -265,11 +269,10 @@ class BottomBar extends StatelessWidget {
   }
 
   Future<void> _showSpeedPicker(BuildContext context, Color accentColor) {
-    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
     return _showPicker<double>(
       context: context,
       accentColor: accentColor,
-      items: speeds.map((speed) {
+      items: controller.options.availableSpeeds.map((speed) {
         final selected = controller.playbackSpeed.value == speed;
         return PopupMenuItem(
           value: speed,

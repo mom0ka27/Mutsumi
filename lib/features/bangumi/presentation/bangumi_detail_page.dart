@@ -5,11 +5,12 @@ import 'package:mutsumi/constants.dart';
 import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/media_detail_overview.dart';
-import '../../../core/widgets/error_dialog.dart';
-import '../../../core/network/app_network_error.dart';
+import '../../anime/data/anime_list_store.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
+import '../../anime_garden/presentation/anime_garden_bindings.dart';
 import '../../anime_garden/presentation/local_add_prepare_page.dart';
 import '../data/bangumi_repository.dart';
+import 'bangumi_detail_controller.dart';
 
 class BangumiDetailPage extends StatefulWidget {
   const BangumiDetailPage({super.key, required this.subject});
@@ -21,121 +22,85 @@ class BangumiDetailPage extends StatefulWidget {
 }
 
 class _BangumiDetailPageState extends State<BangumiDetailPage> {
-  late Future<BangumiSubjectDetail> _detailFuture;
-  bool _showingDetailError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDetail();
-  }
-
-  void _loadDetail() {
-    _detailFuture = BangumiRepository().getSubjectDetail(widget.subject.id);
-  }
-
-  void _showDetailError(Object error) {
-    if (_showingDetailError) return;
-    _showingDetailError = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      await showErrorDialog(
-        title: '详情加载失败',
-        message: errorMessageOf(error),
-        error: error,
-      );
-      if (mounted) _showingDetailError = false;
-    });
-  }
+  final _controller = Get.find<BangumiDetailController>();
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<BangumiSubjectDetail>(
-      future: _detailFuture,
-      initialData: widget.subject is BangumiSubjectDetail
-          ? widget.subject as BangumiSubjectDetail
-          : null,
-      builder: (context, snapshot) {
-        final subject = snapshot.data ?? widget.subject;
-        final detail = snapshot.data;
-
-        if (snapshot.hasError) {
-          _showDetailError(snapshot.error!);
-        }
-        return GlassScaffold(
-          topEdgeFade: true,
-          bottomEdgeFade: false,
-          background: MediaDetailBackground(
-            imageUrl: subject.imageUrl,
-            blurSigma: 16,
-            showGradientWithoutImage: false,
+    return Obx(() {
+      final detail = _controller.detail.value;
+      final subject = detail ?? widget.subject;
+      return GlassScaffold(
+        topEdgeFade: true,
+        bottomEdgeFade: false,
+        background: MediaDetailBackground(
+          imageUrl: subject.imageUrl,
+          blurSigma: 16,
+          showGradientWithoutImage: false,
+        ),
+        statusBarStyle: GlassStatusBarStyle.light,
+        edgeToEdge: true,
+        appBar: GlassAppBar(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: GlassButton(
+            width: 40,
+            height: 40,
+            iconSize: 20,
+            icon: const Icon(Icons.arrow_back),
+            label: '返回',
+            onTap: Get.back,
           ),
-          statusBarStyle: GlassStatusBarStyle.light,
-          edgeToEdge: true,
-          appBar: GlassAppBar(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            leading: GlassButton(
-              width: 40,
-              height: 40,
-              iconSize: 20,
-              icon: const Icon(Icons.arrow_back),
-              label: '返回',
-              onTap: Get.back,
-            ),
-          ),
-          body: CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: context.pageContentPadding(bottom: 120),
-                sliver: SliverToBoxAdapter(
-                  child: MediaDetailOverview(
-                    data: _overviewData(subject, detail),
-                    heroTag: 'cover-${subject.id}',
-                  ),
+        ),
+        body: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: context.pageContentPadding(bottom: 120),
+              sliver: SliverToBoxAdapter(
+                child: MediaDetailOverview(
+                  data: _overviewData(subject, detail),
+                  heroTag: 'cover-${subject.id}',
                 ),
               ),
-              if (snapshot.connectionState != ConnectionState.done)
-                const SliverToBoxAdapter(
-                  child: Center(child: CircularProgressIndicator()),
+            ),
+            if (_controller.loading.value)
+              const SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          ],
+        ),
+        floatingActionButton: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingActionButton.extended(
+                heroTag: 'local-add',
+                onPressed: () => showLocalAddDialog(context, subject: subject),
+                shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
+                label: const Text("添加"),
+                icon: const Icon(Icons.add_rounded),
+              ),
+              const SizedBox(height: 16),
+              FloatingActionButton.extended(
+                heroTag: 'download',
+                onPressed: () => Get.to(
+                  () => AnimeGardenDownloadPage(
+                    subject: subject,
+                    backgroundImageUrl: subject.imageUrl,
+                  ),
+                  binding: AnimeGardenDownloadBinding(
+                    subject: subject,
+                    animeListStore: Get.find<AnimeListStore>(),
+                  ),
                 ),
+                shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
+                label: const Text("下载"),
+                icon: const Icon(Icons.download_rounded),
+              ),
             ],
           ),
-          floatingActionButton: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'local-add',
-                  onPressed: () =>
-                      showLocalAddDialog(context, subject: subject),
-                  shape: LiquidRoundedRectangle(
-                    borderRadius: Constants.radius.x,
-                  ),
-                  label: const Text("添加"),
-                  icon: const Icon(Icons.add_rounded),
-                ),
-                const SizedBox(height: 16),
-                FloatingActionButton.extended(
-                  heroTag: 'download',
-                  onPressed: () => Get.to(
-                    () => AnimeGardenDownloadPage(
-                      subject: subject,
-                      backgroundImageUrl: subject.imageUrl,
-                    ),
-                  ),
-                  shape: LiquidRoundedRectangle(
-                    borderRadius: Constants.radius.x,
-                  ),
-                  label: const Text("下载"),
-                  icon: const Icon(Icons.download_rounded),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+        ),
+      );
+    });
   }
 
   MediaDetailOverviewData _overviewData(

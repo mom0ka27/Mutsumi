@@ -28,28 +28,49 @@ class BangumiRepository {
     return BangumiSubjectDetail.fromJson(data);
   }
 
-  Future<List<BangumiSubject>> searchAnime(String keyword) async {
+  Future<BangumiSearchPage> searchAnime({
+    required String keyword,
+    int limit = 20,
+    int offset = 0,
+    BangumiSearchFilter filter = const BangumiSearchFilter(types: [2]),
+  }) async {
     final trimmedKeyword = keyword.trim();
     if (trimmedKeyword.isEmpty) {
-      return [];
+      return const BangumiSearchPage(
+        total: 0,
+        limit: 20,
+        offset: 0,
+        subjects: [],
+      );
     }
 
-    AppLogger.info('搜索动画 keyword=$trimmedKeyword', tag: 'Bangumi');
+    AppLogger.info(
+      '搜索动画 keyword=$trimmedKeyword offset=$offset limit=$limit',
+      tag: 'Bangumi',
+    );
     final response = await _dio.post<Map<String, dynamic>>(
       '/v0/search/subjects',
       data: {
         'keyword': trimmedKeyword,
         'sort': 'match',
-        'filter': {
-          'type': [2],
-        },
+        'filter': filter.toJson(),
       },
-      queryParameters: const {'limit': 20, 'offset': 0},
+      queryParameters: {'limit': limit, 'offset': offset},
     );
 
     final results = _parseDataList(response.data, BangumiSubject.fromJson);
-    AppLogger.info('搜索完成 count=${results.length}', tag: 'Bangumi');
-    return results;
+    final body = response.data;
+    final page = BangumiSearchPage(
+      total: body?['total'] as int? ?? results.length,
+      limit: body?['limit'] as int? ?? limit,
+      offset: body?['offset'] as int? ?? offset,
+      subjects: results,
+    );
+    AppLogger.info(
+      '搜索完成 count=${results.length} total=${page.total}',
+      tag: 'Bangumi',
+    );
+    return page;
   }
 
   List<T> _parseDataList<T>(
@@ -62,6 +83,33 @@ class BangumiRepository {
     }
     return data.whereType<Map<String, dynamic>>().map(fromJson).toList();
   }
+}
+
+class BangumiSearchFilter {
+  const BangumiSearchFilter({required this.types});
+
+  final List<int> types;
+
+  Map<String, dynamic> toJson() {
+    return {'type': types};
+  }
+}
+
+class BangumiSearchPage {
+  const BangumiSearchPage({
+    required this.total,
+    required this.limit,
+    required this.offset,
+    required this.subjects,
+  });
+
+  final int total;
+  final int limit;
+  final int offset;
+  final List<BangumiSubject> subjects;
+
+  bool get hasMore => offset + subjects.length < total;
+  int get nextOffset => offset + subjects.length;
 }
 
 class BangumiEpisode {

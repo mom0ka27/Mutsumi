@@ -7,130 +7,17 @@ import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_glass_settings.dart';
-import '../../../core/widgets/error_dialog.dart';
-import '../../../core/network/app_network_error.dart';
 import '../data/users_repository.dart';
+import 'users_management_controller.dart';
 
-class UsersManagementPage extends StatefulWidget {
+class UsersManagementPage extends GetView<UsersManagementController> {
   const UsersManagementPage({super.key});
 
-  @override
-  State<UsersManagementPage> createState() => _UsersManagementPageState();
-}
-
-class _UsersManagementPageState extends State<UsersManagementPage> {
-  final _repository = UsersRepository();
-  final _users = <ManagedUser>[].obs;
-  final _loading = true.obs;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    _loading.value = true;
-    try {
-      _users.assignAll(await _repository.listUsers());
-    } catch (error) {
-      await showErrorDialog(
-        title: '加载失败',
-        message: errorMessageOf(error),
-        error: error,
-      );
-    } finally {
-      _loading.value = false;
-    }
-  }
-
   Future<void> _edit([ManagedUser? user]) async {
-    final username = TextEditingController(text: user?.username);
-    final password = TextEditingController();
-    final permission = (user?.permissionGroup ?? 'User').obs;
-    final confirmed = await showAppDialog<bool>(
-      AlertDialog(
-        title: Text(user == null ? '新增用户' : '编辑用户'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: username,
-                decoration: const InputDecoration(labelText: '用户名'),
-              ),
-              TextField(
-                controller: password,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: user == null ? '密码' : '新密码（留空不修改）',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Obx(
-                () => DropdownButtonFormField<String>(
-                  initialValue: permission.value,
-                  decoration: const InputDecoration(labelText: '权限组'),
-                  items: const ['Admin', 'User', 'Guest']
-                      .map(
-                        (value) =>
-                            DropdownMenuItem(value: value, child: Text(value)),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) permission.value = value;
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          Builder(
-            builder: (context) => TextButton(
-              onPressed: () => AppDialog.dismiss(context, false),
-              child: const Text('取消'),
-            ),
-          ),
-          Builder(
-            builder: (context) => FilledButton(
-              onPressed: () => AppDialog.dismiss(context, true),
-              child: const Text('保存'),
-            ),
-          ),
-        ],
-      ),
+    controller.beginEdit(user);
+    await showAppDialog<void>(
+      _UserEditDialog(controller: controller, user: user),
     );
-    if (confirmed == true &&
-        username.text.trim().isNotEmpty &&
-        (user != null || password.text.isNotEmpty)) {
-      try {
-        if (user == null) {
-          await _repository.createUser(
-            username: username.text.trim(),
-            password: password.text,
-            permissionGroup: permission.value,
-          );
-        } else {
-          await _repository.updateUser(
-            user.id,
-            username: username.text.trim(),
-            permissionGroup: permission.value,
-            password: password.text,
-          );
-        }
-        await _load();
-        await showInfoDialog(title: '保存成功', message: '用户信息已更新');
-      } catch (error) {
-        await showErrorDialog(
-          title: '保存失败',
-          message: errorMessageOf(error),
-          error: error,
-        );
-      }
-    }
-    username.dispose();
-    password.dispose();
   }
 
   Future<void> _delete(ManagedUser user) async {
@@ -155,17 +42,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
       ),
     );
     if (confirmed == true) {
-      try {
-        await _repository.deleteUser(user.id);
-        await _load();
-        await showInfoDialog(title: '删除成功', message: '用户已删除');
-      } catch (error) {
-        await showErrorDialog(
-          title: '删除失败',
-          message: errorMessageOf(error),
-          error: error,
-        );
-      }
+      await controller.delete(user);
     }
   }
 
@@ -195,17 +72,17 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
         child: const Icon(Icons.person_add_rounded),
       ),
       body: Obx(() {
-        if (_loading.value) {
+        if (controller.loading.value) {
           return const Center(child: CircularProgressIndicator());
         }
         return RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: controller.load,
           child: ListView.separated(
             padding: context.pageContentPadding(horizontal: 16, bottom: 16),
-            itemCount: _users.length,
+            itemCount: controller.users.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final user = _users[index];
+              final user = controller.users[index];
               final colors = Theme.of(context).colorScheme;
               return GlassCard(
                 useOwnLayer: true,
@@ -246,6 +123,84 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
           ),
         );
       }),
+    );
+  }
+}
+
+class _UserEditDialog extends StatefulWidget {
+  const _UserEditDialog({required this.controller, required this.user});
+
+  final UsersManagementController controller;
+  final ManagedUser? user;
+
+  @override
+  State<_UserEditDialog> createState() => _UserEditDialogState();
+}
+
+class _UserEditDialogState extends State<_UserEditDialog> {
+  bool _saving = false;
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final saved = await widget.controller.save();
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (saved) AppDialog.dismiss(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    return AlertDialog(
+      title: Text(widget.user == null ? '新增用户' : '编辑用户'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller.usernameController,
+              decoration: const InputDecoration(labelText: '用户名'),
+            ),
+            TextField(
+              controller: controller.passwordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: widget.user == null ? '密码' : '新密码（留空不修改）',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Obx(
+              () => DropdownButtonFormField<String>(
+                initialValue: controller.permissionGroup.value,
+                decoration: const InputDecoration(labelText: '权限组'),
+                items: const ['Admin', 'User', 'Guest']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
+                onChanged: _saving
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          controller.permissionGroup.value = value;
+                        }
+                      },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => AppDialog.dismiss(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? '保存中...' : '保存'),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -7,10 +5,9 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../../constants.dart';
 import '../../../player/extension/duration.dart';
 import '../../../core/extensions/build_context.dart';
-import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/app_glass_settings.dart';
-import '../../../core/widgets/error_dialog.dart';
 import '../../../core/widgets/media_summary_card.dart';
+import '../../../app/page_bindings.dart';
 import '../data/anime_list_store.dart';
 import '../data/anime_service.dart';
 import 'anime_detail_page.dart';
@@ -27,48 +24,17 @@ class AnimeHomeView extends StatefulWidget {
 class _AnimeHomeViewState extends State<AnimeHomeView>
     with AutomaticKeepAliveClientMixin {
   AnimeListStore get store => widget.store;
-  var _showingError = false;
 
   @override
   bool get wantKeepAlive => true;
 
-  Future<void> _refresh() async {
-    try {
-      await store.refresh();
-    } catch (error) {
-      unawaited(_showErrorDialog(error));
-    }
-  }
-
-  Future<void> _showErrorDialog(Object error) async {
-    if (_showingError || !mounted) {
-      return;
-    }
-    _showingError = true;
-    await showErrorDialog(
-      title: '加载 Anime 失败',
-      message: errorMessageOf(error),
-      error: error,
-    );
-    _showingError = false;
-  }
-
   Future<void> _showCreateSeriesDialog() async {
-    try {
-      final request = await showDialog<_CreateSeriesRequest>(
-        context: context,
-        builder: (_) => _CreateSeriesDialog(animes: store.ungroupedAnimes),
-      );
-      if (request == null) return;
-      await store.createSeries(name: request.name, animeIds: request.animeIds);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Series 已新建')));
-      }
-    } catch (error) {
-      unawaited(_showErrorDialog(error));
-    }
+    final request = await showDialog<_CreateSeriesRequest>(
+      context: context,
+      builder: (_) => _CreateSeriesDialog(animes: store.ungroupedAnimes),
+    );
+    if (request == null) return;
+    await store.createSeries(name: request.name, animeIds: request.animeIds);
   }
 
   @override
@@ -95,7 +61,7 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
         body: store.isLoading.value
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
-                onRefresh: _refresh,
+                onRefresh: store.refresh,
                 child: itemCount == 0
                     ? ListView(
                         padding: context.pageContentPadding(horizontal: 356),
@@ -106,12 +72,12 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
                           if (index < store.series.length) {
                             return _SeriesCard(
                               series: store.series[index],
-                              refresh: _refresh,
+                              refresh: store.refresh,
                             );
                           }
                           return _AnimeCard(
                             anime: ungrouped[index - store.series.length],
-                            refresh: _refresh,
+                            refresh: store.refresh,
                           );
                         },
                         separatorBuilder: (_, _) => const SizedBox(height: 14),
@@ -294,6 +260,7 @@ class _AnimeCard extends StatelessWidget {
       onTap: () async {
         final deleted = await Get.to<bool>(
           () => AnimeDetailPage(animeId: anime.id, initialAnime: anime),
+          binding: AnimeDetailBinding(animeId: anime.id, initialAnime: anime),
         );
         if (deleted == true) {
           await refresh();

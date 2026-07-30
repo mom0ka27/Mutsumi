@@ -15,5 +15,5 @@ abstract final class AppPlatform {
           current == TargetPlatform.windows ||
           current == TargetPlatform.linux);
 
-  static bool get isMacOS => !isWeb && current == TargetPlatform.macOS;
+  static bool get isIOS => !isWeb && current == TargetPlatform.iOS;
 }

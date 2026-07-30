@@ -6,6 +6,7 @@ import 'package:mutsumi/constants.dart';
 import '../../../core/widgets/media_summary_card.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/extensions/build_context.dart';
+import '../../../app/page_bindings.dart';
 import '../../anime/data/anime_list_store.dart';
 import '../../anime/data/anime_service.dart';
 import '../../anime/presentation/anime_detail_page.dart';
@@ -24,24 +25,23 @@ class BangumiSearchView extends StatefulWidget {
 
 class _BangumiSearchViewState extends State<BangumiSearchView>
     with AutomaticKeepAliveClientMixin {
+  final _controller = Get.find<BangumiSearchController>();
+
   @override
   bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final controller = Get.put(
-      BangumiSearchController(animeListStore: widget.store),
-    );
-
     final padding = context.homeContentPadding();
 
     return CustomScrollView(
+      controller: _controller.scrollController,
       slivers: [
         SliverPadding(
           padding: padding.copyWith(bottom: 16),
           sliver: SliverToBoxAdapter(
-            child: _SearchHeader(controller: controller),
+            child: _SearchHeader(controller: _controller),
           ),
         ),
         Obx(() {
@@ -49,8 +49,8 @@ class _BangumiSearchViewState extends State<BangumiSearchView>
             padding: padding.copyWith(top: 0),
             sliver: SliverList.separated(
               itemBuilder: (context, index) {
-                final subject = controller.results[index];
-                final existingAnime = controller.existingAnimeMap[subject.id];
+                final subject = _controller.results[index];
+                final existingAnime = _controller.existingAnimeMap[subject.id];
                 return _SubjectCard(
                   key: ValueKey('bangumi-subject-${subject.id}'),
                   subject: subject,
@@ -58,10 +58,11 @@ class _BangumiSearchViewState extends State<BangumiSearchView>
                 );
               },
               separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemCount: controller.results.length,
+              itemCount: _controller.results.length,
             ),
           );
         }),
+        _SearchFooter(controller: _controller, padding: padding),
       ],
     );
   }
@@ -143,8 +144,96 @@ class _SearchHeader extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              _SearchFilters(controller: controller),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchFilters extends StatelessWidget {
+  const _SearchFilters({required this.controller});
+
+  final BangumiSearchController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      type: MaterialType.transparency,
+      borderRadius: BorderRadius.all(Constants.radius),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        shape: const Border(),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        leading: const Icon(Icons.tune_rounded),
+        title: const Text('类型筛选'),
+        children: [
+          Obx(
+            () => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: const {1: '书籍', 2: '动画', 3: '音乐', 4: '游戏', 6: '三次元'}
+                  .entries
+                  .map(
+                    (entry) => FilterChip(
+                      label: Text(entry.value),
+                      selected: controller.selectedTypes.contains(entry.key),
+                      onSelected: (_) => controller.toggleType(entry.key),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              FilledButton.icon(
+                onPressed: controller.applyFilters,
+                icon: const Icon(Icons.search_rounded),
+                label: const Text('应用筛选'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchFooter extends StatelessWidget {
+  const _SearchFooter({required this.controller, required this.padding});
+
+  final BangumiSearchController controller;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.loading.value || controller.results.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    return SliverPadding(
+      padding: padding.copyWith(top: 18, bottom: 28),
+      sliver: SliverToBoxAdapter(
+        child: Center(
+          child: controller.loadingMore.value
+              ? const CircularProgressIndicator()
+              : controller.hasMore.value
+              ? OutlinedButton.icon(
+                  onPressed: controller.loadMore,
+                  icon: const Icon(Icons.expand_more_rounded),
+                  label: Text(
+                    '加载更多（已显示 ${controller.results.length}/${controller.total.value}）',
+                  ),
+                )
+              : Text(
+                  '已显示全部 ${controller.results.length} 条结果',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
         ),
       ),
     );
@@ -191,9 +280,16 @@ class _SubjectCard extends StatelessWidget {
               animeId: existingAnime!.id,
               initialAnime: existingAnime,
             ),
+            binding: AnimeDetailBinding(
+              animeId: existingAnime!.id,
+              initialAnime: existingAnime,
+            ),
           );
         } else {
-          Get.to(() => BangumiDetailPage(subject: subject));
+          Get.to(
+            () => BangumiDetailPage(subject: subject),
+            binding: BangumiDetailBinding(subject: subject),
+          );
         }
       },
     );

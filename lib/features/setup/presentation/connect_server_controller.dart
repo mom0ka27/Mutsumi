@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/error_dialog.dart';
+import '../../../app/page_bindings.dart';
 
 import '../../auth/presentation/login_page.dart';
 import '../../settings/data/settings_repository.dart';
@@ -10,10 +11,13 @@ import '../data/setup_service.dart';
 import 'create_admin_page.dart';
 
 class ConnectServerController extends GetxController {
-  ConnectServerController({this.prefillLastServer = true});
+  ConnectServerController({
+    this.prefillLastServer = true,
+    SettingsRepository? settingsRepository,
+  }) : settingsRepository = settingsRepository ?? SettingsRepository();
 
   final bool prefillLastServer;
-  final settingsRepository = SettingsRepository();
+  final SettingsRepository settingsRepository;
   final scheme = 'http'.obs;
   final checking = false.obs;
 
@@ -98,7 +102,8 @@ class ConnectServerController extends GetxController {
       final status = await setupService.getStatus();
       if (status.initialized) {
         await Get.to(
-          () => LoginPage(
+          () => const LoginPage(),
+          binding: LoginBinding(
             serverUrl: serverUrl,
             certificateSha256: certificateSha256,
             serverName: status.serverName,
@@ -106,7 +111,8 @@ class ConnectServerController extends GetxController {
         );
       } else {
         await Get.to(
-          () => CreateAdminPage(
+          () => const CreateAdminPage(),
+          binding: CreateAdminBinding(
             serverUrl: serverUrl,
             certificateSha256: certificateSha256,
             initialServerName: status.serverName,

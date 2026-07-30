@@ -1,13 +1,19 @@
-import 'package:get/get.dart';
-
 import '../../settings/data/settings_repository.dart';
 import '../data/auth_service.dart';
 import 'current_user_controller.dart';
 
 class AuthSession {
-  AuthSession._();
+  AuthSession({
+    SettingsRepository? settingsRepository,
+    CurrentUserController? currentUserController,
+  }) : _settingsRepository = settingsRepository ?? SettingsRepository(),
+       _currentUserController =
+           currentUserController ?? CurrentUserController();
 
-  static Future<void> establish({
+  final SettingsRepository _settingsRepository;
+  final CurrentUserController _currentUserController;
+
+  Future<void> establish({
     required String serverUrl,
     required String username,
     required String password,
@@ -15,7 +21,7 @@ class AuthSession {
     String? certificateFingerprint,
     String? serverName,
   }) async {
-    await SettingsRepository().saveLogin(
+    await _settingsRepository.saveLogin(
       serverUrl: serverUrl,
       username: username,
       password: password,
@@ -24,8 +30,6 @@ class AuthSession {
       certificateFingerprint: certificateFingerprint,
       serverName: serverName,
     );
-    Get.find<CurrentUserController>().setPermissionGroup(
-      result.permissionGroup,
-    );
+    _currentUserController.setPermissionGroup(result.permissionGroup);
   }
 }

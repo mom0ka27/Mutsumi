@@ -14,12 +14,48 @@ import 'model/playlist.dart';
 import 'model/video.dart' as models;
 
 class PlayerState {
-  Duration position = Duration.zero;
-  Duration duration = Duration.zero;
-  bool buffering = false;
-  bool playing = false;
-  List<PlayerSubtitleTrack> subtitles = const [];
-  PlayerSubtitleTrack? subtitle;
+  final _position = Duration.zero.obs;
+  final _duration = Duration.zero.obs;
+  final _buffering = false.obs;
+  final _playing = false.obs;
+  final _subtitles = Rx<List<PlayerSubtitleTrack>>(const []);
+  final _subtitle = Rx<PlayerSubtitleTrack?>(null);
+
+  Duration get position => _position.value;
+  Duration get duration => _duration.value;
+  bool get buffering => _buffering.value;
+  bool get playing => _playing.value;
+  List<PlayerSubtitleTrack> get subtitles => _subtitles.value;
+  PlayerSubtitleTrack? get subtitle => _subtitle.value;
+
+  void updatePlayback({
+    Duration? position,
+    Duration? duration,
+    bool? buffering,
+    bool? playing,
+  }) {
+    if (position != null) _position.value = position;
+    if (duration != null) _duration.value = duration;
+    if (buffering != null) _buffering.value = buffering;
+    if (playing != null) _playing.value = playing;
+  }
+
+  void updateSubtitles(
+    List<PlayerSubtitleTrack> subtitles,
+    PlayerSubtitleTrack? subtitle,
+  ) {
+    _subtitles.value = subtitles;
+    _subtitle.value = subtitle;
+  }
+
+  void reset() {
+    _position.value = Duration.zero;
+    _duration.value = Duration.zero;
+    _buffering.value = false;
+    _playing.value = false;
+    _subtitles.value = const [];
+    _subtitle.value = null;
+  }
 }
 
 class PlayerSubtitleTrack {
@@ -39,15 +75,12 @@ class PlayerSubtitleTrack {
 }
 
 class IndexPlayerController {
-  final _player = ErikaPlayer();
+  late final ErikaPlayer _player;
   final IndexPlayerOptions options;
   final PlayerPlaylist playlist;
   final Future<void> Function(PlayerPlaybackSnapshot snapshot)? onItemLeaving;
   final _state = PlayerState();
-  final _revision = 0.obs;
-  final _playing = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
-  final _events = StreamController<ErikaPlayerEvent>.broadcast();
   final _completed = StreamController<void>.broadcast();
   final GlobalKey _videoKey = GlobalKey();
 
@@ -57,7 +90,7 @@ class IndexPlayerController {
   final danmakuCount = (-1).obs;
   final danmakuEpisodeId = RxnInt();
   final Rx<bool> wantSeeking = false.obs;
-  final Rx<Duration> sliderPostion = Rx(Duration.zero);
+  final Rx<Duration> sliderPosition = Rx(Duration.zero);
   final Rx<bool> isFullScreen = false.obs;
   final Rx<bool> debugHudEnabled = false.obs;
   final Rx<bool> debugHudUpdating = false.obs;
@@ -70,11 +103,10 @@ class IndexPlayerController {
   StreamSubscription<ErikaPlayerEvent>? _eventSubscription;
   Future<void>? _fullscreenTransition;
   bool _disposed = false;
-  bool _seeking = false;
+  final _seeking = false.obs;
   int? _lastDanmakuSecond;
   int _videoGeneration = 0;
   bool _playbackCompleted = false;
-  bool _resumeAfterSeek = false;
   Completer<Duration>? _durationCompleter;
 
   IndexPlayerController({
@@ -82,6 +114,7 @@ class IndexPlayerController {
     this.options = const IndexPlayerOptions(),
     this.onItemLeaving,
   }) {
+    _player = ErikaPlayer(allowBackgroundPlayback: options.backgroundPlayback);
     _eventSubscription = _player.events.listen(_handleEvent);
   }
 
@@ -90,15 +123,14 @@ class IndexPlayerController {
   GlobalKey get videoKey => _videoKey;
   Rx<models.Video?> get video => _video;
   bool get disposed => _disposed;
-  bool get seeking => _seeking;
-  Stream<bool> get playingStream => _playing.stream;
+  bool get seeking => _seeking.value;
   Stream<String> get errorStream => _errors.stream;
-  Stream<ErikaPlayerEvent> get eventStream => _events.stream;
   Stream<void> get completedStream => _completed.stream;
-  int get revision => _revision.value;
   bool get hasNext =>
       selectedIndex.value != null &&
       selectedIndex.value! < playlist.items.length - 1;
+  bool get hasPrevious =>
+      selectedIndex.value != null && selectedIndex.value! > 0;
   PlayerPlaylistItem? get selectedItem {
     final index = selectedIndex.value;
     return index == null ? null : playlist.items[index];
@@ -116,31 +148,32 @@ class IndexPlayerController {
 
   void _handleEvent(ErikaPlayerEvent event) {
     if (_disposed) return;
+    if (event.kind == ErikaEventKind.systemMediaNavigationRequested) {
+      unawaited(_handleSystemMediaNavigation(event.systemMediaCommand));
+      return;
+    }
     if (event.kind == ErikaEventKind.positionChanged) {
-      _state.position = event.position;
-      if (!_seeking) sliderPostion.value = event.position;
+      _state.updatePlayback(position: event.position);
+      if (!seeking) sliderPosition.value = event.position;
     }
     if (event.kind == ErikaEventKind.durationChanged) {
-      _state.duration = event.duration;
+      _state.updatePlayback(duration: event.duration);
       final completer = _durationCompleter;
       if (completer != null && !completer.isCompleted) {
         completer.complete(event.duration);
       }
     }
-    _state.buffering = event.buffering;
+    _state.updatePlayback(buffering: event.buffering);
     if (event.state == ErikaPlaybackState.playing) {
-      _state.playing = true;
+      _state.updatePlayback(playing: true);
     } else if (event.state == ErikaPlaybackState.paused ||
         event.state == ErikaPlaybackState.stopped) {
-      _state.playing = false;
+      _state.updatePlayback(playing: false);
     }
     if (event.kind == ErikaEventKind.tracksChanged ||
         event.kind == ErikaEventKind.trackSelectionChanged) {
       _updateTracks(event.trackList, event.trackSelection.subtitle);
     }
-    _revision.value++;
-    _playing.add(_state.playing);
-    _events.add(event);
     if (event.error != null && event.error!.isNotEmpty) {
       _errors.add(event.error!);
     }
@@ -153,6 +186,31 @@ class IndexPlayerController {
       _completed.add(null);
     }
     _pushDanmaku(event.position);
+  }
+
+  Future<void> _handleSystemMediaNavigation(
+    ErikaSystemMediaCommand? command,
+  ) async {
+    if (_disposed || loadingIndex.value != null) return;
+    switch (command) {
+      case ErikaSystemMediaCommand.previous:
+        await previous();
+      case ErikaSystemMediaCommand.next:
+        await next();
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _syncSystemMediaNavigation({required bool switching}) {
+    final index = selectedIndex.value;
+    return _player
+        .setSystemMediaNavigation(
+          previousEnabled: !switching && index != null && index > 0,
+          nextEnabled:
+              !switching && index != null && index < playlist.items.length - 1,
+        )
+        .then<void>((_) {}, onError: (_, _) {});
   }
 
   void _updateTracks(List<ErikaTrackInfo> tracks, int? selectedId) {
@@ -168,11 +226,11 @@ class IndexPlayerController {
             ),
           ),
     ];
-    _state.subtitles = subtitles;
-    _state.subtitle = subtitles.firstWhere(
+    final subtitle = subtitles.firstWhere(
       (track) => track.id == (selectedId ?? -1),
       orElse: () => subtitles.first,
     );
+    _state.updateSubtitles(subtitles, subtitle);
   }
 
   void _pushDanmaku(Duration position) {
@@ -190,8 +248,10 @@ class IndexPlayerController {
     if (_disposed || index < 0 || index >= playlist.items.length) return;
     if (index == selectedIndex.value || index == loadingIndex.value) return;
     final generation = ++_videoGeneration;
+    final previousIndex = selectedIndex.value;
     final snapshot = currentSnapshot;
     loadingIndex.value = index;
+    unawaited(_syncSystemMediaNavigation(switching: true));
     if (snapshot != null && snapshot.position > Duration.zero) {
       await onItemLeaving?.call(snapshot);
       if (_disposed || generation != _videoGeneration) return;
@@ -205,13 +265,16 @@ class IndexPlayerController {
       if (_disposed || generation != _videoGeneration) return;
       selectedIndex.value = index;
       await play();
+      unawaited(_syncSystemMediaNavigation(switching: false));
     } catch (error) {
       if (!_disposed && generation == _videoGeneration) {
+        selectedIndex.value = previousIndex;
         _errors.add(error.toString());
       }
     } finally {
       if (!_disposed && generation == _videoGeneration) {
         loadingIndex.value = null;
+        unawaited(_syncSystemMediaNavigation(switching: false));
       }
     }
   }
@@ -249,6 +312,11 @@ class IndexPlayerController {
       await _player.open(
         video.uri.toString(),
         httpHeaders: video is models.NetworkVideo ? video.httpHeaders : null,
+        metadata: ErikaMediaMetadata(
+          title: video.title,
+          artist: playlist.title,
+          artwork: video.artwork,
+        ),
       );
       if (generation != _videoGeneration || _disposed) return;
       await durationCompleter.future.timeout(
@@ -291,14 +359,8 @@ class IndexPlayerController {
   }
 
   void _resetPlaybackState() {
-    _state.position = Duration.zero;
-    _state.duration = Duration.zero;
-    _state.buffering = false;
-    _state.playing = false;
-    _state.subtitles = const [];
-    _state.subtitle = null;
-    sliderPostion.value = Duration.zero;
-    _revision.value++;
+    _state.reset();
+    sliderPosition.value = Duration.zero;
   }
 
   void setDanmakuController(DanmakuController controller) {
@@ -345,15 +407,14 @@ class IndexPlayerController {
 
   void beginSeeking() {
     if (!_disposed) {
-      _resumeAfterSeek = _state.playing;
-      _seeking = true;
+      _seeking.value = true;
       wantSeeking.value = true;
     }
   }
 
   void updateSeekingPosition(Duration position) {
     if (_disposed) return;
-    sliderPostion.value = position < Duration.zero
+    sliderPosition.value = position < Duration.zero
         ? Duration.zero
         : position > _state.duration
         ? _state.duration
@@ -362,17 +423,15 @@ class IndexPlayerController {
 
   Future<void> endSeeking([Duration? position]) async {
     if (position != null) updateSeekingPosition(position);
-    await seek(sliderPostion.value);
+    await seek(sliderPosition.value);
   }
 
   Future<void> seek(Duration position) async {
     if (_disposed) return;
-    _seeking = true;
+    _seeking.value = true;
     wantSeeking.value = false;
     await _player.seek(position < Duration.zero ? Duration.zero : position);
-    if (_resumeAfterSeek) await _player.play();
-    _resumeAfterSeek = false;
-    _seeking = false;
+    _seeking.value = false;
     _resetDanmakuSecond();
   }
 
@@ -511,14 +570,16 @@ class IndexPlayerController {
 
   void _resetDanmakuSecond() => _lastDanmakuSecond = null;
 
-  Future<void> dispose() async {
+  Future<void> close() async {
     if (_disposed) return;
+    await _player.setSystemMediaNavigation(
+      previousEnabled: false,
+      nextEnabled: false,
+    );
     _disposed = true;
     await _eventSubscription?.cancel();
     await _player.dispose();
-    await _playing.close();
     await _errors.close();
-    await _events.close();
     await _completed.close();
     _danmakuController?.clear();
     _danmakuController = null;

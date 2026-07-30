@@ -6,11 +6,11 @@ import '../../../core/extensions/build_context.dart';
 
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/error_dialog.dart';
-import '../../../core/network/app_network_error.dart';
 import '../../../core/window/playback_window.dart';
 import '../../../core/widgets/media_detail_overview.dart';
-import '../../bangumi/data/bangumi_repository.dart';
+import '../../../app/page_bindings.dart';
 import '../data/anime_service.dart';
+import 'anime_detail_controller.dart';
 import 'anime_play_page.dart';
 
 class AnimeDetailPage extends StatefulWidget {
@@ -24,163 +24,119 @@ class AnimeDetailPage extends StatefulWidget {
 }
 
 class _AnimeDetailPageState extends State<AnimeDetailPage> {
-  final _animeService = AnimeService();
-  late Future<AnimeRead> _future;
-  final _deleting = false.obs;
-  final _refreshing = false.obs;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _animeService.getAnime(widget.animeId);
-  }
+  final _controller = Get.find<AnimeDetailController>();
 
   @override
   Widget build(BuildContext context) {
-    final initial = widget.initialAnime;
-    return FutureBuilder<AnimeRead>(
-      future: _future,
-      initialData: initial,
-      builder: (context, snapshot) {
-        final anime = snapshot.data ?? initial;
-        if (anime == null) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    return Obx(() {
+      final anime = _controller.anime.value;
+      if (anime == null) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
 
-        return GlassScaffold(
-          topEdgeFade: true,
-          bottomEdgeFade: false,
-          background: MediaDetailBackground(
-            imageUrl: anime.imageUrl,
-            blurSigma: 24,
-            showGradientWithoutImage: true,
+      return GlassScaffold(
+        topEdgeFade: true,
+        bottomEdgeFade: false,
+        background: MediaDetailBackground(
+          imageUrl: anime.imageUrl,
+          blurSigma: 24,
+          showGradientWithoutImage: true,
+        ),
+        statusBarStyle: GlassStatusBarStyle.light,
+        edgeToEdge: true,
+        appBar: GlassAppBar(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: GlassButton(
+            width: 40,
+            height: 40,
+            iconSize: 20,
+            icon: const Icon(Icons.arrow_back),
+            label: '返回',
+            onTap: Get.back,
           ),
-          statusBarStyle: GlassStatusBarStyle.light,
-          edgeToEdge: true,
-          appBar: GlassAppBar(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            leading: GlassButton(
-              width: 40,
-              height: 40,
-              iconSize: 20,
-              icon: const Icon(Icons.arrow_back),
-              label: '返回',
-              onTap: Get.back,
+          actions: [
+            Obx(
+              () => _controller.refreshing.value
+                  ? SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : GlassButton(
+                      width: 40,
+                      height: 40,
+                      iconSize: 20,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: '刷新番剧信息',
+                      onTap: _controller.refreshAnime,
+                    ),
             ),
-            actions: [
-              Obx(
-                () => _refreshing.value
-                    ? SizedBox.square(
+            SizedBox(width: 2),
+            Obx(
+              () => _controller.deleting.value
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox.square(
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : GlassButton(
-                        width: 40,
-                        height: 40,
-                        iconSize: 20,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: '刷新番剧信息',
-                        onTap: () => _refreshAnime(anime),
                       ),
+                    )
+                  : GlassButton(
+                      width: 40,
+                      height: 40,
+                      iconSize: 20,
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: '删除番剧',
+                      onTap: () => _deleteAnime(anime),
+                    ),
+            ),
+          ],
+        ),
+        body: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: context.pageContentPadding(bottom: 120),
+              sliver: SliverToBoxAdapter(
+                child: MediaDetailOverview(
+                  data: _overviewData(anime),
+                  heroTag: 'cover-${anime.bangumiId}',
+                  beforeSummary: _watchProgress(anime),
+                ),
               ),
-              SizedBox(width: 2),
-              Obx(
-                () => _deleting.value
-                    ? const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : GlassButton(
-                        width: 40,
-                        height: 40,
-                        iconSize: 20,
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: '删除番剧',
-                        onTap: () => _deleteAnime(anime),
+            ),
+            if (_controller.loading.value)
+              const SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          ],
+        ),
+        floatingActionButton: anime.episodes.isEmpty
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () async {
+                  final windowLease = await PlaybackWindow.enter();
+                  try {
+                    await Get.to(
+                      () => AnimePlayPage(
+                        anime: anime,
+                        episodes: anime.episodes,
+                        initialEpisode: _initialEpisode(anime),
                       ),
+                      binding: AnimePlayBinding(
+                        anime: anime,
+                        episodes: anime.episodes,
+                        initialEpisode: _initialEpisode(anime),
+                      ),
+                    );
+                  } finally {
+                    await windowLease.release();
+                  }
+                  await _controller.load();
+                },
+                label: Text("播放"),
+                icon: const Icon(Icons.play_arrow),
               ),
-            ],
-          ),
-          body: CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: context.pageContentPadding(bottom: 120),
-                sliver: SliverToBoxAdapter(
-                  child: MediaDetailOverview(
-                    data: _overviewData(anime),
-                    heroTag: 'cover-${anime.bangumiId}',
-                    beforeSummary: _watchProgress(anime),
-                  ),
-                ),
-              ),
-              if (snapshot.connectionState != ConnectionState.done)
-                const SliverToBoxAdapter(
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-            ],
-          ),
-          floatingActionButton: anime.episodes.isEmpty
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed: () async {
-                    final windowLease = await PlaybackWindow.enter();
-                    try {
-                      await Get.to(
-                        () => AnimePlayPage(
-                          anime: anime,
-                          episodes: anime.episodes,
-                          initialEpisode: _initialEpisode(anime),
-                        ),
-                      );
-                    } finally {
-                      await windowLease.release();
-                    }
-                    setState(() {});
-                  },
-                  label: Text("播放"),
-                  icon: const Icon(Icons.play_arrow),
-                ),
-        );
-      },
-    );
-  }
-
-  Future<void> _refreshAnime(AnimeRead anime) async {
-    if (_refreshing.value) {
-      return;
-    }
-    _refreshing.value = true;
-    try {
-      final subject = await BangumiRepository().getSubjectDetail(
-        anime.bangumiId,
       );
-      final updatedAnime = await _animeService.updateAnimeMetadata(
-        animeId: anime.id,
-        subject: subject,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _future = Future.value(updatedAnime);
-      });
-      await showInfoDialog(title: '刷新成功', message: '番剧信息已从 Bangumi 更新到服务器');
-    } catch (error) {
-      if (mounted) {
-        await showErrorDialog(
-          title: '刷新失败',
-          message: errorMessageOf(error),
-          error: error,
-        );
-      }
-    } finally {
-      _refreshing.value = false;
-    }
+    });
   }
 
   int _initialEpisode(AnimeRead anime) {
@@ -317,24 +273,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
     if (confirmed != true || !mounted) {
       return;
     }
-    _deleting.value = true;
-    try {
-      await _animeService.deleteAnime(anime.id, deleteFiles: deleteFiles);
+    final deleted = await _controller.deleteAnime(deleteFiles: deleteFiles);
+    if (deleted) {
       Get.back(result: true);
       await showInfoDialog(
         title: '删除成功',
         message: deleteFiles
             ? '已删除"${anime.displayName}"及其下载文件'
             : '已删除"${anime.displayName}"，文件已保留',
-      );
-    } catch (error) {
-      if (mounted) {
-        _deleting.value = false;
-      }
-      await showErrorDialog(
-        title: '删除失败',
-        message: errorMessageOf(error),
-        error: error,
       );
     }
   }

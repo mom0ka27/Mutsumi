@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/extensions/build_context.dart';
 import '../../core/platform/app_platform.dart';
+import '../controller.dart';
 import '../model/episode_menu.dart';
+import 'package:get/get.dart';
 
 class PlayerEpisodePanel extends StatelessWidget {
   const PlayerEpisodePanel({
@@ -10,8 +12,7 @@ class PlayerEpisodePanel extends StatelessWidget {
     required this.visible,
     required this.position,
     required this.menu,
-    required this.playingStream,
-    required this.initiallyPlaying,
+    required this.controller,
     required this.onSelected,
     required this.onClose,
   });
@@ -19,8 +20,7 @@ class PlayerEpisodePanel extends StatelessWidget {
   final bool visible;
   final Animation<Offset> position;
   final PlayerEpisodeMenu menu;
-  final Stream<bool> playingStream;
-  final bool initiallyPlaying;
+  final IndexPlayerController controller;
   final ValueChanged<int> onSelected;
   final VoidCallback onClose;
 
@@ -163,8 +163,7 @@ class PlayerEpisodePanel extends StatelessWidget {
                                       _PlayerEpisodeTile(
                                         item: menu.items[index],
                                         selected: index == menu.selectedIndex,
-                                        playingStream: playingStream,
-                                        initiallyPlaying: initiallyPlaying,
+                                        controller: controller,
                                         onTap: index == menu.selectedIndex
                                             ? null
                                             : () => onSelected(index),
@@ -191,15 +190,13 @@ class _PlayerEpisodeTile extends StatelessWidget {
   const _PlayerEpisodeTile({
     required this.item,
     required this.selected,
-    required this.playingStream,
-    required this.initiallyPlaying,
+    required this.controller,
     required this.onTap,
   });
 
   final PlayerEpisodeItem item;
   final bool selected;
-  final Stream<bool> playingStream;
-  final bool initiallyPlaying;
+  final IndexPlayerController controller;
   final VoidCallback? onTap;
 
   @override
@@ -255,12 +252,10 @@ class _PlayerEpisodeTile extends StatelessWidget {
               ),
               if (selected) ...[
                 const SizedBox(width: 8),
-                StreamBuilder<bool>(
-                  stream: playingStream,
-                  initialData: initiallyPlaying,
-                  builder: (context, snapshot) => _PlayingIndicator(
+                Obx(
+                  () => _PlayingIndicator(
                     color: colorScheme.primary,
-                    playing: snapshot.data ?? false,
+                    playing: controller.state.playing,
                   ),
                 ),
               ],

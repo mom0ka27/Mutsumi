@@ -6,17 +6,26 @@ import 'package:hive_ce/hive.dart';
 import 'package:mutsumi/core/extensions/build_context.dart';
 import 'package:mutsumi/core/storage/local_storage.dart';
 import 'package:mutsumi/core/widgets/app_glass_background.dart';
+import 'package:mutsumi/app/page_bindings.dart';
+import 'package:mutsumi/features/auth/presentation/auth_session.dart';
 import 'package:mutsumi/features/auth/presentation/current_user_controller.dart';
 import 'package:mutsumi/features/auth/presentation/login_page.dart';
+import 'package:mutsumi/features/settings/data/settings_repository.dart';
+import 'package:mutsumi/features/settings/presentation/saved_servers_binding.dart';
 import 'package:mutsumi/features/settings/presentation/saved_servers_page.dart';
 import 'package:mutsumi/features/setup/presentation/connect_server_page.dart';
+import 'package:mutsumi/features/setup/presentation/connect_server_binding.dart';
 import 'package:mutsumi/features/setup/presentation/create_admin_page.dart';
 
 /// 一台带刘海的手机横屏时的视口：可用高度只有 390，且左右各有安全区。
 /// 这正是原先那些按竖屏调好的固定留白会把内容挤到溢出的场景。
 const _landscapeSize = Size(844, 390);
 const _landscapeDevicePixelRatio = 2.0;
-const _landscapeViewPadding = FakeViewPadding(left: 118, right: 118, bottom: 42);
+const _landscapeViewPadding = FakeViewPadding(
+  left: 118,
+  right: 118,
+  bottom: 42,
+);
 
 void main() {
   setUpAll(() async {
@@ -24,6 +33,8 @@ void main() {
     await Hive.openBox(LocalStorage.settingsBoxName);
     Get.put(AppearanceController(), permanent: true);
     Get.put(CurrentUserController(), permanent: true);
+    Get.put(SettingsRepository(), permanent: true);
+    Get.put(AuthSession(), permanent: true);
   });
 
   tearDownAll(() async {
@@ -36,14 +47,20 @@ void main() {
     await Hive.box(LocalStorage.settingsBoxName).clear();
   });
 
-  Future<void> pumpLandscape(WidgetTester tester, Widget page) async {
+  Future<void> pumpLandscape(
+    WidgetTester tester,
+    Widget page, {
+    Bindings? binding,
+  }) async {
     tester.view.devicePixelRatio = _landscapeDevicePixelRatio;
     tester.view.physicalSize = _landscapeSize * _landscapeDevicePixelRatio;
     tester.view.padding = _landscapeViewPadding;
     tester.view.viewPadding = _landscapeViewPadding;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(GetMaterialApp(home: page));
+    await tester.pumpWidget(
+      GetMaterialApp(initialBinding: binding, home: page),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -53,14 +70,22 @@ void main() {
   }
 
   testWidgets('已保存服务器页横屏不溢出', (tester) async {
-    await pumpLandscape(tester, const SavedServersPage());
+    await pumpLandscape(
+      tester,
+      const SavedServersPage(),
+      binding: SavedServersBinding(),
+    );
 
     expect(find.byType(SavedServersPage), findsOneWidget);
     expectNoLayoutOverflow(tester);
   });
 
   testWidgets('连接服务器页横屏不溢出', (tester) async {
-    await pumpLandscape(tester, const ConnectServerPage());
+    await pumpLandscape(
+      tester,
+      const ConnectServerPage(),
+      binding: ConnectServerBinding(),
+    );
 
     expect(find.byType(ConnectServerPage), findsOneWidget);
     expectNoLayoutOverflow(tester);
@@ -69,7 +94,8 @@ void main() {
   testWidgets('登录页横屏不溢出并可滚动', (tester) async {
     await pumpLandscape(
       tester,
-      const LoginPage(serverUrl: 'http://127.0.0.1:12091'),
+      const LoginPage(),
+      binding: LoginBinding(serverUrl: 'http://127.0.0.1:12091'),
     );
 
     expect(find.byType(LoginPage), findsOneWidget);
@@ -81,7 +107,8 @@ void main() {
   testWidgets('创建管理员页横屏不溢出', (tester) async {
     await pumpLandscape(
       tester,
-      const CreateAdminPage(serverUrl: 'http://127.0.0.1:12091'),
+      const CreateAdminPage(),
+      binding: CreateAdminBinding(serverUrl: 'http://127.0.0.1:12091'),
     );
 
     expect(find.byType(CreateAdminPage), findsOneWidget);

@@ -128,8 +128,9 @@ jobs:
         run: flutter pub get --enforce-lockfile
       - name: Install Android NDK
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "ndk;29.0.14206865"
+          sdkmanager_path="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -path '*/bin/sdkmanager' -print -quit)"
+          test -x "$sdkmanager_path"
+          "$sdkmanager_path" "ndk;29.0.14206865"
           ndk_path="$ANDROID_SDK_ROOT/ndk/29.0.14206865"
           libclang_path="$(find "$ndk_path/toolchains/llvm/prebuilt/linux-x86_64" -type f -name 'libclang.so*' -print -quit)"
           test -n "$libclang_path"

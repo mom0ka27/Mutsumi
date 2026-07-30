@@ -41,7 +41,9 @@ dependencies:
   liquid_glass_widgets: ^0.23.0
   get: ^4.7.3
   cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.2
   image_picker: ^1.2.3
+  image: ^4.9.1
   palette_generator: ^0.3.3+7
   ns_danmaku: 
     git: 
@@ -49,10 +51,11 @@ dependencies:
       ref: master
   audio_video_progress_bar: ^2.0.3
   erika_flutter:
-    git:
-      url: https://github.com/mom0ka27/Erika.git
-      ref: dev
-      path: packages/erika_flutter
+    path: ../Erika/packages/erika_flutter
+    # git:
+      # url: https://github.com/mom0ka27/Erika.git
+      # ref: dev
+      # path: packages/erika_flutter
   auto_orientation_v2: ^2.3.8
   package_info_plus: ^10.2.0
 

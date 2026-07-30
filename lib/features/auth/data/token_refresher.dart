@@ -1,5 +1,3 @@
-import 'package:get/get.dart';
-
 import '../../../core/logging/app_logger.dart';
 import '../../settings/data/settings_repository.dart';
 import '../presentation/current_user_controller.dart';
@@ -20,11 +18,15 @@ typedef LoginCallback =
 /// until the app is restarted. Concurrent refreshes for the same server share a
 /// single login round-trip.
 class TokenRefresher {
-  TokenRefresher({SettingsRepository? settingsRepository, LoginCallback? login})
-    : _settings = settingsRepository ?? SettingsRepository(),
-      _login = login ?? _defaultLogin;
+  TokenRefresher({
+    SettingsRepository? settingsRepository,
+    this.currentUserController,
+    LoginCallback? login,
+  }) : _settings = settingsRepository ?? SettingsRepository(),
+       _login = login ?? _defaultLogin;
 
   final SettingsRepository _settings;
+  final CurrentUserController? currentUserController;
   final LoginCallback _login;
 
   static Future<LoginResult?> _defaultLogin(
@@ -75,11 +77,7 @@ class TokenRefresher {
     }
 
     await _settings.setAccessToken(serverUrl, result.accessToken);
-    if (Get.isRegistered<CurrentUserController>()) {
-      Get.find<CurrentUserController>().setPermissionGroup(
-        result.permissionGroup,
-      );
-    }
+    currentUserController?.setPermissionGroup(result.permissionGroup);
     AppLogger.info('重新登录成功', tag: 'Auth');
     return result.accessToken;
   }

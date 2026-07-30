@@ -103,29 +103,31 @@ void main() {
       expect(adapter.sentAuthorization, ['Bearer expired', 'Bearer refreshed']);
     });
 
-    test('surfaces the original error when the refresh yields no token',
-        () async {
-      final adapter = _ScriptedAdapter([
-        _json({'detail': 'Invalid authentication credentials'}, 401),
-      ]);
-      final client = DioClient(
-        'https://example.test',
-        accessToken: 'expired',
-        refreshAccessToken: () async => null,
-      )..dio.httpClientAdapter = adapter;
+    test(
+      'surfaces the original error when the refresh yields no token',
+      () async {
+        final adapter = _ScriptedAdapter([
+          _json({'detail': 'Invalid authentication credentials'}, 401),
+        ]);
+        final client = DioClient(
+          'https://example.test',
+          accessToken: 'expired',
+          refreshAccessToken: () async => null,
+        )..dio.httpClientAdapter = adapter;
 
-      await expectLater(
-        client.dio.get<dynamic>('/anime'),
-        throwsA(
-          isA<DioException>().having(
-            (error) => error.response?.statusCode,
-            'statusCode',
-            401,
+        await expectLater(
+          client.dio.get<dynamic>('/anime'),
+          throwsA(
+            isA<DioException>().having(
+              (error) => error.response?.statusCode,
+              'statusCode',
+              401,
+            ),
           ),
-        ),
-      );
-      expect(adapter.requests, hasLength(1));
-    });
+        );
+        expect(adapter.requests, hasLength(1));
+      },
+    );
 
     test('does not retry when the replay also fails with 401', () async {
       final adapter = _ScriptedAdapter([
@@ -138,7 +140,10 @@ void main() {
         refreshAccessToken: () async => 'refreshed',
       )..dio.httpClientAdapter = adapter;
 
-      await expectLater(client.dio.get<dynamic>('/anime'), throwsA(isA<Object>()));
+      await expectLater(
+        client.dio.get<dynamic>('/anime'),
+        throwsA(isA<Object>()),
+      );
       expect(adapter.requests, hasLength(2));
     });
 
@@ -215,16 +220,20 @@ void main() {
       }
     });
 
-    test('a success response carrying a code field is not treated as an error',
-        () async {
-      final adapter = _ScriptedAdapter([
-        _json({'code': 3, 'value': 'fine'}, 200),
-      ]);
-      final client = DioClient('https://example.test')
-        ..dio.httpClientAdapter = adapter;
+    test(
+      'a success response carrying a code field is not treated as an error',
+      () async {
+        final adapter = _ScriptedAdapter([
+          _json({'code': 3, 'value': 'fine'}, 200),
+        ]);
+        final client = DioClient('https://example.test')
+          ..dio.httpClientAdapter = adapter;
 
-      final response = await client.dio.get<Map<String, dynamic>>('/anything');
-      expect(response.data, {'code': 3, 'value': 'fine'});
-    });
+        final response = await client.dio.get<Map<String, dynamic>>(
+          '/anything',
+        );
+        expect(response.data, {'code': 3, 'value': 'fine'});
+      },
+    );
   });
 }

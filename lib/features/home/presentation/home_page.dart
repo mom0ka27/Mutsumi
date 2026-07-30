@@ -10,20 +10,10 @@ import '../../anime/presentation/anime_home_view.dart';
 import '../../downloads/presentation/download_progress_view.dart';
 import '../../settings/presentation/settings_home_view.dart';
 import '../../bangumi/presentation/bangumi_search_page.dart';
+import 'home_controller.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends GetView<HomeController> {
   const HomePage({super.key});
-
-  static const routeName = '/home';
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  final _selectedIndex = 0.obs;
-  late final PageController _pageController;
-  late final AnimeListStore _animeListStore;
 
   static const _titles = ['主页', 'Bangumi', '下载', '设置'];
   static const _icons = [
@@ -34,32 +24,11 @@ class _HomePageState extends State<HomePage> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _animeListStore = Get.put<AnimeListStore>(AnimeListStore());
-    _pageController = PageController(initialPage: _selectedIndex.value);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _onTabSelected(int index) {
-    _selectedIndex.value = index;
-    _pageController.jumpToPage(index);
-  }
-
-  void _onPageChanged(int index) {
-    _selectedIndex.value = index;
-  }
-
-  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final animeListStore = Get.find<AnimeListStore>();
     return Obx(() {
-      final selectedIndex = _selectedIndex.value;
+      final selectedIndex = controller.selectedIndex.value;
       final useSidebar = context.useSidebarNavigation;
 
       return GlassScaffold(
@@ -77,22 +46,22 @@ class _HomePageState extends State<HomePage> {
               if (useSidebar)
                 _HomeSidebar(
                   selectedIndex: selectedIndex,
-                  onSelected: _onTabSelected,
+                  onSelected: controller.selectTab,
                   expanded: context.useExpandedSidebar,
                 ),
               Expanded(
                 child: PageView(
-                  controller: _pageController,
-                  onPageChanged: _onPageChanged,
+                  controller: controller.pageController,
+                  onPageChanged: controller.changePage,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     HeroMode(
                       enabled: selectedIndex == 0,
-                      child: AnimeHomeView(store: _animeListStore),
+                      child: AnimeHomeView(store: animeListStore),
                     ),
                     HeroMode(
                       enabled: selectedIndex == 1,
-                      child: BangumiSearchView(store: _animeListStore),
+                      child: BangumiSearchView(store: animeListStore),
                     ),
                     HeroMode(
                       enabled: selectedIndex == 2,
@@ -114,7 +83,7 @@ class _HomePageState extends State<HomePage> {
             ? null
             : GlassTabBar.bottom(
                 selectedIndex: selectedIndex,
-                onTabSelected: _onTabSelected,
+                onTabSelected: controller.selectTab,
                 tabs: const [
                   GlassTab(icon: Icon(Icons.home_rounded), label: '主页'),
                   GlassTab(icon: Icon(Icons.search_rounded), label: 'Bangumi'),
@@ -180,17 +149,17 @@ class _HomeSidebar extends StatelessWidget {
             SizedBox(height: compact ? 12 : 24),
             Expanded(
               child: ListView.separated(
-                itemCount: _HomePageState._titles.length,
+                itemCount: HomePage._titles.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final selected = index == selectedIndex;
                   final item = NavigationRailDestination(
-                    icon: Icon(_HomePageState._icons[index]),
-                    selectedIcon: Icon(_HomePageState._icons[index]),
-                    label: Text(_HomePageState._titles[index]),
+                    icon: Icon(HomePage._icons[index]),
+                    selectedIcon: Icon(HomePage._icons[index]),
+                    label: Text(HomePage._titles[index]),
                   );
                   return Tooltip(
-                    message: expanded ? '' : _HomePageState._titles[index],
+                    message: expanded ? '' : HomePage._titles[index],
                     child: Material(
                       color: selected
                           ? colorScheme.primaryContainer

@@ -3,171 +3,27 @@ import 'package:get/get.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mutsumi/constants.dart';
 
-import '../../../core/widgets/app_dialog.dart';
-import '../../../core/widgets/error_dialog.dart';
-import '../../../core/network/app_network_error.dart';
+import '../../../app/page_bindings.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/extensions/build_context.dart';
-import '../../auth/data/auth_service.dart';
-import '../../auth/presentation/login_page.dart';
-import '../../auth/presentation/current_user_controller.dart';
 import '../../users/presentation/users_management_page.dart';
-import '../data/settings_repository.dart';
-import '../data/server_info_service.dart';
 import 'qbittorrent_settings_view.dart';
 import 'storage_status_page.dart';
 import 'appearance_settings_page.dart';
+import 'player_settings_page.dart';
 import 'saved_servers_page.dart';
+import 'saved_servers_binding.dart';
 import 'server_update_page.dart';
+import 'settings_home_controller.dart';
 
-class SettingsHomeView extends StatefulWidget {
+class SettingsHomeView extends GetView<SettingsHomeController> {
   const SettingsHomeView({super.key});
 
   @override
-  State<SettingsHomeView> createState() => _SettingsHomeViewState();
-}
-
-class _SettingsHomeViewState extends State<SettingsHomeView>
-    with AutomaticKeepAliveClientMixin {
-  final _settings = SettingsRepository();
-  final _currentUser = Get.find<CurrentUserController>();
-  final _serverVersion = RxnString();
-  var _versionServerUrl = '';
-
-  @override
-  bool get wantKeepAlive => true;
-
-  void _loadServerVersion(ServerAccount? account) {
-    if (account == null || _versionServerUrl == account.serverUrl) return;
-    _versionServerUrl = account.serverUrl;
-    _serverVersion.value = null;
-    ServerInfoService(
-      account.serverUrl,
-      certificateSha256: _settings.getCertificateFingerprint(account.serverUrl),
-    ).getInfo().then(
-      (info) {
-        if (_versionServerUrl == account.serverUrl && mounted) {
-          _serverVersion.value = info.version.isEmpty ? '未知' : info.version;
-        }
-      },
-      onError: (_) {
-        if (_versionServerUrl == account.serverUrl && mounted) {
-          _serverVersion.value = '获取失败';
-        }
-      },
-    );
-  }
-
-  Future<void> _addAccount() async {
-    final account = _settings.getCurrentAccount();
-    if (account == null) return;
-    await Get.to(
-      () => LoginPage(
-        serverUrl: account.serverUrl,
-        certificateSha256: _settings.getCertificateFingerprint(
-          account.serverUrl,
-        ),
-        serverName: _settings.getServerName(account.serverUrl),
-      ),
-    );
-  }
-
-  Future<void> _changePassword() async {
-    final account = _settings.getCurrentAccount();
-    if (account == null) return;
-    final currentPassword = TextEditingController();
-    final newPassword = TextEditingController();
-    final confirmedPassword = TextEditingController();
-    try {
-      final confirmed = await showAppDialog<bool>(
-        AlertDialog(
-          title: const Text('修改密码'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: currentPassword,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: '当前密码'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: newPassword,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: '新密码'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: confirmedPassword,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: '确认新密码'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            Builder(
-              builder: (context) => TextButton(
-                onPressed: () => AppDialog.dismiss(context, false),
-                child: const Text('取消'),
-              ),
-            ),
-            Builder(
-              builder: (context) => FilledButton(
-                onPressed: () => AppDialog.dismiss(context, true),
-                child: const Text('保存'),
-              ),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      if (currentPassword.text.isEmpty || newPassword.text.isEmpty) {
-        await showErrorDialog(title: '修改失败', message: '请填写当前密码和新密码');
-        return;
-      }
-      if (newPassword.text != confirmedPassword.text) {
-        await showErrorDialog(title: '修改失败', message: '两次输入的新密码不一致');
-        return;
-      }
-      await AuthService(
-        account.serverUrl,
-        certificateSha256: _settings.getCertificateFingerprint(
-          account.serverUrl,
-        ),
-        accessToken: account.accessToken,
-      ).changePassword(
-        currentPassword: currentPassword.text,
-        newPassword: newPassword.text,
-      );
-      await _settings.saveLogin(
-        serverUrl: account.serverUrl,
-        username: account.username,
-        password: newPassword.text,
-        accessToken: account.accessToken,
-        permissionGroup: account.permissionGroup ?? 'User',
-      );
-      await showInfoDialog(title: '修改成功', message: '密码已更新');
-    } catch (error) {
-      await showErrorDialog(
-        title: '修改失败',
-        message: errorMessageOf(error),
-        error: error,
-      );
-    } finally {
-      currentPassword.dispose();
-      newPassword.dispose();
-      confirmedPassword.dispose();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    super.build(context);
     return Obx(() {
-      final account = _settings.getCurrentAccount();
-      _loadServerVersion(account);
+      final account = controller.currentAccount;
+      controller.loadServerVersion(account);
       final colors = Theme.of(context).colorScheme;
       final glassSettings = AppGlassSettings.standard(context);
       return ListView(
@@ -200,7 +56,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                       Text(
                         account == null
                             ? '未连接服务器'
-                            : _settings.getServerName(account.serverUrl),
+                            : controller.serverName(account.serverUrl),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
@@ -216,7 +72,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                       if (account != null)
                         Obx(
                           () => Text(
-                            '服务端版本：${_serverVersion.value ?? '获取中...'}',
+                            '服务端版本：${controller.serverVersion.value ?? '获取中...'}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: colors.onSurfaceVariant),
                           ),
@@ -240,7 +96,10 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                   title: const Text('切换账户'),
                   subtitle: const Text('管理已保存的服务器与账户'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Get.to(() => const SavedServersPage()),
+                  onTap: () => Get.to(
+                    () => const SavedServersPage(),
+                    binding: SavedServersBinding(),
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -248,7 +107,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                   title: const Text('添加账户'),
                   subtitle: const Text('登录当前服务器的其他账户'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: account == null ? null : _addAccount,
+                  onTap: account == null ? null : controller.addAccount,
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -256,7 +115,7 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                   title: const Text('修改密码'),
                   subtitle: const Text('更新当前账户的登录密码'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: account == null ? null : _changePassword,
+                  onTap: account == null ? null : controller.changePassword,
                 ),
               ],
             ),
@@ -275,7 +134,21 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
               onTap: () => Get.to(() => const AppearanceSettingsPage()),
             ),
           ),
-          if (_currentUser.isAdmin) ...[
+          const SizedBox(height: 20),
+          GlassCard(
+            useOwnLayer: true,
+            padding: EdgeInsets.zero,
+            shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
+            settings: glassSettings,
+            child: ListTile(
+              leading: const Icon(Icons.play_circle_outline_rounded),
+              title: const Text('播放器'),
+              subtitle: const Text('后台播放、倍速与长按倍速'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Get.to(() => const PlayerSettingsPage()),
+            ),
+          ),
+          if (controller.isAdmin) ...[
             const SizedBox(height: 20),
             GlassCard(
               useOwnLayer: true,
@@ -291,7 +164,10 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                     title: const Text('qBittorrent'),
                     subtitle: const Text('下载与分享率设置'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(() => const QBittorrentSettingsPage()),
+                    onTap: () => Get.to(
+                      () => const QBittorrentSettingsPage(),
+                      binding: QBittorrentSettingsBinding(),
+                    ),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -299,7 +175,10 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                     title: const Text('用户管理'),
                     subtitle: const Text('新增、编辑和删除用户'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(() => const UsersManagementPage()),
+                    onTap: () => Get.to(
+                      () => const UsersManagementPage(),
+                      binding: UsersManagementBinding(),
+                    ),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -307,7 +186,10 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                     title: const Text('存储空间'),
                     subtitle: const Text('查看 data 文件夹和服务器磁盘容量'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(() => const StorageStatusPage()),
+                    onTap: () => Get.to(
+                      () => const StorageStatusPage(),
+                      binding: StorageStatusBinding(),
+                    ),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -315,7 +197,10 @@ class _SettingsHomeViewState extends State<SettingsHomeView>
                     title: const Text('服务端更新'),
                     subtitle: const Text('检查并安装 GitHub 发布版本或分支更新'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(() => const ServerUpdatePage()),
+                    onTap: () => Get.to(
+                      () => const ServerUpdatePage(),
+                      binding: ServerUpdateBinding(),
+                    ),
                   ),
                 ],
               ),

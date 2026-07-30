@@ -15,12 +15,14 @@ import 'anime_models.dart';
 export 'anime_models.dart';
 
 class AnimeService {
-  AnimeService({SettingsRepository? settingsRepository})
-    : _settingsRepository = settingsRepository ?? SettingsRepository();
+  AnimeService({
+    SettingsRepository? settingsRepository,
+    AuthenticatedServerClient? serverClient,
+  }) : _settingsRepository = settingsRepository ?? SettingsRepository(),
+       _serverClient = serverClient ?? AuthenticatedServerClient();
 
   final SettingsRepository _settingsRepository;
-  late final AuthenticatedServerClient _serverClient =
-      AuthenticatedServerClient();
+  final AuthenticatedServerClient _serverClient;
 
   Future<List<AnimeRead>> listAnimes() async {
     return _request('获取 Anime 列表', () async {

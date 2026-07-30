@@ -43,7 +43,7 @@ class PlayerInteractionState {
       _superSpeedActive = true;
       _speedBeforeSuperSpeed = _controller.playbackSpeed.value;
       superSpeed.value = true;
-      _controller.setSpeed(2);
+      _controller.setSpeed(_controller.options.longPressSpeed);
       HapticFeedback.mediumImpact();
     });
   }

@@ -8,10 +8,12 @@ import '../../../core/network/app_network_error.dart';
 import '../data/anime_garden_download_coordinator.dart';
 import '../data/anime_garden_repository.dart';
 import 'anime_garden_episode_match_page.dart';
+import 'anime_garden_bindings.dart';
 
 class AnimeGardenDownloadController extends GetxController {
   AnimeGardenDownloadController({
     required this.subject,
+    required this.animeListStore,
     AnimeGardenRepository? repository,
     AnimeGardenDownloadCoordinator? downloadCoordinator,
   }) : _repository = repository ?? AnimeGardenRepository(),
@@ -21,6 +23,7 @@ class AnimeGardenDownloadController extends GetxController {
   }
 
   final BangumiSubject subject;
+  final AnimeListStore animeListStore;
   final AnimeGardenRepository _repository;
   final AnimeGardenDownloadCoordinator _downloadCoordinator;
   final keywordController = TextEditingController();
@@ -155,7 +158,14 @@ class AnimeGardenDownloadController extends GetxController {
           resource: resource,
           files: context.files,
           bangumiEpisodes: context.bangumiEpisodes,
-          animeListStore: Get.find<AnimeListStore>(),
+          animeListStore: animeListStore,
+        ),
+        binding: AnimeGardenEpisodeMatchBinding(
+          subject: subject,
+          resource: resource,
+          files: context.files,
+          bangumiEpisodes: context.bangumiEpisodes,
+          animeListStore: animeListStore,
         ),
       );
     } catch (error) {

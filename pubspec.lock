@@ -172,11 +172,9 @@ packages:
   erika_flutter:
     dependency: "direct main"
     description:
-      path: "packages/erika_flutter"
-      ref: dev
-      resolved-ref: "1a7a7480e8b06869e45d967910b9c7a5ec5978d6"
-      url: "https://github.com/mom0ka27/Erika.git"
-    source: git
+      path: "../Erika/packages/erika_flutter"
+      relative: true
+    source: path
     version: "0.1.3"
   fake_async:
     dependency: transitive
@@ -256,7 +254,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_cache_manager:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_cache_manager
       sha256: "1de7849213b4c73c85aca7e0ac687a9a5d82ccdb594366b9dcc26cb6a2189cd2"
@@ -346,7 +344,7 @@ packages:
     source: hosted
     version: "4.1.2"
   image:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: image
       sha256: "6300175e00616bbc832e2fc91bfa4d776af5402c81c7151bee6905bb08473c52"

@@ -35,16 +35,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(
-      AnimeGardenEpisodeMatchController(
-        subject: subject,
-        resource: resource,
-        files: files,
-        bangumiEpisodes: bangumiEpisodes,
-        animeListStore: animeListStore,
-        onSave: onSave,
-      ),
-    );
+    final controller = Get.find<AnimeGardenEpisodeMatchController>();
     return GlassScaffold(
       topEdgeFade: true,
       bottomEdgeFade: false,
