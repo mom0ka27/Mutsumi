@@ -25,6 +25,7 @@ router = APIRouter(prefix="/qbittorrent", tags=["qbittorrent"])
 _qbittorrent_cookies = httpx.Cookies()
 _qbittorrent_cookie_lock = asyncio.Lock()
 _qbittorrent_category = "Mutsumi"
+_subtitle_extensions = {".ass", ".ssa", ".srt", ".vtt"}
 
 
 @router.get("/torrents", response_model=list[QBittorrentTorrentRead])
@@ -70,6 +71,7 @@ async def download_torrent_files(
 
         torrent_hash = _metadata_hash(metadata) or _parse_bt_hash(payload.source) or ""
         save_path = _download_save_path(torrent_hash)
+        selected_filenames.update(_related_subtitle_names(files, selected_filenames))
         file_priorities = ["1" if file.name in selected_filenames else "0" for file in files]
         add_data = {
             "urls": payload.source,
@@ -222,6 +224,21 @@ def _metadata_files(metadata: dict) -> list[QBittorrentFileRead]:
         for file in files
         if isinstance(file, dict) and (file.get("name") or file.get("path"))
     ]
+
+
+def _related_subtitle_names(
+    files: list[QBittorrentFileRead], selected_video_names: set[str]
+) -> set[str]:
+    selected_videos = [Path(name) for name in selected_video_names]
+    return {
+        file.name
+        for file in files
+        if Path(file.name).suffix.lower() in _subtitle_extensions
+        and any(
+            Path(file.name).parent == video.parent and video.stem in Path(file.name).name
+            for video in selected_videos
+        )
+    }
 
 
 async def _qbittorrent_client(timeout: float = 10) -> httpx.AsyncClient:
