@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:ns_danmaku/ns_danmaku.dart';
 
+import '../core/logging/app_logger.dart';
 import '../core/platform/app_platform.dart';
 import 'model/danmaku.dart';
 import 'model/option.dart';
@@ -108,6 +109,7 @@ class IndexPlayerController {
   int _videoGeneration = 0;
   bool _playbackCompleted = false;
   Completer<Duration>? _durationCompleter;
+  Future<void>? _closeFuture;
 
   IndexPlayerController({
     required this.playlist,
@@ -115,7 +117,12 @@ class IndexPlayerController {
     this.onItemLeaving,
   }) {
     _player = ErikaPlayer(allowBackgroundPlayback: options.backgroundPlayback);
-    _eventSubscription = _player.events.listen(_handleEvent);
+    _eventSubscription = _player.events.listen(
+      _handleEventSafely,
+      onError: (Object error, StackTrace stackTrace) {
+        _reportError(error, stackTrace: stackTrace, message: 'Erika 事件流异常');
+      },
+    );
   }
 
   PlayerState get state => _state;
@@ -146,10 +153,45 @@ class IndexPlayerController {
     );
   }
 
+  void _handleEventSafely(ErikaPlayerEvent event) {
+    try {
+      _handleEvent(event);
+    } catch (error, stackTrace) {
+      _reportError(error, stackTrace: stackTrace, message: '处理 Erika 播放事件失败');
+    }
+  }
+
+  void _reportError(
+    Object error, {
+    required String message,
+    StackTrace? stackTrace,
+    bool notify = true,
+  }) {
+    final trace = stackTrace ?? StackTrace.current;
+    AppLogger.error(message, tag: 'Player', error: error, stackTrace: trace);
+    if (notify && !_disposed && !_errors.isClosed) {
+      _errors.add(error.toString());
+    }
+  }
+
+  void _reportAsyncError(Future<void> future, String message) {
+    unawaited(
+      future.then<void>(
+        (_) {},
+        onError: (Object error, StackTrace stackTrace) {
+          _reportError(error, stackTrace: stackTrace, message: message);
+        },
+      ),
+    );
+  }
+
   void _handleEvent(ErikaPlayerEvent event) {
     if (_disposed) return;
     if (event.kind == ErikaEventKind.systemMediaNavigationRequested) {
-      unawaited(_handleSystemMediaNavigation(event.systemMediaCommand));
+      _reportAsyncError(
+        _handleSystemMediaNavigation(event.systemMediaCommand),
+        '处理系统媒体导航失败',
+      );
       return;
     }
     if (event.kind == ErikaEventKind.positionChanged) {
@@ -175,6 +217,12 @@ class IndexPlayerController {
       _updateTracks(event.trackList, event.trackSelection.subtitle);
     }
     if (event.error != null && event.error!.isNotEmpty) {
+      AppLogger.error(
+        'Erika 播放器报告错误',
+        tag: 'Player',
+        error: event.error!,
+        stackTrace: StackTrace.current,
+      );
       _errors.add(event.error!);
     }
     if (event.state == ErikaPlaybackState.stopped &&
@@ -204,13 +252,11 @@ class IndexPlayerController {
 
   Future<void> _syncSystemMediaNavigation({required bool switching}) {
     final index = selectedIndex.value;
-    return _player
-        .setSystemMediaNavigation(
-          previousEnabled: !switching && index != null && index > 0,
-          nextEnabled:
-              !switching && index != null && index < playlist.items.length - 1,
-        )
-        .then<void>((_) {}, onError: (_, _) {});
+    return _player.setSystemMediaNavigation(
+      previousEnabled: !switching && index != null && index > 0,
+      nextEnabled:
+          !switching && index != null && index < playlist.items.length - 1,
+    );
   }
 
   void _updateTracks(List<ErikaTrackInfo> tracks, int? selectedId) {
@@ -251,7 +297,10 @@ class IndexPlayerController {
     final previousIndex = selectedIndex.value;
     final snapshot = currentSnapshot;
     loadingIndex.value = index;
-    unawaited(_syncSystemMediaNavigation(switching: true));
+    _reportAsyncError(
+      _syncSystemMediaNavigation(switching: true),
+      '同步系统媒体导航状态失败',
+    );
     if (snapshot != null && snapshot.position > Duration.zero) {
       await onItemLeaving?.call(snapshot);
       if (_disposed || generation != _videoGeneration) return;
@@ -265,16 +314,22 @@ class IndexPlayerController {
       if (_disposed || generation != _videoGeneration) return;
       selectedIndex.value = index;
       await play();
-      unawaited(_syncSystemMediaNavigation(switching: false));
+      _reportAsyncError(
+        _syncSystemMediaNavigation(switching: false),
+        '同步系统媒体导航状态失败',
+      );
     } catch (error) {
       if (!_disposed && generation == _videoGeneration) {
         selectedIndex.value = previousIndex;
-        _errors.add(error.toString());
+        _reportError(error, message: '切换播放集失败', notify: true);
       }
     } finally {
       if (!_disposed && generation == _videoGeneration) {
         loadingIndex.value = null;
-        unawaited(_syncSystemMediaNavigation(switching: false));
+        _reportAsyncError(
+          _syncSystemMediaNavigation(switching: false),
+          '同步系统媒体导航状态失败',
+        );
       }
     }
   }
@@ -346,7 +401,7 @@ class IndexPlayerController {
     }
     final provider = video.danmakuProvider;
     if (provider != null) {
-      unawaited(
+      _reportAsyncError(
         provider.getDanmakuList().then((result) {
           if (!_disposed && generation == _videoGeneration) {
             _danmakuList = result.list;
@@ -354,6 +409,7 @@ class IndexPlayerController {
             danmakuEpisodeId.value = result.episodeId;
           }
         }),
+        '弹幕加载失败',
       );
     }
   }
@@ -382,7 +438,13 @@ class IndexPlayerController {
     if (_disposed || provider == null) return;
     final generation = _videoGeneration;
     _danmakuController?.clear();
-    final result = await provider.getDanmakuList();
+    late final DanmakuLoadResult result;
+    try {
+      result = await provider.getDanmakuList();
+    } catch (error, stackTrace) {
+      _reportError(error, stackTrace: stackTrace, message: '刷新弹幕失败');
+      rethrow;
+    }
     if (!_disposed && generation == _videoGeneration) {
       _danmakuList = result.list;
       danmakuCount.value = result.count;
@@ -455,8 +517,9 @@ class IndexPlayerController {
     volume.value = value;
     try {
       await _player.setVolume(value);
-    } catch (_) {
+    } catch (error, stackTrace) {
       if (!_disposed && volume.value == value) volume.value = previous;
+      _reportError(error, stackTrace: stackTrace, message: '调整播放器音量失败');
       rethrow;
     }
   }
@@ -571,17 +634,55 @@ class IndexPlayerController {
   void _resetDanmakuSecond() => _lastDanmakuSecond = null;
 
   Future<void> close() async {
-    if (_disposed) return;
-    await _player.setSystemMediaNavigation(
-      previousEnabled: false,
-      nextEnabled: false,
-    );
+    if (_disposed && _closeFuture == null) return;
+    final existing = _closeFuture;
+    if (existing != null) {
+      await existing;
+      return;
+    }
+    final future = _closeSafely();
+    _closeFuture = future;
+    await future;
+  }
+
+  Future<void> _closeSafely() async {
     _disposed = true;
-    await _eventSubscription?.cancel();
-    await _player.dispose();
-    await _errors.close();
-    await _completed.close();
+    try {
+      await _player.setSystemMediaNavigation(
+        previousEnabled: false,
+        nextEnabled: false,
+      );
+    } catch (error, stackTrace) {
+      _reportError(
+        error,
+        stackTrace: stackTrace,
+        message: '关闭系统媒体控制失败',
+        notify: false,
+      );
+    }
+    try {
+      await _eventSubscription?.cancel();
+    } catch (error, stackTrace) {
+      _reportError(
+        error,
+        stackTrace: stackTrace,
+        message: '关闭 Erika 事件订阅失败',
+        notify: false,
+      );
+    }
+    try {
+      await _player.dispose();
+    } catch (error, stackTrace) {
+      _reportError(
+        error,
+        stackTrace: stackTrace,
+        message: '释放 Erika 播放器失败',
+        notify: false,
+      );
+    }
     _danmakuController?.clear();
     _danmakuController = null;
+    await _errors.close();
+    await _completed.close();
   }
 }

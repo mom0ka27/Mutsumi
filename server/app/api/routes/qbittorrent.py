@@ -224,11 +224,33 @@ async def get_torrent_files(
 ):
     client = await _qbittorrent_client()
     try:
-        metadata = await _fetch_metadata(client, torrent_hash)
+        return await _get_torrent_files(client, torrent_hash)
     finally:
         await client.aclose()
 
-    return _metadata_files(metadata)
+
+async def _get_torrent_files(
+    client: httpx.AsyncClient,
+    torrent_hash: str,
+) -> list[QBittorrentFileRead]:
+    response = await _qbittorrent_get(
+        client,
+        "/api/v2/torrents/files",
+        params={"hash": torrent_hash},
+    )
+    if response.status_code >= 400:
+        raise QBittorrentError(21004, "获取下载文件列表失败")
+    data = response.json()
+    if not isinstance(data, list):
+        raise QBittorrentError(21004, "qBittorrent 返回了无效文件列表")
+    return [
+        QBittorrentFileRead(
+            name=str(item.get("name") or ""),
+            size=int(item.get("size") or 0),
+        )
+        for item in data
+        if isinstance(item, dict) and item.get("name")
+    ]
 
 
 async def delete_torrent(torrent_hash: str, delete_files: bool = True) -> None:

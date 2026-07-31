@@ -24,6 +24,34 @@ def test_related_subtitle_names_selects_same_directory_video_subtitles():
     }
 
 
+async def test_get_torrent_files_uses_qbittorrent_files_endpoint(monkeypatch):
+    calls = []
+
+    async def fake_get(_client, url, params=None):
+        calls.append((url, params))
+        request = httpx.Request("GET", "http://test/api/v2/torrents/files")
+        return httpx.Response(
+            200,
+            json=[
+                {"name": "Show/01.mkv", "size": 100},
+                {"name": "Show/01.ass", "size": 20},
+            ],
+            request=request,
+        )
+
+    monkeypatch.setattr(qbittorrent, "_qbittorrent_get", fake_get)
+
+    files = await qbittorrent._get_torrent_files(object(), "abc123")
+
+    assert calls == [
+        ("/api/v2/torrents/files", {"hash": "abc123"}),
+    ]
+    assert [(file.name, file.size) for file in files] == [
+        ("Show/01.mkv", 100),
+        ("Show/01.ass", 20),
+    ]
+
+
 async def test_download_existing_torrent_enables_selected_files(monkeypatch):
     class Client:
         async def aclose(self):
