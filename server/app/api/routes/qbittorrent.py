@@ -206,6 +206,7 @@ async def sync_torrent_file_priorities(
                 await _set_torrent_file_priority(
                     client, torrent_hash, selected_ids, 1
                 )
+            await _start_torrent(client, torrent_hash)
         finally:
             await client.aclose()
 
@@ -227,6 +228,19 @@ async def _set_torrent_file_priority(
     )
     if response.status_code >= 400 or response.text.strip() == "Fails.":
         raise QBittorrentError(21006, f"更新下载文件失败: {response.text.strip()}")
+
+
+async def _start_torrent(
+    client: httpx.AsyncClient,
+    torrent_hash: str,
+) -> None:
+    response = await _qbittorrent_post(
+        client,
+        "/api/v2/torrents/start",
+        data={"hashes": torrent_hash},
+    )
+    if response.status_code >= 400 or response.text.strip() == "Fails.":
+        raise QBittorrentError(21011, "继续下载任务失败")
 
 
 @router.post("/torrents/{torrent_hash}/pause", status_code=204)

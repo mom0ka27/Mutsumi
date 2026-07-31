@@ -51,11 +51,11 @@ dependencies:
       ref: master
   audio_video_progress_bar: ^2.0.3
   erika_flutter:
-    path: ../Erika/packages/erika_flutter
-    # git:
-      # url: https://github.com/mom0ka27/Erika.git
-      # ref: dev
-      # path: packages/erika_flutter
+    # path: ../Erika/packages/erika_flutter
+    git:
+      url: https://github.com/mom0ka27/Erika.git
+      ref: dev
+      path: packages/erika_flutter
   auto_orientation_v2: ^2.3.8
   package_info_plus: ^10.2.0
 
