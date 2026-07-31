@@ -56,6 +56,25 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
           ),
           actions: [
             Obx(
+              () => _controller.rematching.value
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : GlassButton(
+                      width: 40,
+                      height: 40,
+                      iconSize: 20,
+                      icon: const Icon(Icons.find_in_page_outlined),
+                      label: '重新匹配剧集',
+                      onTap: _controller.rematchEpisodes,
+                    ),
+            ),
+            SizedBox(width: 2),
+            Obx(
               () => _controller.refreshing.value
                   ? SizedBox.square(
                       dimension: 20,

@@ -93,6 +93,25 @@ class AnimeService {
     });
   }
 
+  Future<AnimeRead> addDownloadedEpisodes({
+    required int animeId,
+    required String downloadHash,
+    required List<AnimeEpisodeCreate> episodes,
+  }) async {
+    return _request('更新 Anime Episodes id=$animeId', () async {
+      final response = await _serverDio().post<Map<String, dynamic>>(
+        '$animeApiPath/$animeId/episodes',
+        data: {
+          'download_hash': downloadHash,
+          'episodes': episodes.map((episode) => episode.toJson()).toList(),
+        },
+      );
+      final data = response.data;
+      if (data == null) throw StateError('服务器返回了空 Anime');
+      return AnimeRead.fromJson(data);
+    });
+  }
+
   Future<void> deleteAnime(int id, {bool deleteFiles = true}) async {
     await _request('删除 Anime id=$id', () {
       return _serverDio().delete<void>(
@@ -252,6 +271,19 @@ class AnimeService {
       final response = await _serverDio().get<List<dynamic>>(
         '$qbittorrentApiPath/torrents/metadata/files',
         queryParameters: {'source': source},
+      );
+      final data = response.data ?? [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(QBittorrentFile.fromJson)
+          .toList();
+    });
+  }
+
+  Future<List<QBittorrentFile>> getTorrentFilesByHash(String hash) async {
+    return _request('获取已下载种子文件列表 hash=$hash', () async {
+      final response = await _serverDio().get<List<dynamic>>(
+        '$qbittorrentApiPath/torrents/$hash/files',
       );
       final data = response.data ?? [];
       return data

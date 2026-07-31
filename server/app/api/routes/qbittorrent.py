@@ -24,6 +24,7 @@ router = APIRouter(prefix="/qbittorrent", tags=["qbittorrent"])
 
 _qbittorrent_cookies = httpx.Cookies()
 _qbittorrent_cookie_lock = asyncio.Lock()
+_torrent_download_lock = asyncio.Lock()
 _qbittorrent_category = "Mutsumi"
 _subtitle_extensions = {".ass", ".ssa", ".srt", ".vtt"}
 
@@ -85,19 +86,85 @@ async def download_torrent_files(
         if save_path:
             add_data["savepath"] = save_path
 
-        response = await _qbittorrent_post(
-            client,
-            "/api/v2/torrents/add",
-            data=add_data,
-        )
-        if response.status_code >= 400 or response.text.strip() == "Fails.":
-            raise QBittorrentError(21006, f"添加下载任务失败: {response.text.strip()}")
+        async with _torrent_download_lock:
+            if await _torrent_exists(client, torrent_hash):
+                await _enable_torrent_files(
+                    client,
+                    torrent_hash,
+                    files,
+                    selected_filenames,
+                )
+            else:
+                response = await _qbittorrent_post(
+                    client,
+                    "/api/v2/torrents/add",
+                    data=add_data,
+                )
+                if response.status_code >= 400 or response.text.strip() == "Fails.":
+                    if await _torrent_exists(client, torrent_hash):
+                        await _enable_torrent_files(
+                            client,
+                            torrent_hash,
+                            files,
+                            selected_filenames,
+                        )
+                    else:
+                        raise QBittorrentError(
+                            21006,
+                            f"添加下载任务失败: {response.text.strip()}",
+                        )
     finally:
         await client.aclose()
 
     if not torrent_hash:
         torrent_hash = _metadata_hash(metadata) or _parse_bt_hash(payload.source) or ""
     return QBittorrentTorrentAddResult(hash=torrent_hash)
+
+
+async def _torrent_exists(client: httpx.AsyncClient, torrent_hash: str) -> bool:
+    if not torrent_hash:
+        return False
+    response = await _qbittorrent_get(
+        client,
+        "/api/v2/torrents/info",
+        params={"hashes": torrent_hash},
+    )
+    if response.status_code >= 400:
+        raise QBittorrentError(21004, "读取下载任务失败")
+    data = response.json()
+    if not isinstance(data, list):
+        raise QBittorrentError(21004, "qBittorrent 返回了无效下载任务数据")
+    return any(
+        isinstance(item, dict)
+        and str(item.get("hash") or "").lower() == torrent_hash.lower()
+        for item in data
+    )
+
+
+async def _enable_torrent_files(
+    client: httpx.AsyncClient,
+    torrent_hash: str,
+    files: list[QBittorrentFileRead],
+    selected_filenames: set[str],
+) -> None:
+    selected_ids = [
+        str(index)
+        for index, file in enumerate(files)
+        if file.name in selected_filenames
+    ]
+    if not selected_ids:
+        raise QBittorrentError(21010, "选择的文件不在种子中", HTTPStatus.BAD_REQUEST)
+    response = await _qbittorrent_post(
+        client,
+        "/api/v2/torrents/filePrio",
+        data={
+            "hash": torrent_hash,
+            "id": "|".join(selected_ids),
+            "priority": "1",
+        },
+    )
+    if response.status_code >= 400 or response.text.strip() == "Fails.":
+        raise QBittorrentError(21006, f"更新下载文件失败: {response.text.strip()}")
 
 
 @router.post("/torrents/{torrent_hash}/pause", status_code=204)

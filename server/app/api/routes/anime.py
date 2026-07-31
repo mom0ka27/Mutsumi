@@ -18,6 +18,7 @@ from app.core.auth import (
 from app.models import Anime, Episode, Series, User, WatchProgress
 from app.schemas import (
     AnimeCreate,
+    EpisodeDownloadCreate,
     AnimeMetadataUpdate,
     AnimeRead,
     AnimeSummaryRead,
@@ -148,6 +149,44 @@ async def update_anime_metadata(
         raise HTTPException(status_code=404, detail="Anime not found")
 
     _apply_metadata(anime, payload)
+    await session.commit()
+    await session.refresh(anime)
+    return (await _with_watch_progress([anime], current_user.id, session))[0]
+
+
+@router.post("/{anime_id}/episodes", response_model=AnimeRead)
+async def add_downloaded_episodes(
+    anime_id: int,
+    payload: EpisodeDownloadCreate,
+    current_user: User = Depends(require_download_permission),
+    session: AsyncSession = Depends(get_session),
+):
+    anime = await session.scalar(
+        select(Anime)
+        .options(selectinload(Anime.episodes))
+        .where(Anime.id == anime_id)
+    )
+    if not anime:
+        raise HTTPException(status_code=404, detail="Anime not found")
+
+    by_index = {episode.index: episode for episode in anime.episodes}
+    for payload_episode in payload.episodes:
+        episode = by_index.get(payload_episode.index)
+        if episode is None:
+            anime.episodes.append(
+                Episode(
+                    index=payload_episode.index,
+                    name=payload_episode.name,
+                    filename=payload_episode.filename,
+                    download_hash=payload.download_hash,
+                )
+            )
+        else:
+            episode.name = payload_episode.name
+            episode.filename = payload_episode.filename
+            episode.download_hash = payload.download_hash
+            episode.file_hash = None
+
     await session.commit()
     await session.refresh(anime)
     return (await _with_watch_progress([anime], current_user.id, session))[0]
@@ -410,7 +449,10 @@ async def _with_watch_progress(
 
 
 def _episode_file_path(anime: Anime, episode: Episode):
-    return storage_service.episode_file_path(anime.download_hash, episode.filename)
+    return storage_service.episode_file_path(
+        episode.download_hash or anime.download_hash,
+        episode.filename,
+    )
 
 
 def _apply_metadata(anime: Anime, payload: AnimeCreate | AnimeMetadataUpdate) -> None:

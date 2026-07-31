@@ -20,6 +20,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
     this.resource,
     required this.files,
     required this.bangumiEpisodes,
+    this.existingEpisodes,
     required this.animeListStore,
     this.onSave,
     this.pageTitle = '匹配 Episode',
@@ -29,6 +30,7 @@ class AnimeGardenEpisodeMatchPage extends StatelessWidget {
   final AnimeGardenResource? resource;
   final List<QBittorrentFile> files;
   final List<BangumiEpisode> bangumiEpisodes;
+  final List<AnimeEpisodeRead>? existingEpisodes;
   final AnimeListStore animeListStore;
   final Future<void> Function(List<AnimeEpisodeCreate> episodes)? onSave;
   final String pageTitle;

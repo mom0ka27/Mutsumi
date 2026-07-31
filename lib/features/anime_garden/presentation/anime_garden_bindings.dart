@@ -38,6 +38,7 @@ class AnimeGardenEpisodeMatchBinding extends Bindings {
     this.resource,
     required this.files,
     required this.bangumiEpisodes,
+    this.existingEpisodes,
     required this.animeListStore,
     this.onSave,
   });
@@ -46,6 +47,7 @@ class AnimeGardenEpisodeMatchBinding extends Bindings {
   final AnimeGardenResource? resource;
   final List<QBittorrentFile> files;
   final List<BangumiEpisode> bangumiEpisodes;
+  final List<AnimeEpisodeRead>? existingEpisodes;
   final AnimeListStore animeListStore;
   final Future<void> Function(List<AnimeEpisodeCreate> episodes)? onSave;
 
@@ -57,6 +59,7 @@ class AnimeGardenEpisodeMatchBinding extends Bindings {
         resource: resource,
         files: files,
         bangumiEpisodes: bangumiEpisodes,
+        existingEpisodes: existingEpisodes,
         downloadCoordinator: Get.find<AnimeGardenDownloadCoordinator>(),
         animeListStore: animeListStore,
         onSave: onSave,

@@ -12,6 +12,11 @@ class EpisodeCreate(BaseModel):
     filename: str = ""
 
 
+class EpisodeDownloadCreate(BaseModel):
+    download_hash: str
+    episodes: list[EpisodeCreate]
+
+
 class EpisodeRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -52,4 +52,47 @@ class AnimeGardenDownloadCoordinator {
       episodes: episodes,
     );
   }
+
+  Future<void> submitEpisodesForAnime({
+    required int animeId,
+    required String source,
+    required List<AnimeEpisodeCreate> episodes,
+  }) async {
+    final hash = await _animeService.downloadTorrentFiles(
+      source: source,
+      filenames: episodes.map((episode) => episode.filename).toSet().toList(),
+    );
+    await _animeService.addDownloadedEpisodes(
+      animeId: animeId,
+      downloadHash: hash,
+      episodes: episodes,
+    );
+  }
+
+  Future<AnimeGardenEpisodeMatchingContext> prepareEpisodeRematch({
+    required BangumiSubject subject,
+    required String downloadHash,
+  }) async {
+    final files = await _animeService.getTorrentFilesByHash(downloadHash);
+    if (files.isEmpty) {
+      throw StateError('qBittorrent 暂未返回文件列表');
+    }
+    final bangumiEpisodes = await _bangumiRepository.getEpisodes(subject.id);
+    return AnimeGardenEpisodeMatchingContext(
+      files: files,
+      bangumiEpisodes: bangumiEpisodes,
+    );
+  }
+
+  Future<void> submitRematchedEpisodes({
+    required int animeId,
+    required String downloadHash,
+    required List<AnimeEpisodeCreate> episodes,
+  }) async {
+    await _animeService.addDownloadedEpisodes(
+      animeId: animeId,
+      downloadHash: downloadHash,
+      episodes: episodes,
+    );
+  }
 }

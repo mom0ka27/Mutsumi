@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../features/anime/data/anime_service.dart';
 import '../features/anime/presentation/anime_detail_controller.dart';
 import '../features/anime/presentation/anime_play_controller.dart';
+import '../features/anime_garden/data/anime_garden_download_coordinator.dart';
 import '../features/auth/presentation/auth_session.dart';
 import '../features/auth/presentation/login_controller.dart';
 import '../features/bangumi/data/bangumi_repository.dart';
@@ -78,6 +79,7 @@ class AnimeDetailBinding extends Bindings {
         initialAnime: initialAnime,
         animeService: Get.find<AnimeService>(),
         bangumiRepository: Get.find<BangumiRepository>(),
+        downloadCoordinator: Get.find<AnimeGardenDownloadCoordinator>(),
       ),
     );
   }

@@ -42,6 +42,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
     this.resource,
     required List<QBittorrentFile> files,
     required List<BangumiEpisode> bangumiEpisodes,
+    List<AnimeEpisodeRead>? existingEpisodes,
     AnimeGardenDownloadCoordinator? downloadCoordinator,
     this._animeListStore,
     this.onSave,
@@ -49,6 +50,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
            downloadCoordinator ?? AnimeGardenDownloadCoordinator() {
     _files.addAll(files);
     _bangumiEpisodes.addAll(bangumiEpisodes);
+    _existingEpisodes.addAll(existingEpisodes ?? const []);
   }
 
   final BangumiSubject subject;
@@ -58,6 +60,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
   final Future<void> Function(List<AnimeEpisodeCreate> episodes)? onSave;
   final _files = <QBittorrentFile>[];
   final _bangumiEpisodes = <BangumiEpisode>[];
+  final _existingEpisodes = <AnimeEpisodeRead>[];
   final matches = <EpisodeFileMatch>[].obs;
   final saving = false.obs;
 
@@ -157,7 +160,7 @@ class AnimeGardenEpisodeMatchController extends GetxController {
         await onSave!(episodes);
         _refreshAnimeList();
         Get
-          ..back()
+          ..back<bool>(result: true)
           ..snackbar('已添加', 'Anime 和 Episode 已保存到服务器');
       } else {
         await _downloadCoordinator.submitEpisodeSelection(
@@ -237,7 +240,29 @@ class AnimeGardenEpisodeMatchController extends GetxController {
     return result ?? false;
   }
 
+  void _buildMatchesFromExisting() {
+    final bangumiByIndex = {for (final e in _bangumiEpisodes) e.index: e};
+    final defaultMatches =
+        _existingEpisodes
+            .map(
+              (episode) => EpisodeFileMatch(
+                index: episode.index,
+                name: episode.name,
+                filename: episode.filename,
+                bangumiEpisode: bangumiByIndex[episode.index],
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.index.compareTo(b.index));
+    matches.assignAll(defaultMatches);
+  }
+
   void _buildDefaultMatches() {
+    if (_existingEpisodes.isNotEmpty) {
+      _buildMatchesFromExisting();
+      return;
+    }
+
     final sortedFiles = videoFiles
         .where((file) => file.size > 1024 * 1024 * 10)
         .toList();
