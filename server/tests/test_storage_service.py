@@ -4,6 +4,7 @@ escaping the data directory is the failure mode worth pinning down."""
 import pytest
 from fastapi import HTTPException
 
+from app.models import Anime, Episode
 from app.services.storage_service import StorageService, storage_service
 
 
@@ -67,11 +68,30 @@ async def test_status_reports_sizes(data_path):
     folder_id = await storage_service.create_local_folder(1234)
     (data_path / folder_id / "ep1.mkv").write_bytes(b"0" * 2048)
 
-    status = await storage_service.status([(1, "Anime", "动画", folder_id)])
+    anime = Anime(id=1, bangumi_id=1, name="Anime", name_cn="动画", download_hash=folder_id)
+    anime.episodes.append(Episode(index=1, filename="ep1.mkv"))
+    status = await storage_service.status([anime])
     assert status.data_size_bytes >= 2048
     assert status.anime[0].size_bytes == 2048
     assert status.anime[0].file_count == 1
     assert status.disk_total_bytes > 0
+
+    await storage_service.delete_local_folder(folder_id)
+
+
+async def test_status_counts_shared_download_hash_once(data_path):
+    folder_id = await storage_service.create_local_folder(4321)
+    (data_path / folder_id / "ep1.mkv").write_bytes(b"0" * 2048)
+
+    anime_a = Anime(id=1, bangumi_id=1, name="Anime A", name_cn="动画 A", download_hash=folder_id)
+    anime_a.episodes.append(Episode(index=1, filename="ep1.mkv"))
+    anime_b = Anime(id=2, bangumi_id=2, name="Anime B", name_cn="动画 B", download_hash=folder_id)
+    anime_b.episodes.append(Episode(index=1, filename="ep1.mkv"))
+    status = await storage_service.status([anime_a, anime_b], refresh=True)
+
+    sizes = {item.anime_id: item.size_bytes for item in status.anime}
+    assert sizes == {1: 2048, 2: 0}
+    assert status.data_size_bytes >= 2048
 
     await storage_service.delete_local_folder(folder_id)
 
@@ -84,17 +104,18 @@ async def test_directory_size_cache_is_reused_then_refreshed(monkeypatch, data_p
     folder = data_path / folder_id
     (folder / "ep1.mkv").write_bytes(b"0" * 1024)
 
-    anime = [(1, "Anime", "动画", folder_id)]
-    first = await service.status(anime)
+    anime = Anime(id=1, bangumi_id=1, name="Anime", name_cn="动画", download_hash=folder_id)
+    anime.episodes.append(Episode(index=1, filename="ep1.mkv"))
+    first = await service.status([anime])
     assert first.anime[0].size_bytes == 1024
 
     (folder / "ep2.mkv").write_bytes(b"0" * 4096)
 
-    cached = await service.status(anime)
+    cached = await service.status([anime])
     assert cached.anime[0].size_bytes == 1024, "cached scan should be reused"
 
-    refreshed = await service.status(anime, refresh=True)
-    assert refreshed.anime[0].size_bytes == 5120
+    refreshed = await service.status([anime], refresh=True)
+    assert refreshed.anime[0].size_bytes == 1024
 
     await service.delete_local_folder(folder_id)
 
@@ -126,8 +147,9 @@ async def test_delete_invalidates_the_cache(monkeypatch, data_path):
 
     folder_id = await service.create_local_folder(777)
     (data_path / folder_id / "ep1.mkv").write_bytes(b"0" * 1024)
-    anime = [(1, "Anime", "动画", folder_id)]
-    assert (await service.status(anime)).anime[0].size_bytes == 1024
+    anime = Anime(id=1, bangumi_id=1, name="Anime", name_cn="动画", download_hash=folder_id)
+    anime.episodes.append(Episode(index=1, filename="ep1.mkv"))
+    assert (await service.status([anime])).anime[0].size_bytes == 1024
 
     await service.delete_local_folder(folder_id)
-    assert (await service.status(anime)).anime[0].size_bytes == 0
+    assert (await service.status([anime])).anime[0].size_bytes == 0

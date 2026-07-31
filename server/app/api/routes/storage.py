@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_session, require_admin
 from app.models import Anime
@@ -22,5 +23,13 @@ async def get_storage_status(
         description="Bypass the directory size cache and rescan.",
     ),
 ):
-    anime = (await session.execute(select(Anime.id, Anime.name, Anime.name_cn, Anime.download_hash).order_by(Anime.name_cn, Anime.name))).all()
+    anime = list(
+        (
+            await session.scalars(
+                select(Anime)
+                .options(selectinload(Anime.episodes))
+                .order_by(Anime.name_cn, Anime.name)
+            )
+        ).all()
+    )
     return await storage_service.status(anime, refresh=refresh)

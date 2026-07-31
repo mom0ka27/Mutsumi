@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from app.core.config import config
+from app.models import Anime
 from app.schemas import AnimeStorageRead, QBittorrentFileRead, StorageStatusRead
 
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".webm"}
@@ -56,7 +57,7 @@ class StorageService:
 
     async def status(
         self,
-        anime: list[tuple[int, str, str, str]],
+        anime: list[Anime],
         refresh: bool = False,
     ) -> StorageStatusRead:
         # Serialised so concurrent requests share one walk instead of racing
@@ -101,15 +102,19 @@ class StorageService:
         path = (root / filename).resolve()
         return path if root in path.parents else None
 
-    def _status(self, anime: list[tuple[int, str, str, str]]) -> StorageStatusRead:
+    def _status(self, anime: list[Anime]) -> StorageStatusRead:
         data_path = self._root(create=True)
         stat = os.statvfs(data_path)
         total = stat.f_blocks * stat.f_frsize
         free = stat.f_bavail * stat.f_frsize
         used = total - (stat.f_bfree * stat.f_frsize)
         data_size, data_file_count = self._directory_size(data_path)
+        counted_files: set[str] = set()
         anime_storage = sorted(
-            (self._anime_storage(item, data_path) for item in anime),
+            (
+                self._anime_storage(item, counted_files)
+                for item in anime
+            ),
             key=lambda item: item.size_bytes,
             reverse=True,
         )
@@ -161,17 +166,33 @@ class StorageService:
             raise HTTPException(status_code=400, detail="Invalid folder id")
         return path
 
-    def _anime_storage(self, anime: tuple[int, str, str, str], data_path: Path) -> AnimeStorageRead:
-        download_hash = anime[3]
-        folder_path = (data_path / download_hash).resolve() if download_hash else None
-        size_bytes, file_count = (
-            self._directory_size(folder_path)
-            if folder_path is not None and data_path in folder_path.parents and folder_path.is_dir() and not folder_path.is_symlink()
-            else (0, 0)
-        )
+    def _anime_storage(
+        self,
+        anime: Anime,
+        counted_files: set[str],
+    ) -> AnimeStorageRead:
+        size_bytes = 0
+        file_count = 0
+        download_hash = anime.download_hash
+        for episode in anime.episodes:
+            path = self.episode_file_path(
+                episode.download_hash or download_hash,
+                episode.filename,
+            )
+            if path is None or path.is_symlink() or not path.is_file():
+                continue
+            file_key = str(path)
+            if file_key in counted_files:
+                continue
+            try:
+                size_bytes += path.stat().st_size
+            except OSError:
+                continue
+            counted_files.add(file_key)
+            file_count += 1
         return AnimeStorageRead(
-            anime_id=anime[0],
-            name=anime[2] or anime[1],
+            anime_id=anime.id,
+            name=anime.name_cn or anime.name,
             size_bytes=size_bytes,
             file_count=file_count,
             download_hash=download_hash,
