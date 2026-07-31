@@ -12,6 +12,8 @@ class QBittorrentTorrentAddResult(BaseModel):
 class QBittorrentFileRead(BaseModel):
     name: str
     size: int
+    id: int | None = None
+    priority: int = 0
 
 
 class QBittorrentTorrentRead(BaseModel):

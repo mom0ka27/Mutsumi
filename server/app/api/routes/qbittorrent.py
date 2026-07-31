@@ -148,7 +148,7 @@ async def _enable_torrent_files(
     selected_filenames: set[str],
 ) -> None:
     selected_ids = [
-        str(index)
+        str(file.id if file.id is not None else index)
         for index, file in enumerate(files)
         if file.name in selected_filenames
     ]
@@ -161,6 +161,68 @@ async def _enable_torrent_files(
             "hash": torrent_hash,
             "id": "|".join(selected_ids),
             "priority": "1",
+        },
+    )
+    if response.status_code >= 400 or response.text.strip() == "Fails.":
+        raise QBittorrentError(21006, f"更新下载文件失败: {response.text.strip()}")
+
+
+async def sync_torrent_file_priorities(
+    torrent_hash: str,
+    selected_filenames: set[str],
+) -> None:
+    async with _torrent_download_lock:
+        client = await _qbittorrent_client(timeout=30)
+        try:
+            files = await _get_torrent_files(client, torrent_hash)
+            selected_filenames = set(selected_filenames)
+            selected_filenames.update(
+                _related_subtitle_names(files, selected_filenames)
+            )
+            selected_ids = [
+                str(file.id)
+                for file in files
+                if file.name in selected_filenames and file.id is not None
+            ]
+            if selected_filenames - {file.name for file in files}:
+                raise QBittorrentError(
+                    21010,
+                    "选择的文件不在种子中",
+                    HTTPStatus.BAD_REQUEST,
+                )
+            selected_id_set = set(selected_ids)
+            removed_ids = [
+                str(file.id)
+                for file in files
+                if file.id is not None
+                and file.priority > 0
+                and str(file.id) not in selected_id_set
+            ]
+            if removed_ids:
+                await _set_torrent_file_priority(
+                    client, torrent_hash, removed_ids, 0
+                )
+            if selected_ids:
+                await _set_torrent_file_priority(
+                    client, torrent_hash, selected_ids, 1
+                )
+        finally:
+            await client.aclose()
+
+
+async def _set_torrent_file_priority(
+    client: httpx.AsyncClient,
+    torrent_hash: str,
+    file_ids: list[str],
+    priority: int,
+) -> None:
+    response = await _qbittorrent_post(
+        client,
+        "/api/v2/torrents/filePrio",
+        data={
+            "hash": torrent_hash,
+            "id": "|".join(file_ids),
+            "priority": str(priority),
         },
     )
     if response.status_code >= 400 or response.text.strip() == "Fails.":
@@ -247,8 +309,10 @@ async def _get_torrent_files(
         QBittorrentFileRead(
             name=str(item.get("name") or ""),
             size=int(item.get("size") or 0),
+            id=int(item.get("index", index)),
+            priority=int(item.get("priority") or 0),
         )
-        for item in data
+        for index, item in enumerate(data)
         if isinstance(item, dict) and item.get("name")
     ]
 
@@ -309,8 +373,10 @@ def _metadata_files(metadata: dict) -> list[QBittorrentFileRead]:
         QBittorrentFileRead(
             name=str(file.get("name") or file.get("path") or ""),
             size=int(file.get("size") or file.get("length") or 0),
+            id=int(file.get("index", index)),
+            priority=int(file.get("priority") or 0),
         )
-        for file in files
+        for index, file in enumerate(files)
         if isinstance(file, dict) and (file.get("name") or file.get("path"))
     ]
 

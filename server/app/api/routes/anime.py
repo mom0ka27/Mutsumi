@@ -29,6 +29,7 @@ from app.schemas import (
     WatchProgressUpdate,
 )
 from app.services.qbittorrent_service import delete_torrent
+from app.api.routes.qbittorrent import sync_torrent_file_priorities
 from app.services.storage_service import storage_service
 
 SUBTITLE_EXTENSIONS = {".ass", ".ssa", ".srt", ".vtt"}
@@ -186,6 +187,39 @@ async def add_downloaded_episodes(
             episode.filename = payload_episode.filename
             episode.download_hash = payload.download_hash
             episode.file_hash = None
+
+    hash_to_filenames: dict[str, set[str]] = {}
+    for episode in anime.episodes:
+        download_hash = episode.download_hash or anime.download_hash
+        if download_hash and episode.filename and len(download_hash) == 40:
+            hash_to_filenames.setdefault(download_hash, set()).add(episode.filename)
+
+    if hash_to_filenames:
+        shared_animes = list(
+            (
+                await session.scalars(
+                    select(Anime)
+                    .options(selectinload(Anime.episodes))
+                    .where(
+                        (Anime.download_hash.in_(hash_to_filenames))
+                        | Anime.episodes.any(
+                            Episode.download_hash.in_(hash_to_filenames)
+                        )
+                    )
+                )
+            ).all()
+        )
+        for shared_anime in shared_animes:
+            for episode in shared_anime.episodes:
+                download_hash = episode.download_hash or shared_anime.download_hash
+                if (
+                    download_hash in hash_to_filenames
+                    and episode.filename
+                ):
+                    hash_to_filenames[download_hash].add(episode.filename)
+
+    for download_hash, filenames in hash_to_filenames.items():
+        await sync_torrent_file_priorities(download_hash, filenames)
 
     await session.commit()
     await session.refresh(anime)
