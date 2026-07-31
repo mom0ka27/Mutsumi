@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 server/config.yaml
+
+# Environment variables (contains secrets, do not commit)
+.env

@@ -1,5 +1,5 @@
 PODS:
-  - erika_flutter (0.1.3):
+  - erika_flutter (0.1.4):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
 
@@ -14,7 +14,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
 
 SPEC CHECKSUMS:
-  erika_flutter: 065ef3b560f5dd5414b8489f54bc4d1823e5ef7a
+  erika_flutter: 6aeed83af30194a78de6321f8dc7c8ebc75adea0
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
 
 PODFILE CHECKSUM: 6055c7ea8057d8966575408a022dd98a9f946373

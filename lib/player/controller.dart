@@ -281,13 +281,17 @@ class IndexPlayerController {
 
   void _pushDanmaku(Duration position) {
     final second = position.inSeconds;
-    if (!enableDanmaku.value ||
-        _danmakuController == null ||
-        _lastDanmakuSecond == second) {
+    final controller = _danmakuController;
+    final list = _danmakuList;
+    if (controller == null ||
+        list == null ||
+        seeking ||
+        (_lastDanmakuSecond != null && second <= _lastDanmakuSecond!) ||
+        !controller.running) {
       return;
     }
     _lastDanmakuSecond = second;
-    _danmakuController!.addItems(_danmakuList?.getDanmakus(second) ?? []);
+    controller.addItems(list.getDanmakus(second));
   }
 
   Future<void> selectIndex(int index) async {
@@ -357,6 +361,7 @@ class IndexPlayerController {
     this.video.value = video;
     _playbackCompleted = false;
     _resetPlaybackState();
+    _danmakuController?.clear();
     _resetDanmakuSecond();
     _danmakuList = null;
     danmakuCount.value = 0;
@@ -407,6 +412,8 @@ class IndexPlayerController {
             _danmakuList = result.list;
             danmakuCount.value = result.count;
             danmakuEpisodeId.value = result.episodeId;
+            _resetDanmakuSecond();
+            _pushDanmaku(_state.position);
           }
         }),
         '弹幕加载失败',
@@ -429,8 +436,6 @@ class IndexPlayerController {
 
   void toggleDanmaku() {
     enableDanmaku.toggle();
-    _resetDanmakuSecond();
-    if (!enableDanmaku.value) _danmakuController?.clear();
   }
 
   Future<void> refreshDanmaku() async {
@@ -461,8 +466,8 @@ class IndexPlayerController {
 
   Future<void> pause() async {
     if (_disposed || !_state.playing) return;
-    await _player.pause();
     _danmakuController?.pause();
+    await _player.pause();
   }
 
   Future<void> togglePlayback() => _state.playing ? pause() : play();
@@ -492,9 +497,16 @@ class IndexPlayerController {
     if (_disposed) return;
     _seeking.value = true;
     wantSeeking.value = false;
-    await _player.seek(position < Duration.zero ? Duration.zero : position);
-    _seeking.value = false;
+    _danmakuController?.clear();
     _resetDanmakuSecond();
+    final target = position < Duration.zero ? Duration.zero : position;
+    try {
+      await _player.seek(target);
+    } finally {
+      _seeking.value = false;
+    }
+    _resetDanmakuSecond();
+    _pushDanmaku(target);
   }
 
   Future<void> seekBy(Duration offset) async {
@@ -505,8 +517,16 @@ class IndexPlayerController {
         : target > _state.duration
         ? _state.duration
         : target;
-    await _player.seek(position);
+    _seeking.value = true;
+    _danmakuController?.clear();
     _resetDanmakuSecond();
+    try {
+      await _player.seek(position);
+    } finally {
+      _seeking.value = false;
+    }
+    _resetDanmakuSecond();
+    _pushDanmaku(position);
   }
 
   Future<void> adjustVolume(double delta) async {

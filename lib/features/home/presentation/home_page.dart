@@ -33,6 +33,7 @@ class HomePage extends GetView<HomeController> {
 
       return GlassScaffold(
         topEdgeFade: true,
+        edgeToEdge: true,
         bottomEdgeFade: false,
         extendBody: true,
         resizeToAvoidBottomInset: false,

@@ -128,39 +128,47 @@ class BottomBar extends StatelessWidget {
                 );
               }),
               const Spacer(),
-              Semantics(
-                label: '弹幕',
-                button: true,
-                enabled: dandanPlayConfigured,
-                selected:
-                    dandanPlayConfigured && controller.enableDanmaku.value,
-                child: InkWell(
-                  onTap: dandanPlayConfigured ? controller.toggleDanmaku : null,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 11,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          dandanPlayConfigured && controller.enableDanmaku.value
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
+              Obx(
+                () => Semantics(
+                  label: '弹幕',
+                  button: true,
+                  enabled: dandanPlayConfigured,
+                  selected:
+                      dandanPlayConfigured && controller.enableDanmaku.value,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: dandanPlayConfigured
+                        ? controller.toggleDanmaku
+                        : null,
                     child: Obx(
-                      () => Text(
-                        '弹 ${controller.danmakuCount.value}',
-                        style: TextStyle(
+                      () => AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
                           color:
                               dandanPlayConfigured &&
                                   controller.enableDanmaku.value
-                              ? Colors.black
-                              : Colors.white.withValues(
-                                  alpha: dandanPlayConfigured ? 1 : 0.4,
-                                ),
-                          fontWeight: FontWeight.w700,
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Obx(
+                          () => Text(
+                            '弹 ${controller.danmakuCount.value}',
+                            style: TextStyle(
+                              color:
+                                  dandanPlayConfigured &&
+                                      controller.enableDanmaku.value
+                                  ? Colors.black
+                                  : Colors.white.withValues(
+                                      alpha: dandanPlayConfigured ? 1 : 0.4,
+                                    ),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ),
                     ),

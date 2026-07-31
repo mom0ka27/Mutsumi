@@ -89,35 +89,42 @@ class SettingsHomeView extends GetView<SettingsHomeController> {
             padding: EdgeInsets.zero,
             shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
             settings: glassSettings,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.switch_account_rounded),
-                  title: const Text('切换账户'),
-                  subtitle: const Text('管理已保存的服务器与账户'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Get.to(
-                    () => const SavedServersPage(),
-                    binding: SavedServersBinding(),
+            child: Material(
+              color: Colors.transparent,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.all(Constants.radius),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.switch_account_rounded),
+                    title: const Text('切换账户'),
+                    subtitle: const Text('管理已保存的服务器与账户'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Get.to(
+                      () => const SavedServersPage(),
+                      binding: SavedServersBinding(),
+                    ),
                   ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.person_add_alt_1_rounded),
-                  title: const Text('添加账户'),
-                  subtitle: const Text('登录当前服务器的其他账户'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: account == null ? null : controller.addAccount,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.password_rounded),
-                  title: const Text('修改密码'),
-                  subtitle: const Text('更新当前账户的登录密码'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: account == null ? null : controller.changePassword,
-                ),
-              ],
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.person_add_alt_1_rounded),
+                    title: const Text('添加账户'),
+                    subtitle: const Text('登录当前服务器的其他账户'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: account == null ? null : controller.addAccount,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.password_rounded),
+                    title: const Text('修改密码'),
+                    subtitle: const Text('更新当前账户的登录密码'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: account == null ? null : controller.changePassword,
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -126,12 +133,19 @@ class SettingsHomeView extends GetView<SettingsHomeController> {
             padding: EdgeInsets.zero,
             shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
             settings: glassSettings,
-            child: ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('外观'),
-              subtitle: const Text('调整主题模式'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Get.to(() => const AppearanceSettingsPage()),
+            child: Material(
+              color: Colors.transparent,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.all(Constants.radius),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('外观'),
+                subtitle: const Text('调整主题模式'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Get.to(() => const AppearanceSettingsPage()),
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -140,12 +154,19 @@ class SettingsHomeView extends GetView<SettingsHomeController> {
             padding: EdgeInsets.zero,
             shape: LiquidRoundedSuperellipse(borderRadius: Constants.radius.x),
             settings: glassSettings,
-            child: ListTile(
-              leading: const Icon(Icons.play_circle_outline_rounded),
-              title: const Text('播放器'),
-              subtitle: const Text('后台播放、倍速与长按倍速'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Get.to(() => const PlayerSettingsPage()),
+            child: Material(
+              color: Colors.transparent,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.all(Constants.radius),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                leading: const Icon(Icons.play_circle_outline_rounded),
+                title: const Text('播放器'),
+                subtitle: const Text('后台播放、倍速与长按倍速'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Get.to(() => const PlayerSettingsPage()),
+              ),
             ),
           ),
           if (controller.isAdmin) ...[
@@ -157,52 +178,59 @@ class SettingsHomeView extends GetView<SettingsHomeController> {
                 borderRadius: Constants.radius.x,
               ),
               settings: glassSettings,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.download_rounded),
-                    title: const Text('qBittorrent'),
-                    subtitle: const Text('下载与分享率设置'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(
-                      () => const QBittorrentSettingsPage(),
-                      binding: QBittorrentSettingsBinding(),
+              child: Material(
+                color: Colors.transparent,
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: BorderRadius.all(Constants.radius),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.download_rounded),
+                      title: const Text('qBittorrent'),
+                      subtitle: const Text('下载与分享率设置'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Get.to(
+                        () => const QBittorrentSettingsPage(),
+                        binding: QBittorrentSettingsBinding(),
+                      ),
                     ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.manage_accounts_rounded),
-                    title: const Text('用户管理'),
-                    subtitle: const Text('新增、编辑和删除用户'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(
-                      () => const UsersManagementPage(),
-                      binding: UsersManagementBinding(),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.manage_accounts_rounded),
+                      title: const Text('用户管理'),
+                      subtitle: const Text('新增、编辑和删除用户'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Get.to(
+                        () => const UsersManagementPage(),
+                        binding: UsersManagementBinding(),
+                      ),
                     ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.storage_rounded),
-                    title: const Text('存储空间'),
-                    subtitle: const Text('查看 data 文件夹和服务器磁盘容量'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(
-                      () => const StorageStatusPage(),
-                      binding: StorageStatusBinding(),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.storage_rounded),
+                      title: const Text('存储空间'),
+                      subtitle: const Text('查看 data 文件夹和服务器磁盘容量'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Get.to(
+                        () => const StorageStatusPage(),
+                        binding: StorageStatusBinding(),
+                      ),
                     ),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.system_update_rounded),
-                    title: const Text('服务端更新'),
-                    subtitle: const Text('检查并安装 GitHub 发布版本或分支更新'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Get.to(
-                      () => const ServerUpdatePage(),
-                      binding: ServerUpdateBinding(),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.system_update_rounded),
+                      title: const Text('服务端更新'),
+                      subtitle: const Text('检查并安装 GitHub 发布版本或分支更新'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Get.to(
+                        () => const ServerUpdatePage(),
+                        binding: ServerUpdateBinding(),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
