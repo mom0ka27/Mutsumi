@@ -134,7 +134,7 @@ class BottomBar extends StatelessWidget {
                   button: true,
                   enabled: dandanPlayConfigured,
                   selected:
-                      dandanPlayConfigured && controller.enableDanmaku.value,
+                      controller.enableDanmaku.value && dandanPlayConfigured,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: dandanPlayConfigured
@@ -149,8 +149,8 @@ class BottomBar extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color:
-                              dandanPlayConfigured &&
-                                  controller.enableDanmaku.value
+                              controller.enableDanmaku.value &&
+                                  dandanPlayConfigured
                               ? Colors.white
                               : Colors.white.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(18),
@@ -160,8 +160,8 @@ class BottomBar extends StatelessWidget {
                             '弹 ${controller.danmakuCount.value}',
                             style: TextStyle(
                               color:
-                                  dandanPlayConfigured &&
-                                      controller.enableDanmaku.value
+                                  controller.enableDanmaku.value &&
+                                      dandanPlayConfigured
                                   ? Colors.black
                                   : Colors.white.withValues(
                                       alpha: dandanPlayConfigured ? 1 : 0.4,
