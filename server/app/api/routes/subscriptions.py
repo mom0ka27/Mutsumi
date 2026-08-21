@@ -34,7 +34,6 @@ from app.schemas import (
     SubscriptionRead,
     SubscriptionUpdate,
 )
-from app.services.animegarden_service import AnimeGardenService
 from app.services.bangumi_service import BangumiService
 from app.services.subscription_engine import EpisodeInfo, next_expected_episode
 from app.services.subscription_worker import (
@@ -343,17 +342,16 @@ async def list_subscription_fansubs(
     _: User = Depends(get_current_user),
 ):
     now = _utcnow()
-    service = AnimeGardenService()
     display_names: dict[str, str] = {}
     counts: dict[str, int] = {}
     latest: dict[str, datetime | None] = {}
-    resources, _ = await service.search_resources(
-        page=1,
-        page_size=100,
+    # By subject id and by every name the show goes by: a release the indexer
+    # never tagged would otherwise leave the picker empty, and an empty picker
+    # blocks the whole subscription -- saving requires a fansub.
+    resources = await SubscriptionWorker().recent_resources(
+        bangumi_id,
         after=now - timedelta(days=30),
         before=now,
-        subjects=(bangumi_id,),
-        types=("动画",),
     )
     for resource in resources:
         name = resource.fansub_name.strip()
@@ -416,6 +414,7 @@ async def _resolve_or_create_anime(session: AsyncSession, bangumi_id: int) -> An
         platform=subject.platform,
         tags=subject.tags,
         infobox=subject.infobox,
+        aliases=subject.aliases,
         # Initialized so later reads do not trigger a lazy load on a fresh
         # instance, which async SQLAlchemy cannot service.
         episodes=[],

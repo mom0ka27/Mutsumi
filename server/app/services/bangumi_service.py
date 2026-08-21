@@ -34,6 +34,7 @@ class SubjectInfo:
     platform: str = ""
     tags: list[str] = field(default_factory=list)
     infobox: list[dict[str, str]] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
 
 
 class BangumiService:
@@ -177,13 +178,45 @@ def _subject_from_json(item: dict[str, Any]) -> SubjectInfo:
             {"key": str(entry.get("key")), "value": str(entry.get("value"))}
             # Multi-value keys (别名, 主题歌) arrive as lists; the Anime model
             # stores flat key/value pairs, so those entries are dropped rather
-            # than stringified into noise.
+            # than stringified into noise. 别名 is picked up separately below,
+            # because release titles use those names far more often than the
+            # official one.
             for entry in item.get("infobox") or []
             if isinstance(entry, dict)
             and entry.get("key")
             and isinstance(entry.get("value"), str)
         ],
+        aliases=_aliases(item.get("infobox")),
     )
+
+
+_ALIAS_KEYS = ("别名", "別名")
+
+
+def _aliases(infobox: Any) -> list[str]:
+    """The 别名 rows of an infobox, flattened and deduped.
+
+    A single alias arrives as a plain string and several arrive as a list of
+    ``{"v": ...}`` rows, so both shapes have to be read.
+    """
+    if not isinstance(infobox, list):
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for entry in infobox:
+        if not isinstance(entry, dict) or str(entry.get("key")) not in _ALIAS_KEYS:
+            continue
+        value = entry.get("value")
+        candidates = value if isinstance(value, list) else [value]
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                candidate = candidate.get("v")
+            text = str(candidate or "").strip()
+            folded = text.casefold()
+            if len(text) >= 2 and folded not in seen:
+                seen.add(folded)
+                names.append(text)
+    return names
 
 
 def _image_url(images: Any) -> str:

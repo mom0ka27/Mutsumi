@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 import logging
 from pathlib import Path
 import random
+from types import SimpleNamespace
 from typing import Any, Iterable
 
 import httpx
@@ -34,6 +36,7 @@ from app.services.subscription_engine import (
     parse_episode_index,
     profile_values,
     resource_matches_subscription,
+    search_variants,
     season_start,
     subscription_rules,
 )
@@ -43,6 +46,14 @@ from app.services.storage_service import VIDEO_EXTENSIONS
 logger = logging.getLogger(__name__)
 _sweep_lock = asyncio.Lock()
 _VIDEO_MIN_SIZE = 10 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class _Query:
+    """One upstream feed query. Terms within it are ANDed by the API."""
+
+    subjects: tuple[int, ...] = ()
+    search: tuple[str, ...] = ()
 
 
 class SubscriptionSweepAborted(RuntimeError):
@@ -150,6 +161,7 @@ class SubscriptionWorker:
                 anime.name_cn = subject.name_cn
                 anime.episode_count = subject.episode_count
                 anime.air_date = subject.air_date
+                anime.aliases = list(subject.aliases)
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
         resources = await self._fetch_draft_resources(
             anime,
@@ -389,18 +401,10 @@ class SubscriptionWorker:
             after = subscription.cursor_at or now - timedelta(
                 days=_config_int("cold_start_days", 7)
             )
-        subjects = _subjects_for(anime, subscription.use_subject_id)
-        # ``subjects`` and ``search`` are ANDed upstream, and resource titles
-        # rarely carry the full Bangumi name, so the name is only a fallback for
-        # when the subject id is unavailable.
-        search = tuple(subscription.search_keywords or ())
-        if not search and not subjects and anime:
-            search = (anime.name,)
         return await self._fetch_resources(
             after=after,
             before=now,
-            subjects=subjects,
-            search=search,
+            queries=await self._queries_for(subscription, anime),
             types=tuple(subscription.resource_types or ("动画",)),
         )
 
@@ -413,8 +417,7 @@ class SubscriptionWorker:
         return await self._fetch_resources(
             after=_naive_utc(subscription.backfill_after or now),
             before=now,
-            subjects=_subjects_for(anime, subscription.use_subject_id),
-            search=tuple(subscription.search_keywords or ()),
+            queries=await self._queries_for(subscription, anime),
             types=tuple(subscription.resource_types or ("动画",)),
         )
 
@@ -425,16 +428,80 @@ class SubscriptionWorker:
         now: datetime,
         episodes: list[Any] = (),
     ) -> list[AnimeGardenResource]:
-        subjects = _subjects_for(anime, getattr(draft, "use_subject_id", True))
-        search = tuple(getattr(draft, "search_keywords", None) or ())
-        if not search and not subjects:
-            search = (anime.name,)
         return await self._fetch_resources(
             after=_draft_window_start(anime, draft, episodes, now),
             before=now,
-            subjects=subjects,
-            search=search,
+            queries=await self._queries_for(draft, anime),
             types=tuple(getattr(draft, "resource_types", None) or ("动画",)),
+        )
+
+    async def _queries_for(self, rules_source: Any, anime: Anime | None) -> tuple[_Query, ...]:
+        """The subject query plus one query per name this show goes by.
+
+        The subject id is the precise filter, but a release the indexer never
+        tagged is invisible to it -- and that silent gap is the usual reason an
+        episode sits at 等待资源. The name queries are the net underneath it.
+        """
+        if anime is None:
+            return ()
+        await self._ensure_aliases(anime)
+        rules = subscription_rules(rules_source, anime)
+        queries = []
+        subjects = _subjects_for(anime, getattr(rules_source, "use_subject_id", True))
+        if subjects:
+            queries.append(_Query(subjects=subjects))
+        limit = _config_int("max_name_variants", 4)
+        queries.extend(_Query(search=variant) for variant in search_variants(rules, limit))
+        return tuple(queries)
+
+    async def _ensure_aliases(self, anime: Anime) -> tuple[str, ...]:
+        """Bangumi's 别名 list, fetched once and then kept on the row.
+
+        Filled in lazily rather than by a data migration: rows created before
+        the column existed have none, and a subject that gained aliases upstream
+        after its row was created would otherwise never pick them up.
+        """
+        stored = tuple(anime.aliases or ())
+        if stored or not anime.bangumi_id:
+            return stored
+        try:
+            subject = await self.bangumi.get_subject(anime.bangumi_id)
+        except (httpx.HTTPError, ValueError) as error:
+            logger.warning(
+                "Bangumi alias fetch failed id=%s: %s", anime.bangumi_id, error
+            )
+            return ()
+        if subject is None or not subject.aliases:
+            return ()
+        anime.aliases = list(subject.aliases)
+        return tuple(subject.aliases)
+
+    async def recent_resources(
+        self,
+        bangumi_id: int,
+        *,
+        after: datetime,
+        before: datetime,
+        types: tuple[str, ...] = ("动画",),
+    ) -> list[AnimeGardenResource]:
+        """Everything published for a subject, by id and by every known name.
+
+        Used by the fansub picker, which would otherwise list nothing at all for
+        a show whose releases the indexer never tagged with a subject.
+        """
+        subject = await self.bangumi.get_subject(bangumi_id)
+        anime = Anime(
+            id=0,
+            bangumi_id=bangumi_id,
+            name=subject.name if subject else "",
+            name_cn=subject.name_cn if subject else "",
+            aliases=list(subject.aliases) if subject else [],
+        )
+        return await self._fetch_resources(
+            after=after,
+            before=before,
+            queries=await self._queries_for(SimpleNamespace(), anime),
+            types=types,
         )
 
     async def _fetch_resources(
@@ -442,25 +509,31 @@ class SubscriptionWorker:
         *,
         after: datetime,
         before: datetime,
-        subjects: tuple[int, ...] = (),
-        search: tuple[str, ...] = (),
+        queries: tuple[_Query, ...] = (),
         types: tuple[str, ...] = ("动画",),
     ) -> list[AnimeGardenResource]:
+        """The union of every query, deduped by resource id.
+
+        One query per name variant is the only way to ask for alternative
+        titles: upstream ANDs the terms within a single ``search``. The same
+        release commonly comes back from several of them, hence the dedupe.
+        """
         resources: dict[int, AnimeGardenResource] = {}
-        for page in range(1, _config_int("max_pages_per_sweep", 5) + 1):
-            page_resources, complete = await self.anime_garden.search_resources(
-                page=page,
-                page_size=100,
-                after=after,
-                before=before,
-                subjects=subjects,
-                search=search,
-                types=types,
-            )
-            for resource in page_resources:
-                resources[resource.id] = resource
-            if complete:
-                break
+        for query in queries or (_Query(),):
+            for page in range(1, _config_int("max_pages_per_sweep", 5) + 1):
+                page_resources, complete = await self.anime_garden.search_resources(
+                    page=page,
+                    page_size=100,
+                    after=after,
+                    before=before,
+                    subjects=query.subjects,
+                    search=query.search,
+                    types=types,
+                )
+                for resource in page_resources:
+                    resources[resource.id] = resource
+                if complete:
+                    break
         return sorted(resources.values(), key=_resource_sort_key)
 
     async def _process_subscription(

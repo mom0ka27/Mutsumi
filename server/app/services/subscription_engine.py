@@ -59,6 +59,7 @@ class SubscriptionRules:
     bangumi_id: int
     anime_name: str = ""
     anime_name_cn: str = ""
+    aliases: tuple[str, ...] = ()
     fansubs: tuple[str, ...] = ()
     allow_no_fansub: bool = False
     search_keywords: tuple[str, ...] = ()
@@ -177,6 +178,7 @@ def subscription_rules(subscription: Any, anime: Any | None = None) -> Subscript
         bangumi_id=int(getattr(anime, "bangumi_id", 0) or 0),
         anime_name=str(getattr(anime, "name", "") or ""),
         anime_name_cn=str(getattr(anime, "name_cn", "") or ""),
+        aliases=_string_list(getattr(anime, "aliases", None)),
         fansubs=_string_list(getattr(subscription, "fansubs", None)),
         allow_no_fansub=bool(getattr(subscription, "allow_no_fansub", False)),
         search_keywords=_string_list(getattr(subscription, "search_keywords", None)),
@@ -283,6 +285,37 @@ def _contains_any(title: str, values: Iterable[str]) -> str | None:
     return None
 
 
+def known_names(rules: SubscriptionRules) -> tuple[str, ...]:
+    """Every title this show is released under, most recognisable first.
+
+    Bangumi's official name is often the one nobody uses: fansubs title their
+    releases with the Chinese name or one of the 别名, so all of them count as
+    the same show.
+    """
+    return tuple(
+        name
+        for name in merge_unique(
+            (rules.anime_name_cn, rules.anime_name, *rules.aliases)
+        )
+        if len(name.strip()) >= 2
+    )
+
+
+def search_variants(rules: SubscriptionRules, limit: int = 4) -> tuple[tuple[str, ...], ...]:
+    """Name queries to run separately and then merge.
+
+    Upstream ANDs the terms inside one ``search``, so two names for the same
+    show cannot be asked for at once -- each name is its own query and the
+    results get deduped by resource id. [limit] caps the fan-out: a subject with
+    a dozen 别名 would otherwise turn one check into dozens of feed requests.
+    """
+    if rules.search_keywords:
+        # An explicit keyword list is a constraint the user typed, not a name to
+        # guess at, so it stays a single AND group.
+        return (rules.search_keywords,)
+    return tuple((name,) for name in known_names(rules)[: max(1, limit)])
+
+
 def resource_matches_subscription(resource: Any, rules: SubscriptionRules) -> tuple[bool, str | None]:
     resource_type = str(getattr(resource, "type", "") or "")
     if rules.resource_types and resource_type not in rules.resource_types:
@@ -294,7 +327,7 @@ def resource_matches_subscription(resource: Any, rules: SubscriptionRules) -> tu
         if rules.bangumi_id not in subject_ids:
             return False, "Bangumi subject 不匹配"
     elif rules.use_subject_id and rules.bangumi_id:
-        names = [rules.anime_name, rules.anime_name_cn, *rules.search_keywords]
+        names = [*known_names(rules), *rules.search_keywords]
         names = [name.casefold() for name in names if len(name.strip()) >= 2]
         if names and not any(name in title.casefold() for name in names):
             return False, "标题未匹配番剧"

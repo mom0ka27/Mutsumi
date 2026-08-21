@@ -37,4 +37,6 @@ subscription:
   interval_minutes: 15
   cold_start_days: 7
   max_pages_per_sweep: 5
+  # 每部番用几个名字（中文名 / 原名 / 别名）各查一次，结果合并去重
+  max_name_variants: 4
   auto_import: true

@@ -8,15 +8,18 @@ from app.models import Anime, Episode, PreferenceProfile, Subscription
 from app.schemas.qbittorrent import QBittorrentFileRead, QBittorrentTorrentAddResult
 from app.services.animegarden_service import AnimeGardenResource
 from app.api.routes import subscriptions as routes_subscriptions
-from app.services.bangumi_service import SubjectInfo
+from app.services.bangumi_service import SubjectInfo, _subject_from_json
 from app.services.subscription_engine import (
     EpisodeInfo,
     aired_episode_indices,
     derive_airing_status,
     evaluate_resource,
+    known_names,
     parse_episode_index,
     parse_title_attributes,
     profile_values,
+    resource_matches_subscription,
+    search_variants,
     SubscriptionRules,
 )
 from app.services import subscription_worker as worker_module
@@ -340,6 +343,9 @@ async def test_subscription_preview_selects_the_highest_scored_candidate():
         async def get_episodes(self, subject_id):
             return [EpisodeInfo(ep=1, sort=1, name_cn="第一集", airdate="2026-08-19")]
 
+        async def get_subject(self, subject_id):
+            return None
+
     anime = Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试")
     profile = PreferenceProfile(
         name="默认",
@@ -560,6 +566,151 @@ async def test_download_after_subscribing_merges_into_the_placeholder(
     )
 
 
+def test_aliases_are_read_from_both_infobox_shapes():
+    subject = _subject_from_json(
+        {
+            "id": 4242,
+            "name": "Official Name",
+            "infobox": [
+                {"key": "别名", "value": [{"v": "中文别名"}, {"v": "Nickname"}]},
+                # A lone alias arrives as a plain string, not a list.
+                {"key": "別名", "value": "繁體別名"},
+                # Case-insensitive dedupe, and one-character noise dropped.
+                {"key": "别名", "value": [{"v": "nickname"}, {"v": "X"}]},
+                {"key": "话数", "value": "12"},
+            ],
+        }
+    )
+
+    assert subject.aliases == ["中文别名", "Nickname", "繁體別名"]
+    # The flat infobox is unchanged: string rows kept, list rows still dropped.
+    assert subject.infobox == [
+        {"key": "別名", "value": "繁體別名"},
+        {"key": "话数", "value": "12"},
+    ]
+
+
+def test_known_names_put_the_chinese_name_first_and_drop_duplicates():
+    rules = SubscriptionRules(
+        bangumi_id=4242,
+        anime_name="Official Name",
+        anime_name_cn="中文名",
+        aliases=("中文名", "俗称"),
+    )
+
+    assert known_names(rules) == ("中文名", "Official Name", "俗称")
+    # One query per name, capped so a subject with a dozen 别名 cannot turn one
+    # check into a dozen feed requests.
+    assert search_variants(rules, limit=2) == (("中文名",), ("Official Name",))
+
+
+def test_explicit_search_keywords_stay_one_query():
+    rules = SubscriptionRules(
+        bangumi_id=4242,
+        anime_name="Official Name",
+        aliases=("俗称",),
+        search_keywords=("作品", "2nd"),
+    )
+
+    # A typed keyword list is a constraint, not an alternative name: splitting it
+    # would widen the search instead of narrowing it.
+    assert search_variants(rules) == (("作品", "2nd"),)
+
+
+def test_a_release_titled_with_only_an_alias_still_matches():
+    rules = SubscriptionRules(
+        bangumi_id=4242,
+        anime_name="Official Name",
+        anime_name_cn="中文名",
+        aliases=("俗称",),
+    )
+    untagged = SimpleNamespace(
+        type="动画",
+        title="[ANi] 俗称 - 03 [1080p][简日]",
+        subject_ids=frozenset(),
+    )
+
+    assert resource_matches_subscription(untagged, rules) == (True, None)
+    assert resource_matches_subscription(
+        SimpleNamespace(type="动画", title="[ANi] 别的番 - 03", subject_ids=frozenset()),
+        rules,
+    ) == (False, "标题未匹配番剧")
+
+
+async def test_targeted_check_queries_every_alias_and_merges_the_results():
+    calls: list[dict] = []
+    # The same release comes back from several name queries, and one is only
+    # reachable by the alias -- which is the whole point of the fan-out.
+    by_search = {
+        (): [1],
+        ("中文名",): [1, 2],
+        ("Official Name",): [2],
+        ("俗称",): [3],
+    }
+
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            calls.append(kwargs)
+            return [
+                _episode_resource(resource_id, resource_id, "2026-08-01")
+                for resource_id in by_search.get(kwargs["search"], [])
+            ], True
+
+    subscription = SimpleNamespace(
+        anime=Anime(
+            id=1,
+            bangumi_id=4242,
+            name="Official Name",
+            name_cn="中文名",
+            aliases=["俗称"],
+        ),
+        cursor_at=None,
+        backfill_after=None,
+        search_keywords=[],
+        use_subject_id=True,
+        resource_types=["动画"],
+    )
+
+    resources = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+    )._fetch_targeted_resources(
+        subscription,
+        datetime.fromisoformat("2026-09-03T12:00:00"),
+    )
+
+    # The subject id stays the first, most precise query; the names come after.
+    assert [call["subjects"] for call in calls] == [(4242,), (), (), ()]
+    assert [call["search"] for call in calls] == [
+        (),
+        ("中文名",),
+        ("Official Name",),
+        ("俗称",),
+    ]
+    assert [resource.id for resource in resources] == [1, 2, 3]
+
+
+async def test_aliases_are_fetched_once_and_then_kept_on_the_row():
+    fetches: list[int] = []
+
+    class FakeBangumi:
+        async def get_subject(self, subject_id):
+            fetches.append(subject_id)
+            return SubjectInfo(
+                bangumi_id=subject_id,
+                name="Official Name",
+                aliases=["别称一", "别称二"],
+            )
+
+    anime = Anime(id=1, bangumi_id=4242, name="Official Name", aliases=[])
+    worker = SubscriptionWorker(bangumi=FakeBangumi())
+
+    assert await worker._ensure_aliases(anime) == ("别称一", "别称二")
+    assert anime.aliases == ["别称一", "别称二"]
+    # Cached on the row, so a sweep over many subscriptions does not refetch.
+    assert await worker._ensure_aliases(anime) == ("别称一", "别称二")
+    assert fetches == [4242]
+
+
 @pytest.mark.parametrize(
     ("airdates", "expected"),
     [
@@ -622,6 +773,9 @@ async def test_preview_reports_the_aired_season_and_the_episodes_rules_miss():
             ], True
 
     class FakeBangumi:
+        async def get_subject(self, subject_id):
+            return None
+
         async def get_episodes(self, subject_id):
             return [
                 EpisodeInfo(ep=index + 1, sort=index + 1, airdate=value)

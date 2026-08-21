@@ -34,6 +34,9 @@ class Anime(Base):
     media_type: Mapped[str] = mapped_column(String(32), default="unknown")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     infobox: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    # Bangumi's 别名 rows. Release titles use these far more often than the
+    # official name, so subscriptions search on them too.
+    aliases: Mapped[list[str]] = mapped_column(JSON, default=list)
     download_hash: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     series_id: Mapped[int | None] = mapped_column(
         ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True

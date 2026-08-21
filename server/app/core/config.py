@@ -58,6 +58,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "interval_minutes": 15,
         "cold_start_days": 7,
         "max_pages_per_sweep": 5,
+        # How many of a show's names (中文名, 原名, 别名…) get their own feed
+        # query. Each one costs a request, so the cap keeps a subject with a
+        # dozen 别名 from turning one check into dozens.
+        "max_name_variants": 4,
         "auto_import": True,
     },
 }
