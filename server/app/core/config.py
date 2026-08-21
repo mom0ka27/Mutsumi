@@ -57,7 +57,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "enabled": True,
         "interval_minutes": 15,
         "cold_start_days": 7,
-        "max_pages_per_sweep": 5,
+        # Resources per feed page. 100 is the feed's own default, and asking for
+        # more than it will honour gets silently answered with a 100-item page.
+        "page_size": 100,
+        # A runaway guard on the page walk, not a window: a check pages until the
+        # feed says there is no more, or until it has a release for every aired
+        # episode it is missing. Stopping here means results were truncated.
+        "max_pages": 200,
         # How many of a show's names (中文名, 原名, 别名…) get their own feed
         # query. Each one costs a request, so the cap keeps a subject with a
         # dozen 别名 from turning one check into dozens.

@@ -36,7 +36,12 @@ subscription:
   enabled: true
   interval_minutes: 15
   cold_start_days: 7
-  max_pages_per_sweep: 5
+  # 每页取多少条。100 是上游默认值；超出上游允许范围时它不会报错，
+  # 而是静默按 100 条返回，所以不要往大改
+  page_size: 100
+  # 翻页的失控保护，不是抓取窗口：正常情况下会一页一页翻到上游说没有了，
+  # 或者缺的每一集都已经匹配到资源为止。走到这个上限说明结果被截断了
+  max_pages: 200
   # 每部番用几个名字（中文名 / 原名 / 别名）各查一次，结果合并去重
   max_name_variants: 4
   auto_import: true

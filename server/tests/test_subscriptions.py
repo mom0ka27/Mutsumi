@@ -1,12 +1,17 @@
 from datetime import datetime
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from app.models import PermissionGroup
 from app.models import Anime, Episode, PreferenceProfile, Subscription
 from app.schemas.qbittorrent import QBittorrentFileRead, QBittorrentTorrentAddResult
-from app.services.animegarden_service import AnimeGardenResource
+from app.services.animegarden_service import (
+    MAX_PAGE_SIZE,
+    AnimeGardenResource,
+    AnimeGardenService,
+)
 from app.api.routes import subscriptions as routes_subscriptions
 from app.services.bangumi_service import SubjectInfo, _subject_from_json
 from app.services.subscription_engine import (
@@ -34,6 +39,62 @@ class Resource:
         self.fansub_name = fansub_name
         self.type = resource_type
         self.subject_ids = frozenset({4242})
+
+
+class FakeBangumi:
+    """Bangumi with nothing to say, unless a test hands it something."""
+
+    def __init__(self, episodes=(), subject=None):
+        self._episodes = list(episodes)
+        self._subject = subject
+
+    async def get_episodes(self, subject_id):
+        return list(self._episodes)
+
+    async def get_subject(self, subject_id):
+        return self._subject
+
+
+def _feed_resource(resource_id: int, title: str, fansub: str = "ANi"):
+    return AnimeGardenResource(
+        id=resource_id,
+        provider="test",
+        provider_id=str(resource_id),
+        title=title,
+        type="动画",
+        magnet=f"magnet:?xt=urn:btih:{resource_id}",
+        tracker="",
+        size=100,
+        fansub_name=fansub,
+        publisher_name="",
+        created_at=datetime.fromisoformat("2026-08-20T10:00:00"),
+        subject_ids=frozenset({4242}),
+    )
+
+
+_PREVIEW_PROFILE = PreferenceProfile(
+    name="默认",
+    is_default=True,
+    language_mode="简",
+    language_unknown="accept",
+    prefer_resolution=["1080p", "720p"],
+    prefer_codec=["avc"],
+    prefer_subtitle=["简", "繁", "日", "无"],
+    prefer_bitdepth=["10bit", "8bit"],
+    weights={"fansub": 45, "resolution": 22, "codec": 15, "subtitle": 12, "bitdepth": 6},
+)
+
+_PREVIEW_DRAFT = SimpleNamespace(
+    fansub="ANi",
+    allow_no_fansub=False,
+    search_keywords=[],
+    must_include=[],
+    exclude_keywords=[],
+    use_subject_id=True,
+    resource_types=["动画"],
+    profile_overrides=None,
+    episode_offset_override=None,
+)
 
 
 def test_title_attributes_handle_underscore_codec_and_language_fallback():
@@ -260,7 +321,10 @@ async def test_targeted_check_does_not_and_the_anime_name_with_the_subject_id():
         resource_types=["动画"],
     )
 
-    await SubscriptionWorker(anime_garden=FakeAnimeGarden())._fetch_targeted_resources(
+    await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_targeted_resources(
         subscription,
         datetime.fromisoformat("2026-08-20T12:00:00"),
     )
@@ -463,6 +527,243 @@ async def test_preview_picks_the_best_release_of_the_locked_group_only():
         item for item in result["candidates"] if item["resource_id"] == 3
     )
     assert rejected["reason"] == "字幕组不是锁定的 ANi"
+
+
+def _raw_item(resource_id: int) -> dict:
+    return {
+        "id": resource_id,
+        "title": f"[ANi] Test Anime - {resource_id:02d} [简][1080p][avc]",
+        "type": "动画",
+        "magnet": f"magnet:?xt=urn:btih:{resource_id}",
+        "createdAt": "2026-08-20T10:00:00Z",
+    }
+
+
+async def _one_page(payload: dict, **kwargs):
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://feed.test",
+    ) as client:
+        result = await AnimeGardenService(client=client).search_resources(**kwargs)
+    return result, requests
+
+
+async def test_a_page_size_the_feed_replaced_with_its_own_cannot_end_the_walk():
+    # Out-of-range sizes are not rejected upstream, they are substituted: the
+    # reply carries pageSize 100 with 100 items. Measuring against the size that
+    # was *asked for* would call that the last page and drop the rest of the feed.
+    (resources, complete), requests = await _one_page(
+        {
+            "resources": [_raw_item(index) for index in range(1, 101)],
+            "pagination": {"page": 1, "pageSize": 100, "complete": False},
+        },
+        page=1,
+        page_size=2000,
+    )
+
+    assert len(resources) == 100
+    assert complete is False
+    # And the request itself never asks for more than the feed will honour.
+    assert requests[0].url.params["pageSize"] == str(MAX_PAGE_SIZE)
+
+
+async def test_one_unparsable_entry_does_not_shorten_a_full_page():
+    (resources, complete), _ = await _one_page(
+        {
+            "resources": [
+                *[_raw_item(index) for index in range(1, 100)],
+                {"id": 0, "title": ""},
+            ],
+            "pagination": {"page": 1, "pageSize": 100, "complete": False},
+        },
+        page=1,
+        page_size=100,
+    )
+
+    assert len(resources) == 99
+    assert complete is False
+
+
+async def test_a_page_short_of_the_applied_size_is_the_last_page():
+    (resources, complete), _ = await _one_page(
+        {
+            "resources": [_raw_item(index) for index in range(1, 96)],
+            "pagination": {"page": 1, "pageSize": 100, "complete": False},
+        },
+        page=1,
+        page_size=100,
+    )
+
+    assert len(resources) == 95
+    assert complete is True
+
+
+async def test_an_empty_page_is_the_last_page():
+    (resources, complete), _ = await _one_page(
+        {
+            "resources": [],
+            "pagination": {"page": 2, "pageSize": 100, "complete": False},
+        },
+        page=2,
+        page_size=100,
+    )
+
+    assert resources == []
+    assert complete is True
+
+
+async def test_the_walk_runs_to_the_last_page_not_to_a_page_ceiling():
+    seen: list[int] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, *, page, **kwargs):
+            seen.append(page)
+            if page > 7:
+                return [], True
+            return [_feed_resource(page, f"[ANi] Test Anime - {page:02d} [简][1080p]")], False
+
+    resources = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_global_resources(
+        datetime.fromisoformat("2026-08-13T12:00:00"),
+        datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    # Eight pages, well past the five the sweep used to stop at.
+    assert seen == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert len(resources) == 7
+
+
+async def test_a_feed_that_ignores_the_page_number_does_not_loop():
+    seen: list[int] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, *, page, **kwargs):
+            seen.append(page)
+            return [_feed_resource(1, "[ANi] Test Anime - 01 [简][1080p]")], False
+
+    await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_global_resources(
+        datetime.fromisoformat("2026-08-13T12:00:00"),
+        datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    # The second page repeats the first, which is as good as the end of the feed.
+    assert seen == [1, 2]
+
+
+async def test_the_walk_stops_once_every_aired_episode_is_covered():
+    pages = {
+        1: [
+            _feed_resource(3, "[ANi] Test Anime - 03 [简][1080p][avc]"),
+            _feed_resource(2, "[ANi] Test Anime - 02 [简][1080p][avc]"),
+        ],
+        2: [_feed_resource(1, "[ANi] Test Anime - 01 [简][1080p][avc]")],
+    }
+    seen: list[int] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, *, page, **kwargs):
+            seen.append(page)
+            # Never complete: only the coverage check can end this walk.
+            return pages.get(page, [_feed_resource(90 + page, "[ANi] 别的作品 - 01 [简]")]), False
+
+    episodes = [
+        EpisodeInfo(ep=index, sort=index, airdate="2026-08-0%d" % index)
+        for index in (1, 2, 3)
+    ]
+
+    result = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(episodes),
+    ).preview(
+        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
+        profile=_PREVIEW_PROFILE,
+        draft=_PREVIEW_DRAFT,
+        now=datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    assert seen == [1, 2]
+    assert result["matched_episodes"] == [1, 2, 3]
+    assert result["missing_episodes"] == []
+
+
+async def test_the_walk_keeps_paging_while_an_aired_episode_is_still_missing():
+    pages = {
+        1: [_feed_resource(3, "[ANi] Test Anime - 03 [简][1080p][avc]")],
+        2: [_feed_resource(2, "[ANi] Test Anime - 02 [简][1080p][avc]")],
+    }
+    seen: list[int] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, *, page, **kwargs):
+            seen.append(page)
+            found = pages.get(page)
+            # Episode 1 is never published, so the walk can only end at the feed.
+            return (found, False) if found else ([], True)
+
+    episodes = [
+        EpisodeInfo(ep=index, sort=index, airdate="2026-08-0%d" % index)
+        for index in (1, 2, 3)
+    ]
+
+    result = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(episodes),
+    ).preview(
+        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
+        profile=_PREVIEW_PROFILE,
+        draft=_PREVIEW_DRAFT,
+        now=datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    assert seen == [1, 2, 3]
+    assert result["missing_episodes"] == [1]
+
+
+def test_nothing_missing_means_no_early_stop_at_all():
+    # An empty target set would be trivially "covered" and would end the walk on
+    # page one -- and the whole point of walking on is to reach a release for an
+    # episode Bangumi has not listed or dated yet.
+    episodes = [EpisodeInfo(ep=1, sort=1, airdate="2026-08-01")]
+    rules = SubscriptionRules(bangumi_id=4242, anime_name="Test Anime", fansub="ANi")
+
+    assert (
+        worker_module._coverage_stop(
+            rules=rules,
+            values=profile_values(_PREVIEW_PROFILE),
+            episodes=episodes,
+            owned={1},
+            now=datetime.fromisoformat("2026-08-20T12:00:00"),
+        )
+        is None
+    )
+
+
+def test_coverage_ignores_releases_the_rules_would_throw_away():
+    episodes = [EpisodeInfo(ep=1, sort=1, airdate="2026-08-01")]
+    reached = worker_module._coverage_stop(
+        rules=SubscriptionRules(bangumi_id=4242, anime_name="Test Anime", fansub="ANi"),
+        values=profile_values(_PREVIEW_PROFILE),
+        episodes=episodes,
+        owned=set(),
+        now=datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    # The locked group has not published it; another group's copy is not cover.
+    other = _feed_resource(1, "[Other] Test Anime - 01 [简][2160p][avc]", "Other")
+    assert reached({1: other}) is False
+    locked = _feed_resource(2, "[ANi] Test Anime - 01 [简][1080p][avc]")
+    assert reached({1: other, 2: locked}) is True
 
 
 @pytest.mark.parametrize(

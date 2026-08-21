@@ -9,6 +9,12 @@ import httpx
 
 ANIME_GARDEN_BASE_URL = "https://api.animes.garden"
 
+# Out-of-range page sizes are not rejected, they are silently replaced: asking
+# for 2000 comes back as ``pagination.pageSize: 100`` with 100 items. 1000 is
+# the largest size observed to be honoured, so requests are clamped to it --
+# past that the feed would quietly serve a tenth of what was asked for.
+MAX_PAGE_SIZE = 1000
+
 
 @dataclass(frozen=True)
 class AnimeGardenResource:
@@ -54,7 +60,15 @@ class AnimeGardenService:
         exclude: Iterable[str] = (),
         types: Iterable[str] = ("动画",),
     ) -> tuple[list[AnimeGardenResource], bool]:
-        query = {"page": page, "pageSize": page_size, "tracker": True}
+        """One page of the feed, plus whether it is the last one.
+
+        ``complete`` is deliberately conservative: the caller pages until it is
+        set, so a wrong ``True`` silently drops resources -- which is what the
+        old "fewer items than requested" test did whenever the feed ignored the
+        requested page size.
+        """
+        requested_size = max(1, min(int(page_size), MAX_PAGE_SIZE))
+        query = {"page": page, "pageSize": requested_size, "tracker": True}
         body: dict[str, Any] = {}
         self._add_list(body, "subjects", subjects)
         self._add_list(body, "fansubs", fansubs)
@@ -94,9 +108,20 @@ class AnimeGardenService:
         complete = bool(payload.get("complete"))
         if isinstance(pagination, dict):
             complete = complete or bool(pagination.get("complete"))
-        if not complete and len(resources) < page_size:
-            complete = True
-        return resources, complete
+        if complete:
+            return resources, True
+        if not raw_resources:
+            return resources, True  # Nothing on this page: past the end.
+        # A short page ends the walk only when measured against the size the
+        # server says it applied -- never the size that was asked for. Counting
+        # raw items rather than parsed ones matters too: one malformed entry on
+        # a full page must not read as "the last page".
+        effective_size = _int_or_none(
+            pagination.get("pageSize") if isinstance(pagination, dict) else None
+        )
+        if effective_size and len(raw_resources) < effective_size:
+            return resources, True
+        return resources, False
 
     @staticmethod
     def _add_list(target: dict[str, Any], key: str, values: Iterable[Any]) -> None:
@@ -132,6 +157,15 @@ def _nested_name(value: Any) -> str:
     if isinstance(value, dict):
         return str(value.get("name") or value.get("title") or "")
     return str(value or "")
+
+
+def _int_or_none(value: Any) -> int | None:
+    """A positive int, or nothing -- used where zero must not act as a limit."""
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
 
 
 def _int_value(value: Any) -> int:

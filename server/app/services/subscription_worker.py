@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 import random
 from types import SimpleNamespace
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import httpx
 from sqlalchemy import select
@@ -19,7 +19,11 @@ from app.core.config import config
 from app.db.session import AsyncSessionLocal
 from app.models import Anime, Episode, PreferenceProfile, Subscription, SubscriptionEpisode
 from app.schemas.qbittorrent import QBittorrentTorrentDownload
-from app.services.animegarden_service import AnimeGardenResource, AnimeGardenService
+from app.services.animegarden_service import (
+    MAX_PAGE_SIZE,
+    AnimeGardenResource,
+    AnimeGardenService,
+)
 from app.services.bangumi_service import BangumiService
 from app.api.routes.qbittorrent import (
     download_torrent_files,
@@ -55,6 +59,10 @@ class _Query:
 
     subjects: tuple[int, ...] = ()
     search: tuple[str, ...] = ()
+
+
+# Called after each page with everything gathered so far; ``True`` ends the walk.
+_StopCheck = Callable[[dict[int, AnimeGardenResource]], bool]
 
 
 class SubscriptionSweepAborted(RuntimeError):
@@ -164,17 +172,24 @@ class SubscriptionWorker:
                 anime.air_date = subject.air_date
                 anime.aliases = list(subject.aliases)
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
-        resources = await self._fetch_draft_resources(
-            anime,
-            draft,
-            current_time,
-            episodes,
-        )
         rules = subscription_rules(draft, anime)
         values = profile_values(profile, getattr(draft, "profile_overrides", None))
         existing_indices = {
             episode.index for episode in anime.episodes if episode.index is not None
         }
+        resources = await self._fetch_draft_resources(
+            anime,
+            draft,
+            current_time,
+            episodes,
+            stop_when=_coverage_stop(
+                rules=rules,
+                values=values,
+                episodes=episodes,
+                owned=existing_indices,
+                now=current_time,
+            ),
+        )
         rows: list[dict[str, Any]] = []
         accepted_count = 0
         selected_by_episode: dict[int, tuple[tuple[bool, float], int]] = {}
@@ -380,19 +395,12 @@ class SubscriptionWorker:
         before: datetime,
     ) -> list[AnimeGardenResource]:
         resources: dict[int, AnimeGardenResource] = {}
-        max_pages = _config_int("max_pages_per_sweep", 5)
-        for page in range(1, max_pages + 1):
-            page_resources, complete = await self.anime_garden.search_resources(
-                page=page,
-                page_size=100,
-                after=after,
-                before=before,
-                types=("动画",),
-            )
-            for resource in page_resources:
-                resources[resource.id] = resource
-            if complete:
-                break
+        await self._walk_pages(
+            after=after,
+            before=before,
+            types=("动画",),
+            into=resources,
+        )
         return sorted(resources.values(), key=_resource_sort_key)
 
     async def _fetch_targeted_resources(
@@ -416,6 +424,7 @@ class SubscriptionWorker:
             before=now,
             queries=await self._queries_for(subscription, anime),
             types=tuple(subscription.resource_types or ("动画",)),
+            stop_when=await self._coverage_stop_for(subscription, anime, now),
         )
 
     async def _fetch_backfill_resources(
@@ -429,6 +438,7 @@ class SubscriptionWorker:
             before=now,
             queries=await self._queries_for(subscription, anime),
             types=tuple(subscription.resource_types or ("动画",)),
+            stop_when=await self._coverage_stop_for(subscription, anime, now),
         )
 
     async def _fetch_draft_resources(
@@ -437,12 +447,51 @@ class SubscriptionWorker:
         draft: Any,
         now: datetime,
         episodes: list[Any] = (),
+        stop_when: _StopCheck | None = None,
     ) -> list[AnimeGardenResource]:
         return await self._fetch_resources(
             after=_draft_window_start(anime, draft, episodes, now),
             before=now,
             queries=await self._queries_for(draft, anime),
             types=tuple(getattr(draft, "resource_types", None) or ("动画",)),
+            stop_when=stop_when,
+        )
+
+    async def _coverage_stop_for(
+        self,
+        subscription: Any,
+        anime: Anime | None,
+        now: datetime,
+    ) -> _StopCheck | None:
+        """The early-stop condition for one subscription's own walk.
+
+        Built from Bangumi's episode table, which is cached for the duration of
+        a sweep, so asking for it here costs nothing beyond what the check that
+        follows would fetch anyway. A Bangumi failure means no early stop rather
+        than no check -- the walk just runs to the last page.
+        """
+        if anime is None or not getattr(anime, "bangumi_id", 0):
+            return None
+        try:
+            episodes = await self.bangumi.get_episodes(anime.bangumi_id)
+        except (httpx.HTTPError, ValueError) as error:
+            logger.warning(
+                "Bangumi episode fetch failed id=%s: %s", anime.bangumi_id, error
+            )
+            return None
+        return _coverage_stop(
+            rules=subscription_rules(subscription, anime),
+            values=profile_values(
+                getattr(subscription, "profile", None),
+                getattr(subscription, "profile_overrides", None),
+            ),
+            episodes=episodes,
+            owned={
+                episode.index
+                for episode in getattr(anime, "episodes", ())
+                if episode.index is not None
+            },
+            now=now,
         )
 
     async def _queries_for(self, rules_source: Any, anime: Anime | None) -> tuple[_Query, ...]:
@@ -523,6 +572,7 @@ class SubscriptionWorker:
         before: datetime,
         queries: tuple[_Query, ...] = (),
         types: tuple[str, ...] = ("动画",),
+        stop_when: _StopCheck | None = None,
     ) -> list[AnimeGardenResource]:
         """The union of every query, deduped by resource id.
 
@@ -532,21 +582,66 @@ class SubscriptionWorker:
         """
         resources: dict[int, AnimeGardenResource] = {}
         for query in queries or (_Query(),):
-            for page in range(1, _config_int("max_pages_per_sweep", 5) + 1):
-                page_resources, complete = await self.anime_garden.search_resources(
-                    page=page,
-                    page_size=100,
-                    after=after,
-                    before=before,
-                    subjects=query.subjects,
-                    search=query.search,
-                    types=types,
-                )
-                for resource in page_resources:
-                    resources[resource.id] = resource
-                if complete:
-                    break
+            if stop_when is not None and stop_when(resources):
+                break
+            await self._walk_pages(
+                after=after,
+                before=before,
+                query=query,
+                types=types,
+                into=resources,
+                stop_when=stop_when,
+            )
         return sorted(resources.values(), key=_resource_sort_key)
+
+    async def _walk_pages(
+        self,
+        *,
+        after: datetime,
+        before: datetime,
+        query: _Query = _Query(),
+        types: tuple[str, ...] = ("动画",),
+        into: dict[int, AnimeGardenResource],
+        stop_when: _StopCheck | None = None,
+    ) -> None:
+        """Page one query to its last page, accumulating into ``into``.
+
+        The walk ends on the feed's own ``complete`` flag, on a page that adds
+        nothing new, or on ``stop_when`` -- and never on a page merely shorter
+        than the one requested, because the API silently substitutes its own
+        page size when the requested one is out of range. ``max_pages`` is a
+        runaway guard, not a window: stopping there is a truncation, so it is
+        logged rather than passed off as the end of the feed.
+        """
+        page_size = _page_size()
+        max_pages = _config_int("max_pages", 200)
+        for page in range(1, max_pages + 1):
+            page_resources, complete = await self.anime_garden.search_resources(
+                page=page,
+                page_size=page_size,
+                after=after,
+                before=before,
+                subjects=query.subjects,
+                search=query.search,
+                types=types,
+            )
+            fresh = sum(1 for resource in page_resources if resource.id not in into)
+            into.update({resource.id: resource for resource in page_resources})
+            if complete:
+                return
+            if not fresh:
+                # Also the escape hatch for a feed that ignores ``page`` and
+                # keeps handing back the same window.
+                return
+            if stop_when is not None and stop_when(into):
+                return
+        logger.warning(
+            "Feed walk hit the %s-page guard (subjects=%s search=%s); "
+            "results are truncated",
+            max_pages,
+            query.subjects,
+            query.search,
+        )
 
     async def _process_subscription(
         self,
@@ -1020,6 +1115,59 @@ def _draft_window_start(
     return backfill_window_start(getattr(anime, "air_date", None), episodes, now)
 
 
+def _coverage_stop(
+    *,
+    rules: Any,
+    values: ProfileValues,
+    episodes: list[Any],
+    owned: Iterable[int],
+    now: datetime,
+) -> _StopCheck | None:
+    """Stop paging once every aired episode still missing has a usable release.
+
+    Sound only because the feed is strictly newest-first: once the oldest thing
+    we lack has been found, older pages cannot hold anything else we need. It
+    asks for an *accepted* release, not merely a resource carrying that episode
+    number, so a walk never ends on candidates the rules would throw away.
+
+    Returns ``None`` -- no early stop, walk to the last page -- when there is
+    nothing known to be missing. That is what keeps a release for an episode
+    Bangumi has not published or dated yet reachable.
+    """
+    held = set(owned)
+    needed = frozenset(
+        index for index in aired_episode_indices(episodes, now) if index not in held
+    )
+    if not needed:
+        return None
+    anime_name = str(getattr(rules, "anime_name", "") or "")
+    offset = getattr(rules, "episode_offset_override", None)
+    covered: set[int] = set()
+    judged: set[int] = set()
+
+    def reached(resources: dict[int, AnimeGardenResource]) -> bool:
+        for resource_id, resource in resources.items():
+            if resource_id in judged:
+                continue
+            judged.add(resource_id)
+            if not resource_matches_subscription(resource, rules).matched:
+                continue
+            if not evaluate_resource(resource, values, rules).accepted:
+                continue
+            parsed = parse_episode_index(
+                resource.title,
+                episodes,
+                resource.created_at,
+                episode_offset_override=offset,
+                anime_name=anime_name,
+            )
+            if parsed.index is not None:
+                covered.add(parsed.index)
+        return needed <= covered
+
+    return reached
+
+
 def _subjects_for(anime: Anime | None, use_subject_id: bool) -> tuple[int, ...]:
     bangumi_id = int(getattr(anime, "bangumi_id", 0) or 0) if anime else 0
     return (bangumi_id,) if use_subject_id and bangumi_id else ()
@@ -1071,6 +1219,16 @@ def _utcnow() -> datetime:
 def _subscription_config() -> dict[str, Any]:
     value = config.get("subscription")
     return value if isinstance(value, dict) else {}
+
+
+def _page_size() -> int:
+    """How many resources to ask for per page.
+
+    Clamped to what the feed will honour: a larger request is not rejected but
+    silently served as a 100-item page, and a page size we cannot trust is the
+    thing that made walks stop early in the first place.
+    """
+    return min(_config_int("page_size", 100), MAX_PAGE_SIZE)
 
 
 def _config_int(key: str, default: int) -> int:
