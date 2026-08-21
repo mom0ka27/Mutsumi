@@ -40,8 +40,10 @@ class SubscriptionEditorPage extends StatefulWidget {
 class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   late final SubscriptionService _service =
       widget.service ?? Get.find<SubscriptionService>();
-  final _selectedFansubs = <String>{};
-  final _orderedFansubs = <String>[];
+  /// The single locked group. Empty means none picked yet, which only saves
+  /// when [_allowNoFansub] is on.
+  String _fansub = '';
+  final _fansubOptions = <String>[];
   List<FansubCandidateRead> _candidates = const [];
   List<PreferenceProfileRead> _profiles = const [];
   SubscriptionPreviewRead? _preview;
@@ -65,8 +67,8 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   void initState() {
     super.initState();
     final existing = widget.existing;
-    _selectedFansubs.addAll(existing?.fansubs ?? const []);
-    _orderedFansubs.addAll(existing?.fansubs ?? const []);
+    _fansub = existing?.fansub ?? '';
+    if (_fansub.isNotEmpty) _fansubOptions.add(_fansub);
     _allowNoFansub = existing?.allowNoFansub ?? false;
     _enabled = existing?.enabled ?? true;
     // On by default: following a show that is already airing almost always
@@ -80,14 +82,16 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
       final profiles = await _service.listProfiles();
       final candidates = await _service.listFansubs(widget.bangumiId);
       if (!mounted) return;
-      final options = candidates
-          .where((candidate) => !candidate.isNoFansub)
-          .map((candidate) => candidate.name)
-          .toList();
-      for (final option in options) {
-        if (!_orderedFansubs.contains(option)) {
-          _orderedFansubs.add(option);
+      for (final candidate in candidates) {
+        if (!candidate.isNoFansub && !_fansubOptions.contains(candidate.name)) {
+          _fansubOptions.add(candidate.name);
         }
+      }
+      // Most prolific group first, and pre-locked for a new subscription: it is
+      // the right answer often enough to be the default, and picking one is
+      // required anyway.
+      if (_isNew && _fansub.isEmpty && _fansubOptions.isNotEmpty) {
+        _fansub = _fansubOptions.first;
       }
       _profiles = profiles;
       _candidates = candidates;
@@ -113,10 +117,10 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   Future<void> _save() async {
     final profileId = _profileId;
     if (profileId == null || _saving) return;
-    if (_selectedFansubs.isEmpty && !_allowNoFansub) {
+    if (_fansub.isEmpty && !_allowNoFansub) {
       await showInfoDialog(
-        title: '请选择字幕组',
-        message: '至少选择一个字幕组，或打开“允许无字幕组资源”。',
+        title: '请锁定一个字幕组',
+        message: '追番只跟一个字幕组，选一个，或打开“允许无字幕组资源”。',
       );
       return;
     }
@@ -126,7 +130,7 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
         await _service.createSubscription(
           bangumiId: widget.bangumiId,
           profileId: profileId,
-          fansubs: _selectedFansubsInOrder,
+          fansub: _fansub,
           allowNoFansub: _allowNoFansub,
           backfillAired: _backfillAired,
         );
@@ -134,7 +138,7 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
         await _service.updateSubscription(
           subscriptionId: widget.existing!.id,
           profileId: profileId,
-          fansubs: _selectedFansubsInOrder,
+          fansub: _fansub,
           allowNoFansub: _allowNoFansub,
           enabled: _enabled,
         );
@@ -204,7 +208,7 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
       final preview = await _service.previewSubscription(
         bangumiId: widget.bangumiId,
         profileId: profileId,
-        fansubs: _selectedFansubsInOrder,
+        fansub: _fansub,
         allowNoFansub: _allowNoFansub,
         backfillAired: _backfillAired,
       );
@@ -228,27 +232,16 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
     }
   }
 
-  List<String> get _selectedFansubsInOrder =>
-      _orderedFansubs.where(_selectedFansubs.contains).toList(growable: false);
-
   FansubCandidateRead? get _noFansubCandidate =>
       _candidates.firstWhereOrNull((candidate) => candidate.isNoFansub);
 
-  void _toggleFansub(String name) {
+  void _lockFansub(String name) {
     setState(() {
-      if (!_selectedFansubs.remove(name)) {
-        _selectedFansubs.add(name);
-      }
+      // Tapping the locked one unlocks it, which is only savable alongside
+      // "allow no fansub".
+      _fansub = _fansub == name ? '' : name;
       // Marked stale rather than dropped: how much of the season has aired does
       // not depend on the rules, and it is the part worth keeping on screen.
-      _previewStale = true;
-    });
-  }
-
-  void _reorderFansub(int oldIndex, int newIndex) {
-    setState(() {
-      final item = _orderedFansubs.removeAt(oldIndex);
-      _orderedFansubs.insert(newIndex, item);
       _previewStale = true;
     });
   }
@@ -406,49 +399,28 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   Widget _fansubSection(ThemeData theme) {
     final noFansub = _noFansubCandidate;
     return _Section(
-      title: '字幕组优先级',
-      subtitle: '${_selectedFansubs.length} 个已选择 · 上方优先',
+      title: '锁定字幕组',
+      // A season assembled from whoever published first mixes naming, timing
+      // and styling across episodes, so a subscription follows exactly one.
+      subtitle: _fansub.isEmpty ? '整季只跟一个字幕组' : '整季只跟 $_fansub',
       child: _GlassPanel(
         child: _DividedColumn(
           children: [
-            if (_orderedFansubs.isEmpty)
+            if (_fansubOptions.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 28),
                 child: Center(child: Text('最近没有找到字幕组资源')),
               )
             else
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                buildDefaultDragHandles: false,
-                itemCount: _orderedFansubs.length,
-                onReorderItem: _reorderFansub,
-                itemBuilder: (context, index) {
-                  final name = _orderedFansubs[index];
-                  final candidate = _candidates.firstWhereOrNull(
-                    (item) => item.name == name,
-                  );
-                  return CheckboxListTile(
-                    key: ValueKey(name),
-                    value: _selectedFansubs.contains(name),
-                    onChanged: (_) => _toggleFansub(name),
-                    title: Text(name),
-                    subtitle: candidate == null
-                        ? null
-                        : Text('${candidate.count} 条近期资源'),
-                    secondary: ReorderableDragStartListener(
-                      index: index,
-                      child: const Icon(Icons.drag_handle),
-                    ),
-                    controlAffinity: ListTileControlAffinity.leading,
-                  );
-                },
+              RadioGroup<String>(
+                groupValue: _fansub,
+                onChanged: (value) => _lockFansub(value ?? ''),
+                child: Column(children: _fansubTiles()),
               ),
             if (noFansub != null)
               _switchRow(
                 title: '允许无字幕组资源',
-                subtitle: '${noFansub.count} 条近期资源',
+                subtitle: '${noFansub.count} 条近期资源 · 锁定的字幕组没发时也收',
                 value: _allowNoFansub,
                 onChanged: (value) => setState(() {
                   _allowNoFansub = value;
@@ -459,6 +431,28 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
         ),
       ),
     );
+  }
+
+  List<Widget> _fansubTiles() {
+    return [
+      for (final name in _fansubOptions)
+        RadioListTile<String>(
+          value: name,
+          // ``toggleable`` is what lets a second tap on the locked group clear
+          // it, reported as a null value.
+          toggleable: true,
+          title: Text(name),
+          subtitle: _fansubSubtitle(name),
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
+    ];
+  }
+
+  Widget? _fansubSubtitle(String name) {
+    final candidate = _candidates.firstWhereOrNull(
+      (item) => item.name == name,
+    );
+    return candidate == null ? null : Text('${candidate.count} 条近期资源');
   }
 
   Widget _previewSection(ThemeData theme) {
@@ -647,16 +641,15 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   /// disabled has to live here.
   String get _selectionSummary {
     if (_profileId == null) return '没有可用的偏好配置';
-    final count = _selectedFansubs.length;
-    final fansubs = count == 0
-        ? (_allowNoFansub ? '不限字幕组' : '未选择字幕组')
-        : (_allowNoFansub ? '$count 个字幕组 · 含无字幕组' : '$count 个字幕组');
+    final lock = _fansub.isEmpty
+        ? (_allowNoFansub ? '仅无字幕组资源' : '未锁定字幕组')
+        : (_allowNoFansub ? '$_fansub · 含无字幕组' : _fansub);
     final preview = _preview;
-    if (preview == null || _previewStale || !_isNew) return fansubs;
+    if (preview == null || _previewStale || !_isNew) return lock;
     // What pressing the button will actually do, next to the button.
     return preview.matchedEpisodes.isEmpty
-        ? '$fansubs · 暂无可下载的集'
-        : '$fansubs · 立即下载 ${preview.matchedEpisodes.length} 集';
+        ? '$lock · 暂无可下载的集'
+        : '$lock · 立即下载 ${preview.matchedEpisodes.length} 集';
   }
 
   Widget _switchRow({

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_RESOLUTION = ["1080p", "2160p"]
 DEFAULT_CODEC = ["av1", "hevc", "avc"]
-DEFAULT_SUBTITLE = ["日", "无"]
+DEFAULT_SUBTITLE = ["简", "繁", "日", "无"]
 DEFAULT_BITDEPTH = ["10bit", "8bit"]
 DEFAULT_WEIGHTS = {
     "fansub": 45,
@@ -80,7 +80,9 @@ class SubscriptionCreate(BaseModel):
     # Sweep the whole season already broadcast, instead of the default
     # ``cold_start_days`` window. For joining a show mid-season.
     backfill_aired: bool = False
-    fansubs: list[str] = Field(default_factory=list)
+    # One locked group rather than a priority list; empty only makes sense with
+    # ``allow_no_fansub``.
+    fansub: str = Field(default="", max_length=128)
     allow_no_fansub: bool = False
     search_keywords: list[str] = Field(default_factory=list)
     must_include: list[str] = Field(default_factory=list)
@@ -94,7 +96,7 @@ class SubscriptionCreate(BaseModel):
 class SubscriptionUpdate(BaseModel):
     profile_id: int | None = Field(default=None, gt=0)
     enabled: bool | None = None
-    fansubs: list[str] | None = None
+    fansub: str | None = Field(default=None, max_length=128)
     allow_no_fansub: bool | None = None
     search_keywords: list[str] | None = None
     must_include: list[str] | None = None
@@ -114,7 +116,7 @@ class SubscriptionRead(BaseModel):
     image_url: str
     enabled: bool
     profile_id: int
-    fansubs: list[str]
+    fansub: str
     allow_no_fansub: bool
     search_keywords: list[str]
     must_include: list[str]

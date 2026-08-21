@@ -49,7 +49,9 @@ class Subscription(Base):
         ForeignKey("preference_profiles.id", ondelete="RESTRICT"), index=True
     )
 
-    fansubs: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # The one group this show is followed from. Empty means unlocked, which only
+    # makes sense together with ``allow_no_fansub``.
+    fansub: Mapped[str] = mapped_column(String(128), default="")
     allow_no_fansub: Mapped[bool] = mapped_column(default=False)
     search_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
     must_include: Mapped[list[str]] = mapped_column(JSON, default=list)

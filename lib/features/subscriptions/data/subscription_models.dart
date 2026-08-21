@@ -56,7 +56,7 @@ class SubscriptionRead {
     required this.imageUrl,
     required this.enabled,
     required this.profileId,
-    required this.fansubs,
+    required this.fansub,
     required this.allowNoFansub,
     required this.searchKeywords,
     required this.mustInclude,
@@ -92,7 +92,7 @@ class SubscriptionRead {
       imageUrl: json['image_url'] as String? ?? '',
       enabled: json['enabled'] as bool? ?? true,
       profileId: json['profile_id'] as int? ?? 0,
-      fansubs: readList('fansubs'),
+      fansub: json['fansub'] as String? ?? '',
       allowNoFansub: json['allow_no_fansub'] as bool? ?? false,
       searchKeywords: readList('search_keywords'),
       mustInclude: readList('must_include'),
@@ -126,7 +126,8 @@ class SubscriptionRead {
   final String imageUrl;
   final bool enabled;
   final int profileId;
-  final List<String> fansubs;
+  /// The one group this show is followed from; empty means unlocked.
+  final String fansub;
   final bool allowNoFansub;
   final List<String> searchKeywords;
   final List<String> mustInclude;

@@ -19,6 +19,7 @@ from app.services.subscription_engine import (
     parse_title_attributes,
     profile_values,
     resource_matches_subscription,
+    subtitle_tokens,
     search_variants,
     SubscriptionRules,
 )
@@ -49,7 +50,7 @@ def test_cantonese_is_rejected_even_when_unknown_titles_are_accepted():
     result = evaluate_resource(
         Resource("[ANi] 作品 01 [粤语][1080p]"),
         profile,
-        SubscriptionRules(bangumi_id=4242, fansubs=("ANi",)),
+        SubscriptionRules(bangumi_id=4242, fansub="ANi"),
     )
 
     assert result.accepted is False
@@ -141,7 +142,7 @@ def test_real_episode_ranges_are_still_filtered(title):
     result = evaluate_resource(
         Resource(title),
         profile_values(None),
-        SubscriptionRules(bangumi_id=4242, fansubs=("ANi",)),
+        SubscriptionRules(bangumi_id=4242, fansub="ANi"),
     )
 
     assert result.accepted is False
@@ -154,13 +155,93 @@ def test_fansub_dimension_is_neutral_when_nothing_was_selected():
     result = evaluate_resource(
         Resource("[ANi] 作品 - 01 [简][1080p][AVC]"),
         profile,
-        SubscriptionRules(bangumi_id=4242, fansubs=(), allow_no_fansub=True),
+        SubscriptionRules(bangumi_id=4242, fansub="", allow_no_fansub=True),
     )
 
     assert result.accepted is True
     # Zero here would cap the total at 0.55 and make accept_now unreachable.
     assert result.component_scores["fansub"] == profile.neutral_score
     assert result.score > profile.neutral_score
+
+
+def test_a_locked_group_rejects_every_other_group():
+    rules = SubscriptionRules(bangumi_id=4242, fansub="喵萌奶茶屋")
+    profile = profile_values(None)
+
+    assert evaluate_resource(
+        Resource("[喵萌奶茶屋] 作品 - 01 [简日][1080p]", fansub_name="喵萌奶茶屋"),
+        profile,
+        rules,
+    ).accepted is True
+    rejected = evaluate_resource(
+        Resource("[ANi] 作品 - 01 [简日][2160p]", fansub_name="ANi"),
+        profile,
+        rules,
+    )
+    # Better on every other dimension and still out: the lock is the point.
+    assert rejected.accepted is False
+    assert rejected.reason == "字幕组不是锁定的 喵萌奶茶屋"
+
+
+def test_a_locked_group_still_gets_its_untagged_releases_when_allowed():
+    rules = SubscriptionRules(bangumi_id=4242, fansub="ANi", allow_no_fansub=True)
+
+    assert evaluate_resource(
+        Resource("作品 - 01 [简日][1080p]", fansub_name=""),
+        profile_values(None),
+        rules,
+    ).accepted is True
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # CHS/CHT count as subtitle types, so the group's 简 release outranks its
+        # 繁 one instead of both scoring the same.
+        ("[G] 作品 - 01 [CHS][1080p]", ("简", "无")),
+        ("[G] 作品 - 01 [CHT][1080p]", ("繁", "无")),
+        ("[G] 作品 - 01 [简日][1080p]", ("简", "日")),
+        ("[G] 作品 - 01 [简繁日内封][1080p]", ("简", "繁", "简繁", "日")),
+        ("[G] 作品 - 01 [1080p]", ("无",)),
+    ],
+)
+def test_subtitle_types_include_chs_and_cht(title, expected):
+    assert subtitle_tokens(parse_title_attributes(title)["language"]) == expected
+
+
+def test_the_preferred_script_outranks_the_accepted_one():
+    # ``any`` accepts both scripts; the ordering is what expresses "简 preferred,
+    # 繁 acceptable" -- a distinction the hard language filter cannot make.
+    profile = profile_values(
+        None,
+        {"language_mode": "any", "prefer_subtitle": ["简", "繁", "日", "无"]},
+    )
+    rules = SubscriptionRules(bangumi_id=4242, fansub="ANi")
+
+    simplified = evaluate_resource(
+        Resource("[ANi] 作品 - 01 [CHS][1080p][AVC]"), profile, rules
+    )
+    traditional = evaluate_resource(
+        Resource("[ANi] 作品 - 01 [CHT][1080p][AVC]"), profile, rules
+    )
+
+    assert simplified.accepted and traditional.accepted
+    assert simplified.component_scores["subtitle"] == 1
+    assert traditional.component_scores["subtitle"] == 0.75
+    assert simplified.score > traditional.score
+
+
+async def test_subscribing_without_a_lock_is_rejected(client, auth_headers):
+    user_headers = await auth_headers(PermissionGroup.USER)
+
+    response = client.post(
+        "/api/v1/subscriptions",
+        json={"bangumi_id": 4242},
+        headers=user_headers,
+    )
+
+    assert response.status_code == 422
+    assert "锁定" in response.json()["detail"]
 
 
 async def test_targeted_check_does_not_and_the_anime_name_with_the_subject_id():
@@ -268,7 +349,7 @@ async def test_subscription_crud_and_guest_permission(client, auth_headers):
         json={
             "bangumi_id": 4242,
             "profile_id": profile_id,
-            "fansubs": ["ANi"],
+            "fansub": "ANi",
         },
         headers=user_headers,
     )
@@ -305,38 +386,32 @@ async def test_subscription_crud_and_guest_permission(client, auth_headers):
     )
 
 
-async def test_subscription_preview_selects_the_highest_scored_candidate():
+async def test_preview_picks_the_best_release_of_the_locked_group_only():
+    def resource(resource_id: int, title: str, fansub: str) -> AnimeGardenResource:
+        return AnimeGardenResource(
+            id=resource_id,
+            provider="test",
+            provider_id=str(resource_id),
+            title=title,
+            type="动画",
+            magnet=f"magnet:?xt=urn:btih:{resource_id}",
+            tracker="",
+            size=100,
+            fansub_name=fansub,
+            publisher_name="",
+            created_at=datetime.fromisoformat("2026-08-20T10:00:00"),
+            subject_ids=frozenset({4242}),
+        )
+
     class FakeAnimeGarden:
         async def search_resources(self, **kwargs):
             return [
-                AnimeGardenResource(
-                    id=1,
-                    provider="test",
-                    provider_id="1",
-                    title="[ANi] Test Anime - 01 [简][1080p][avc]",
-                    type="动画",
-                    magnet="magnet:?xt=urn:btih:test",
-                    tracker="",
-                    size=100,
-                    fansub_name="ANi",
-                    publisher_name="",
-                    created_at=datetime.fromisoformat("2026-08-20T10:00:00"),
-                    subject_ids=frozenset({4242}),
-                ),
-                AnimeGardenResource(
-                    id=2,
-                    provider="test",
-                    provider_id="2",
-                    title="[Other] Test Anime - 01 [简][720p][avc]",
-                    type="动画",
-                    magnet="magnet:?xt=urn:btih:test2",
-                    tracker="",
-                    size=100,
-                    fansub_name="Other",
-                    publisher_name="",
-                    created_at=datetime.fromisoformat("2026-08-20T10:01:00"),
-                    subject_ids=frozenset({4242}),
-                ),
+                resource(1, "[ANi] Test Anime - 01 [简][1080p][avc]", "ANi"),
+                # Same group, worse resolution: this is the comparison a locked
+                # subscription actually makes.
+                resource(2, "[ANi] Test Anime - 01 [简][720p][avc]", "ANi"),
+                # A different group is out of the running entirely, however good.
+                resource(3, "[Other] Test Anime - 01 [简][2160p][avc]", "Other"),
             ], True
 
     class FakeBangumi:
@@ -359,7 +434,7 @@ async def test_subscription_preview_selects_the_highest_scored_candidate():
         weights={"fansub": 45, "resolution": 22, "codec": 15, "subtitle": 12, "bitdepth": 6},
     )
     draft = SimpleNamespace(
-        fansubs=["ANi", "Other"],
+        fansub="ANi",
         allow_no_fansub=False,
         search_keywords=[],
         must_include=[],
@@ -384,6 +459,10 @@ async def test_subscription_preview_selects_the_highest_scored_candidate():
     assert result["accepted_count"] == 2
     assert len(selected) == 1
     assert selected[0]["resource_id"] == 1
+    rejected = next(
+        item for item in result["candidates"] if item["resource_id"] == 3
+    )
+    assert rejected["reason"] == "字幕组不是锁定的 ANi"
 
 
 @pytest.mark.parametrize(
@@ -470,7 +549,7 @@ async def test_subscribing_creates_a_placeholder_that_is_not_library_content(
 
     created = client.post(
         "/api/v1/subscriptions",
-        json={"bangumi_id": 4242, "fansubs": ["ANi"]},
+        json={"bangumi_id": 4242, "fansub": "ANi"},
         headers=user_headers,
     )
     assert created.status_code == 201, created.text
@@ -526,7 +605,7 @@ async def test_download_after_subscribing_merges_into_the_placeholder(
     user_headers = await auth_headers(PermissionGroup.USER)
     created = client.post(
         "/api/v1/subscriptions",
-        json={"bangumi_id": 4242, "fansubs": ["ANi"]},
+        json={"bangumi_id": 4242, "fansub": "ANi"},
         headers=user_headers,
     )
     assert created.status_code == 201, created.text
@@ -793,7 +872,7 @@ async def test_preview_reports_the_aired_season_and_the_episodes_rules_miss():
     )
     draft = SimpleNamespace(
         backfill_aired=True,
-        fansubs=["ANi"],
+        fansub="ANi",
         allow_no_fansub=False,
         search_keywords=[],
         must_include=[],
@@ -871,7 +950,7 @@ async def test_subscribing_queues_the_first_check_instead_of_waiting_for_a_sweep
 
     created = client.post(
         "/api/v1/subscriptions",
-        json={"bangumi_id": 4242, "fansubs": ["ANi"], "backfill_aired": True},
+        json={"bangumi_id": 4242, "fansub": "ANi", "backfill_aired": True},
         headers=user_headers,
     )
 

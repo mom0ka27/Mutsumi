@@ -49,7 +49,7 @@ class SubscriptionService {
   Future<SubscriptionRead> createSubscription({
     required int bangumiId,
     required int profileId,
-    required List<String> fansubs,
+    required String fansub,
     required bool allowNoFansub,
     bool backfillAired = false,
   }) async {
@@ -60,7 +60,7 @@ class SubscriptionService {
           ..._subscriptionPayload(
             bangumiId: bangumiId,
             profileId: profileId,
-            fansubs: fansubs,
+            fansub: fansub,
             allowNoFansub: allowNoFansub,
           ),
           'backfill_aired': backfillAired,
@@ -73,7 +73,7 @@ class SubscriptionService {
   Future<SubscriptionRead> updateSubscription({
     required int subscriptionId,
     required int profileId,
-    required List<String> fansubs,
+    required String fansub,
     required bool allowNoFansub,
     required bool enabled,
   }) async {
@@ -82,7 +82,7 @@ class SubscriptionService {
         '$subscriptionsApiPath/$subscriptionId',
         data: {
           'profile_id': profileId,
-          'fansubs': fansubs,
+          'fansub': fansub,
           'allow_no_fansub': allowNoFansub,
           'enabled': enabled,
         },
@@ -102,7 +102,7 @@ class SubscriptionService {
   Future<SubscriptionPreviewRead> previewSubscription({
     required int bangumiId,
     required int profileId,
-    required List<String> fansubs,
+    required String fansub,
     required bool allowNoFansub,
     bool backfillAired = false,
   }) async {
@@ -113,7 +113,7 @@ class SubscriptionService {
           ..._subscriptionPayload(
             bangumiId: bangumiId,
             profileId: profileId,
-            fansubs: fansubs,
+            fansub: fansub,
             allowNoFansub: allowNoFansub,
           ),
           // Widens the preview window to the whole broadcast season, so it
@@ -132,7 +132,7 @@ class SubscriptionService {
   Map<String, dynamic> _subscriptionPayload({
     required int bangumiId,
     required int profileId,
-    required List<String> fansubs,
+    required String fansub,
     required bool allowNoFansub,
   }) {
     return {
@@ -140,7 +140,7 @@ class SubscriptionService {
       // show has none yet.
       'bangumi_id': bangumiId,
       'profile_id': profileId,
-      'fansubs': fansubs,
+      'fansub': fansub,
       'allow_no_fansub': allowNoFansub,
       'use_subject_id': true,
       'resource_types': ['动画'],

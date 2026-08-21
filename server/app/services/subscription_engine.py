@@ -21,7 +21,8 @@ DEFAULT_PROFILE_VALUES: dict[str, Any] = {
     "exclude_tokens": [],
     "prefer_resolution": ["1080p", "2160p"],
     "prefer_codec": ["av1", "hevc", "avc"],
-    "prefer_subtitle": ["日", "无"],
+    # 简/繁 rank here too, so a locked group's 简 release outranks its 繁 one.
+    "prefer_subtitle": ["简", "繁", "日", "无"],
     "prefer_bitdepth": ["10bit", "8bit"],
     "weights": {"fansub": 45, "resolution": 22, "codec": 15, "subtitle": 12, "bitdepth": 6},
     "neutral_score": 0.5,
@@ -38,7 +39,7 @@ class ProfileValues:
     exclude_tokens: tuple[str, ...] = ()
     prefer_resolution: tuple[str, ...] = ("1080p", "2160p")
     prefer_codec: tuple[str, ...] = ("av1", "hevc", "avc")
-    prefer_subtitle: tuple[str, ...] = ("日", "无")
+    prefer_subtitle: tuple[str, ...] = ("简", "繁", "日", "无")
     prefer_bitdepth: tuple[str, ...] = ("10bit", "8bit")
     weights: dict[str, float] = field(
         default_factory=lambda: {
@@ -60,7 +61,9 @@ class SubscriptionRules:
     anime_name: str = ""
     anime_name_cn: str = ""
     aliases: tuple[str, ...] = ()
-    fansubs: tuple[str, ...] = ()
+    # One locked group, not a priority list: a season assembled from whoever
+    # published first mixes naming, timing and styling across episodes.
+    fansub: str = ""
     allow_no_fansub: bool = False
     search_keywords: tuple[str, ...] = ()
     must_include: tuple[str, ...] = ()
@@ -179,7 +182,7 @@ def subscription_rules(subscription: Any, anime: Any | None = None) -> Subscript
         anime_name=str(getattr(anime, "name", "") or ""),
         anime_name_cn=str(getattr(anime, "name_cn", "") or ""),
         aliases=_string_list(getattr(anime, "aliases", None)),
-        fansubs=_string_list(getattr(subscription, "fansubs", None)),
+        fansub=str(getattr(subscription, "fansub", "") or "").strip(),
         allow_no_fansub=bool(getattr(subscription, "allow_no_fansub", False)),
         search_keywords=_string_list(getattr(subscription, "search_keywords", None)),
         must_include=_string_list(getattr(subscription, "must_include", None)),
@@ -266,10 +269,6 @@ def parse_title_attributes(title: str, fansub: str = "") -> dict[str, Any]:
         ),
         "fansub": fansub,
     }
-
-
-def _casefolded(values: Iterable[str]) -> tuple[str, ...]:
-    return tuple(value.casefold() for value in values if value)
 
 
 def _contains_all(title: str, values: Iterable[str]) -> bool:
@@ -407,13 +406,12 @@ def evaluate_resource(
     if collection_reason:
         return ResourceEvaluation(False, 0, collection_reason, attributes, {})
 
-    if rules.fansubs:
-        normalized_fansubs = _casefolded(rules.fansubs)
-        if not fansub or fansub.casefold() not in normalized_fansubs:
-            if not fansub and rules.allow_no_fansub:
-                pass
-            else:
-                return ResourceEvaluation(False, 0, "字幕组不在选择列表", attributes, {})
+    if rules.fansub:
+        if fansub.casefold() != rules.fansub.casefold():
+            if not (not fansub and rules.allow_no_fansub):
+                return ResourceEvaluation(
+                    False, 0, f"字幕组不是锁定的 {rules.fansub}", attributes, {}
+                )
     elif not fansub and not rules.allow_no_fansub:
         return ResourceEvaluation(False, 0, "未允许无字幕组资源", attributes, {})
 
@@ -440,20 +438,22 @@ def evaluate_resource(
         return ResourceEvaluation(False, 0, f"命中排除项: {excluded}", attributes, {})
 
     component_scores = {
-        # An empty fansub list means the dimension was never configured, and a
+        # No locked group means the dimension was never configured, and a
         # resource without a fansub cannot be ranked against one -- both are
         # "unresolved", so they take the neutral score rather than zero.
-        "fansub": _preference_score(fansub or None, rules.fansubs, profile.neutral_score),
+        "fansub": _preference_score(
+            fansub or None,
+            (rules.fansub,) if rules.fansub else (),
+            profile.neutral_score,
+        ),
         "resolution": _preference_score(
             attributes["resolution"], profile.prefer_resolution, profile.neutral_score
         ),
         "codec": _preference_score(
             attributes["codec"], profile.prefer_codec, profile.neutral_score
         ),
-        "subtitle": _preference_score(
-            "日" if attributes["language"]["has_jp"] else "无",
-            profile.prefer_subtitle,
-            profile.neutral_score,
+        "subtitle": _subtitle_score(
+            attributes["language"], profile.prefer_subtitle, profile.neutral_score
         ),
         "bitdepth": _preference_score(
             attributes["bitdepth"], profile.prefer_bitdepth, profile.neutral_score
@@ -473,6 +473,39 @@ def evaluate_resource(
     attributes["scores"] = component_scores
     attributes["total_score"] = score
     return ResourceEvaluation(True, score, None, attributes, component_scores)
+
+
+def subtitle_tokens(language: dict[str, Any]) -> tuple[str, ...]:
+    """The subtitle-type labels a release carries.
+
+    CHS/CHT count as subtitle types here, not only as the language filter: with
+    one fansub locked, the script is often the only thing separating that
+    group's two releases of the same episode, and ``language_mode`` can only
+    accept or reject one -- it cannot say "简 preferred, 繁 acceptable".
+    """
+    script = [item for item in ("简", "繁") if item in language.get("script", ())]
+    tokens = [*script]
+    if len(script) == 2:
+        tokens.append("简繁")
+    tokens.append("日" if language.get("has_jp") else "无")
+    return tuple(tokens)
+
+
+def _subtitle_score(
+    language: dict[str, Any],
+    preferences: Iterable[str],
+    neutral: float,
+) -> float:
+    """The best-ranked subtitle type the release carries.
+
+    A 简日 release earns its 简 rank rather than its 日 rank, so ordering 简
+    above 繁 is enough to prefer one script without rejecting the other.
+    """
+    values = tuple(preferences)
+    tokens = subtitle_tokens(language)
+    if not values or not tokens:
+        return neutral
+    return max(_preference_score(token, values, neutral) for token in tokens)
 
 
 def _preference_score(

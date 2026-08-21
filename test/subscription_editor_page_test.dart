@@ -49,6 +49,11 @@ void main() {
     SubscriptionPreviewRead? result,
     AiringStatus status = AiringStatus.airing,
   }) async {
+    // Tall enough that every fansub row and the floating save bar coexist
+    // without scrolling, so taps land on the row and not on the bar.
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final service = _FakeSubscriptionService(result ?? preview());
     await tester.pumpWidget(
       MaterialApp(
@@ -62,6 +67,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     return service;
+  }
+
+  // The locked group's name also shows in the save bar, so the tile has to be
+  // addressed by its row rather than by its label.
+  Finder fansubTile(String name) => find.ancestor(
+    of: find.text(name),
+    matching: find.byType(RadioListTile<String>),
+  );
+
+  Future<void> tapFansub(WidgetTester tester, String name) async {
+    await tester.tap(fansubTile(name));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('打开就查询已播出的集，不用先按按钮', (tester) async {
@@ -92,11 +109,35 @@ void main() {
     expect(find.text('第 1-6 集已播出但没有匹配到资源'), findsOne);
   });
 
+  testWidgets('默认锁定资源最多的字幕组，整季只跟它', (tester) async {
+    final service = await pump(tester);
+
+    expect(service.lastFansub, 'ANi');
+    expect(find.text('整季只跟 ANi'), findsOne);
+    // Single lock, not a priority list: exactly one radio is on.
+    final selected = tester
+        .widgetList<RadioListTile<String>>(find.byType(RadioListTile<String>))
+        .where((tile) => tile.value == 'ANi');
+    expect(selected.length, 1);
+    expect(find.text('ANi · 立即下载 5 集'), findsOne);
+  });
+
+  testWidgets('换字幕组要重新匹配，再点一次可以解除锁定', (tester) async {
+    await pump(tester);
+
+    await tapFansub(tester, '喵萌奶茶屋');
+    expect(find.text('整季只跟 喵萌奶茶屋'), findsOne);
+    expect(find.text('规则已改，重新匹配'), findsOne);
+
+    await tapFansub(tester, '喵萌奶茶屋');
+    expect(find.text('整季只跟一个字幕组'), findsOne);
+    expect(find.text('未锁定字幕组'), findsOne);
+  });
+
   testWidgets('改了字幕组后已播出集数还在，匹配结果标为过期', (tester) async {
     await pump(tester);
 
-    await tester.tap(find.text('ANi'));
-    await tester.pumpAndSettle();
+    await tapFansub(tester, '喵萌奶茶屋');
 
     // Rule-independent, so it stays: it is what tells the user whether an empty
     // match means "nothing aired" or "rules too narrow".
@@ -128,6 +169,7 @@ class _FakeSubscriptionService extends SubscriptionService {
   final SubscriptionPreviewRead result;
   int previewCalls = 0;
   bool? lastBackfillAired;
+  String? lastFansub;
 
   @override
   Future<List<PreferenceProfileRead>> listProfiles() async => [
@@ -138,21 +180,29 @@ class _FakeSubscriptionService extends SubscriptionService {
     }),
   ];
 
+  // Server-side order: most prolific group first.
   @override
   Future<List<FansubCandidateRead>> listFansubs(int bangumiId) async => [
-    FansubCandidateRead.fromJson({'name': 'ANi', 'count': 5}),
+    FansubCandidateRead.fromJson({'name': 'ANi', 'count': 12}),
+    FansubCandidateRead.fromJson({'name': '喵萌奶茶屋', 'count': 5}),
+    FansubCandidateRead.fromJson({
+      'name': '(无字幕组)',
+      'count': 2,
+      'is_no_fansub': true,
+    }),
   ];
 
   @override
   Future<SubscriptionPreviewRead> previewSubscription({
     required int bangumiId,
     required int profileId,
-    required List<String> fansubs,
+    required String fansub,
     required bool allowNoFansub,
     bool backfillAired = false,
   }) async {
     previewCalls++;
     lastBackfillAired = backfillAired;
+    lastFansub = fansub;
     return result;
   }
 }

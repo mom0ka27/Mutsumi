@@ -173,6 +173,7 @@ async def create_subscription(
     )
     if existing:
         raise HTTPException(status_code=409, detail="Anime is already subscribed")
+    _validate_fansub_lock(payload.fansub, payload.allow_no_fansub)
     profile = await _resolve_profile(session, payload.profile_id)
     episodes = await _bangumi_episodes(anime)
     subscription = Subscription(
@@ -219,6 +220,10 @@ async def update_subscription(
         session, subscription_id, current_user
     )
     changes = payload.model_dump(exclude_unset=True)
+    _validate_fansub_lock(
+        changes.get("fansub", subscription.fansub),
+        changes.get("allow_no_fansub", subscription.allow_no_fansub),
+    )
     if "profile_id" in changes:
         profile = await _resolve_profile(session, changes.pop("profile_id"))
         changes["profile_id"] = profile.id
@@ -424,6 +429,20 @@ async def _resolve_or_create_anime(session: AsyncSession, bangumi_id: int) -> An
     return anime
 
 
+def _validate_fansub_lock(fansub: str | None, allow_no_fansub: bool | None) -> None:
+    """A subscription follows one group's releases, so it needs a lock target.
+
+    Enforced here and not only in the editor: without a lock the rules fall back
+    to "whoever published first", which is how a season ends up assembled from
+    four different groups with four different naming and timing conventions.
+    """
+    if not (fansub or "").strip() and not allow_no_fansub:
+        raise HTTPException(
+            status_code=422,
+            detail="需要锁定一个字幕组，或允许无字幕组资源",
+        )
+
+
 async def _bangumi_episodes(anime: Anime) -> list[EpisodeInfo]:
     """The episode table, or ``[]`` if Bangumi is unavailable.
 
@@ -465,7 +484,7 @@ async def _ensure_default_profile(session: AsyncSession) -> PreferenceProfile:
         exclude_tokens=[],
         prefer_resolution=["1080p", "2160p"],
         prefer_codec=["av1", "hevc", "avc"],
-        prefer_subtitle=["日", "无"],
+        prefer_subtitle=["简", "繁", "日", "无"],
         prefer_bitdepth=["10bit", "8bit"],
         weights={"fansub": 45, "resolution": 22, "codec": 15, "subtitle": 12, "bitdepth": 6},
         neutral_score=0.5,
@@ -566,7 +585,7 @@ def _subscription_read(
         image_url=anime.image_url if anime else "",
         enabled=subscription.enabled,
         profile_id=subscription.profile_id,
-        fansubs=list(subscription.fansubs or []),
+        fansub=subscription.fansub or "",
         allow_no_fansub=subscription.allow_no_fansub,
         search_keywords=list(subscription.search_keywords or []),
         must_include=list(subscription.must_include or []),
