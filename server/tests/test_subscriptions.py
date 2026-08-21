@@ -25,7 +25,6 @@ from app.services.subscription_engine import (
     profile_values,
     resource_matches_subscription,
     subtitle_tokens,
-    search_variants,
     SubscriptionRules,
 )
 from app.services import subscription_worker as worker_module
@@ -979,22 +978,6 @@ def test_known_names_put_the_chinese_name_first_and_drop_duplicates():
     )
 
     assert known_names(rules) == ("中文名", "Official Name", "俗称")
-    # One query per name, capped so a subject with a dozen 别名 cannot turn one
-    # check into a dozen feed requests.
-    assert search_variants(rules, limit=2) == (("中文名",), ("Official Name",))
-
-
-def test_explicit_search_keywords_stay_one_query():
-    rules = SubscriptionRules(
-        bangumi_id=4242,
-        anime_name="Official Name",
-        aliases=("俗称",),
-        search_keywords=("作品", "2nd"),
-    )
-
-    # A typed keyword list is a constraint, not an alternative name: splitting it
-    # would widen the search instead of narrowing it.
-    assert search_variants(rules) == (("作品", "2nd"),)
 
 
 def test_a_release_titled_with_only_an_alias_still_matches():
@@ -1135,23 +1118,13 @@ async def test_the_subject_id_is_asked_by_itself_without_any_name():
     assert calls[0]["search"] == ()
 
 
-async def test_names_are_the_fallback_when_there_is_no_subject_to_ask_by():
+async def test_no_subject_to_ask_by_pulls_the_window_instead_of_guessing_names():
     calls: list[dict] = []
-    # One release is reachable only by the alias, so each name needs its own
-    # query: the API ANDs the terms inside a single ``search``.
-    by_search = {
-        ("中文名",): [1, 2],
-        ("Official Name",): [2],
-        ("俗称",): [3],
-    }
 
     class FakeAnimeGarden:
         async def search_resources(self, **kwargs):
             calls.append(kwargs)
-            return [
-                _episode_resource(resource_id, resource_id, "2026-08-01")
-                for resource_id in by_search.get(kwargs["search"], [])
-            ], True
+            return [_episode_resource(1, 1, "2026-08-01")], True
 
     subscription = SimpleNamespace(
         anime=Anime(
@@ -1170,19 +1143,19 @@ async def test_names_are_the_fallback_when_there_is_no_subject_to_ask_by():
 
     resources = await SubscriptionWorker(
         anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
     )._fetch_targeted_resources(
         subscription,
         datetime.fromisoformat("2026-09-03T12:00:00"),
     )
 
-    assert [call["subjects"] for call in calls] == [(), (), ()]
-    assert [call["search"] for call in calls] == [
-        ("中文名",),
-        ("Official Name",),
-        ("俗称",),
-    ]
-    # Merged and deduped: resource 2 came back from two of the three queries.
-    assert [resource.id for resource in resources] == [1, 2, 3]
+    # One unfiltered window, matched locally -- the same path the global sweep
+    # takes. Names identify the show during matching; they never fetch it, so a
+    # per-alias ``search`` fan-out is not the fallback for a missing subject id.
+    assert len(calls) == 1
+    assert calls[0]["subjects"] == ()
+    assert calls[0]["search"] == ()
+    assert [resource.id for resource in resources] == [1]
 
 
 async def test_aliases_are_fetched_once_and_then_kept_on_the_row():

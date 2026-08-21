@@ -64,10 +64,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # feed says there is no more, or until it has a release for every aired
         # episode it is missing. Stopping here means results were truncated.
         "max_pages": 200,
-        # How many of a show's names (中文名, 原名, 别名…) get their own feed
-        # query. Each one costs a request, so the cap keeps a subject with a
-        # dozen 别名 from turning one check into dozens.
-        "max_name_variants": 4,
         "auto_import": True,
     },
 }

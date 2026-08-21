@@ -41,7 +41,6 @@ from app.services.subscription_engine import (
     profile_values,
     resource_matches_subscription,
     SubscriptionMatch,
-    search_variants,
     season_start,
     subscription_rules,
 )
@@ -172,6 +171,7 @@ class SubscriptionWorker:
                 anime.air_date = subject.air_date
                 anime.aliases = list(subject.aliases)
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
+        await self._ensure_aliases(anime)
         rules = subscription_rules(draft, anime)
         values = profile_values(profile, getattr(draft, "profile_overrides", None))
         existing_indices = {
@@ -495,28 +495,29 @@ class SubscriptionWorker:
         )
 
     async def _queries_for(self, rules_source: Any, anime: Anime | None) -> tuple[_Query, ...]:
-        """How this show is asked for upstream: by subject id whenever there is one.
+        """How this show is asked for upstream: by subject id, or not at all.
 
         The feed's ``subjectId`` *is* the Bangumi id, so one subject query is
-        both exact and complete -- sending names alongside it would only add
-        queries whose results the subject filter already covers. Names are the
-        fallback for when there is no subject id to ask by, and then each alias
-        needs its own query because the API ANDs the terms within one.
+        both exact and complete. There is deliberately no query by name: the
+        subject filter already covers everything a name would find, and a name
+        query is a guess that costs a request per alias.
+
+        No subject id to ask by -- a subscription that has turned
+        ``use_subject_id`` off -- returns no query at all, and the caller then
+        pulls the plain window and matches locally, exactly as the global sweep
+        does. Names identify the show during matching; they never fetch it.
         """
         if anime is None:
             return ()
         subjects = _subjects_for(anime, getattr(rules_source, "use_subject_id", True))
-        if subjects:
-            return (_Query(subjects=subjects),)
-        await self._ensure_aliases(anime)
-        rules = subscription_rules(rules_source, anime)
-        limit = _config_int("max_name_variants", 4)
-        return tuple(
-            _Query(search=variant) for variant in search_variants(rules, limit)
-        )
+        return (_Query(subjects=subjects),) if subjects else ()
 
     async def _ensure_aliases(self, anime: Anime) -> tuple[str, ...]:
         """Bangumi's 别名 list, fetched once and then kept on the row.
+
+        Needed for matching, not for fetching: an untagged resource off the
+        global sweep can only be tied to this show by its title, and a release
+        titled with an alias is the common case there.
 
         Filled in lazily rather than by a data migration: rows created before
         the column existed have none, and a subject that gained aliases upstream
@@ -549,19 +550,15 @@ class SubscriptionWorker:
 
         Goes through the same query shaping as a real check, so the groups on
         offer are exactly the groups a subscription would be able to follow.
+        The subject id is all that shaping needs -- names never reach the feed.
         """
-        subject = await self.bangumi.get_subject(bangumi_id)
-        anime = Anime(
-            id=0,
-            bangumi_id=bangumi_id,
-            name=subject.name if subject else "",
-            name_cn=subject.name_cn if subject else "",
-            aliases=list(subject.aliases) if subject else [],
-        )
         return await self._fetch_resources(
             after=after,
             before=before,
-            queries=await self._queries_for(SimpleNamespace(), anime),
+            queries=await self._queries_for(
+                SimpleNamespace(),
+                Anime(id=0, bangumi_id=bangumi_id),
+            ),
             types=types,
         )
 
@@ -655,6 +652,9 @@ class SubscriptionWorker:
             return 0, 0
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
         values = profile_values(subscription.profile, subscription.profile_overrides)
+        # Aliases are what lets an untagged resource off the global sweep still
+        # be recognised by title, so they have to be on the row before matching.
+        await self._ensure_aliases(anime)
         rules = subscription_rules(subscription, anime)
         existing_indices = {
             episode.index

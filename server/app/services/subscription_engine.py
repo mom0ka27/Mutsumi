@@ -289,7 +289,8 @@ def known_names(rules: SubscriptionRules) -> tuple[str, ...]:
 
     Bangumi's official name is often the one nobody uses: fansubs title their
     releases with the Chinese name or one of the 别名, so all of them count as
-    the same show.
+    the same show. Used to *recognise* a show, never to search for one -- the
+    feed is only ever queried by subject id.
     """
     return tuple(
         name
@@ -298,21 +299,6 @@ def known_names(rules: SubscriptionRules) -> tuple[str, ...]:
         )
         if len(name.strip()) >= 2
     )
-
-
-def search_variants(rules: SubscriptionRules, limit: int = 4) -> tuple[tuple[str, ...], ...]:
-    """Name queries to run separately and then merge.
-
-    Upstream ANDs the terms inside one ``search``, so two names for the same
-    show cannot be asked for at once -- each name is its own query and the
-    results get deduped by resource id. [limit] caps the fan-out: a subject with
-    a dozen 别名 would otherwise turn one check into dozens of feed requests.
-    """
-    if rules.search_keywords:
-        # An explicit keyword list is a constraint the user typed, not a name to
-        # guess at, so it stays a single AND group.
-        return (rules.search_keywords,)
-    return tuple((name,) for name in known_names(rules)[: max(1, limit)])
 
 
 MATCHED_BY_SUBJECT = "subject"

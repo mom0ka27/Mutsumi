@@ -64,6 +64,16 @@
 订阅 30 个和 1 个的上游开销完全一样。手动「立即检查」走另一条路径：按订阅带
 `subjects` 精确查询。
 
+### 只按 subject 查，不按名称查
+
+`/resources` 响应里的 `subjectId` **就是** Bangumi id，`subjects` 过滤器也按它走。所以定向查询
+只发一条带 `subjects` 的请求，**不发任何 `search`**：subject 过滤器已经覆盖了名称能找到的一切，
+而按名称查是猜 —— 每个别名一次请求，换来的是 subject 已经给过的结果。
+
+`use_subject_id` 关掉时也不退化成按名称查，而是**不带过滤器拉窗口、在本地匹配**，跟全局 sweep
+完全同一条路。名字（中文名 / 原名 / 别名）只用来**认**番，不用来**搜**番 —— 全局 sweep 里那些
+没打 subject 标签的资源只能靠标题认出来，`known_names()` 就是为这个存在的。
+
 ### 翻页：只信上游的 `complete`
 
 `pageSize` **不一定生效**。超出允许范围时上游不报错，而是静默换成自己的 100：请求
@@ -431,7 +441,7 @@ allow_no_fansub     bool  是否接受个人发布 / 无字幕组
 search_keywords     json  list[str]   → search
 must_include        json  list[str]   叠加在 profile 之上（取并集）
 exclude_keywords    json  list[str]   叠加在 profile 之上（取并集）
-use_subject_id      bool  是否用 anime.bangumi_id 收窄
+use_subject_id      bool  是否用 anime.bangumi_id 收窄；关掉就只能靠标题识别
 resource_types      json  default ['动画']
 
 profile_overrides   json  nullable    仅覆盖 profile 的部分字段

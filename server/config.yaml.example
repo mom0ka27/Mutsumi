@@ -1,40 +1,55 @@
+# Mutsumi 服务端配置模板。复制成 config.yaml 再改：
+#   cp config.yaml.example config.yaml
+# 缺的条目会用 app/core/config.py 里的默认值补上，所以只留想改的即可。
+#
+# 注意：App 内改「服务器名 / qBittorrent 设置 / 更新通道」时，服务端会整份重写
+# config.yaml，注释会丢失 —— 这份模板不会被覆写，可以当注释的备份看。
 server:
-  name: Mutsumi Server
-  host: "::"
-  port: 12091
-  reload: false
+  name: Mutsumi Server  # 服务器显示名，客户端里看到的就是它；App 内可改
+  host: "::"  # 监听地址。'::' = IPv6/IPv4 双栈；只允许本机访问填 127.0.0.1
+  port: 12091  # 监听端口
+  reload: false  # 改代码自动重启，仅开发用；生产环境保持 false
   ssl:
-    enabled: false
-    certfile: ./server.crt
-    keyfile: ./server.key
+    enabled: false  # 开启后走 https，客户端里的服务器地址也要跟着改
+    certfile: ./server.crt  # 证书路径，enabled: false 时不读取
+    keyfile: ./server.key  # 私钥路径，同上
 logging:
-  level: INFO
-  directory: logs
-  retention_days: 7
+  level: INFO  # DEBUG / INFO / WARNING / ERROR，同时作用于控制台和文件
+  directory: logs  # 日志目录，写入 server.log，每天零点切分
+  retention_days: 7  # 保留几个切分文件（≈ 几天），超出自动删除
 storage:
-  data_path: ./data
-  # How long directory-size scans are reused for the storage page.
-  # Set to 0 to always rescan; clients can also pass ?refresh=true.
+  data_path: ./data  # 媒体库根目录，媒体扫描和容量统计都以它为准
+  # 目录体积扫描结果缓存多久（秒），给存储页用。0 = 每次都重扫；
+  # 客户端也可以带 ?refresh=true 强制重扫
   status_cache_seconds: 60
+# 数据库连接串。sqlite 的相对路径以 server/ 为基准；换库或改路径前先备份，
+# 迁移由 alembic 管理（migrations/）
 database_url: sqlite+aiosqlite:///./data/mutsumi.db
 updates:
-  repository: mom0ka27/Mutsumi
-  asset_template: mutsumi-server-{tag}.zip
-  default_branch: main
-  channel: release
+  repository: mom0ka27/Mutsumi  # 服务端自更新的来源，GitHub owner/repo
+  asset_template: mutsumi-server-{tag}.zip  # release 资产名模板，{tag} 替换成版本号
+  default_branch: main  # channel 为 branch 时，跟这个分支的最新提交
+  channel: release  # release 正式版 / prerelease 预发布 / branch 跟分支；App 内可切
 auth:
+  # JWT 签名密钥。**留空**即可 —— 首次启动会自动生成一个随机值写回 config.yaml，
+  # 并把文件权限收成 600。手填的话务必用足够长的随机串，别用这里的占位符
   secret_key: CHANGE_ME_TO_A_SECURE_RANDOM_VALUE
-  algorithm: HS256
-  access_token_expire_minutes: 1440
+  algorithm: HS256  # JWT 签名算法
+  access_token_expire_minutes: 1440  # 登录有效期（分钟），1440 = 一天
 qbittorrent:
-  url: http://localhost:1234
-  username: ''
-  password: ''
+  url: http://localhost:1234  # qBittorrent WebUI 地址；不可达时订阅整轮跳过且不推进游标
+  username: ''  # WebUI 账号，留空 = 未设密码或走了白名单免密
+  password: ''  # WebUI 密码
+  # 下载根目录，每个种子落在 <download_path>/<info_hash>/。这个路径是发给
+  # qBittorrent 用的，qB 跑在容器或别的机器上时要填**它**看得到的路径；
+  # 留空则用 qB 自己的默认下载目录
   download_path: ./data
-  share_ratio_limit: 3.0
+  share_ratio_limit: 3.0  # 分享率上限，达到后 qB 停止做种；-1 = 不限
 subscription:
-  enabled: true
-  interval_minutes: 15
+  enabled: true  # 关掉 = 定时扫描不跑，手动「立即检查」仍可用
+  interval_minutes: 15  # 定时扫描间隔（分钟），带随机抖动避免整点集中打上游
+  # 订阅游标为空时（新订阅 / 首次启动）往回看几天，避免第一次就抓全站历史。
+  # 勾了「补齐已播出的集」的新订阅会用整季窗口，不受这个限制
   cold_start_days: 7
   # 每页取多少条。100 是上游默认值；超出上游允许范围时它不会报错，
   # 而是静默按 100 条返回，所以不要往大改
@@ -42,6 +57,4 @@ subscription:
   # 翻页的失控保护，不是抓取窗口：正常情况下会一页一页翻到上游说没有了，
   # 或者缺的每一集都已经匹配到资源为止。走到这个上限说明结果被截断了
   max_pages: 200
-  # 每部番用几个名字（中文名 / 原名 / 别名）各查一次，结果合并去重
-  max_name_variants: 4
-  auto_import: true
+  auto_import: true  # false = 观察模式，只写台账不真的下载，用来验规则
