@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_session, require_admin
 from app.models import Anime
+from app.models.anime import anime_has_content
 from app.schemas import StorageStatusRead
 from app.services.storage_service import storage_service
 
@@ -28,6 +29,9 @@ async def get_storage_status(
             await session.scalars(
                 select(Anime)
                 .options(selectinload(Anime.episodes))
+                # Placeholders from subscriptions own no files; they would show
+                # up as zero-byte rows.
+                .where(anime_has_content())
                 .order_by(Anime.name_cn, Anime.name)
             )
         ).all()

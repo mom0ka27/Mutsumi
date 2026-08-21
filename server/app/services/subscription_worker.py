@@ -29,6 +29,7 @@ from app.services.subscription_engine import (
     ProfileValues,
     ResourceEvaluation,
     evaluate_resource,
+    next_expected_episode,
     parse_episode_index,
     profile_values,
     resource_matches_subscription,
@@ -105,6 +106,15 @@ class SubscriptionWorker:
         now: datetime | None = None,
     ) -> dict[str, Any]:
         current_time = now or _utcnow()
+        if not anime.name and not anime.id:
+            # A draft for a show with no library row: fill the transient Anime
+            # so season inference and title fallback matching behave as they
+            # will once the subscription exists.
+            subject = await self.bangumi.get_subject(anime.bangumi_id)
+            if subject is not None:
+                anime.name = subject.name
+                anime.name_cn = subject.name_cn
+                anime.episode_count = subject.episode_count
         resources = await self._fetch_draft_resources(anime, draft, current_time)
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
         rules = subscription_rules(draft, anime)
@@ -145,7 +155,14 @@ class SubscriptionWorker:
                 anime_name=anime.name,
             )
             if parsed.index is None:
-                rows.append(_preview_row(resource, parsed, evaluation, "needs_review"))
+                rows.append(
+                    _preview_row(
+                        resource,
+                        parsed,
+                        evaluation,
+                        "deferred" if parsed.deferred else "needs_review",
+                    )
+                )
                 continue
             if parsed.index in existing_indices:
                 rows.append(
@@ -178,6 +195,7 @@ class SubscriptionWorker:
         )
         return {
             "anime_id": anime.id,
+            "bangumi_id": anime.bangumi_id,
             "resource_count": len(resources),
             "accepted_count": accepted_count,
             "candidates": rows,
@@ -217,12 +235,24 @@ class SubscriptionWorker:
                 for subscription in subscriptions:
                     try:
                         async with session.begin_nested():
+                            sub_resources = resources
+                            if subscription.backfill_after is not None:
+                                # A one-shot catch-up for a show joined
+                                # mid-season. It stays a targeted query so the
+                                # season-long window never widens the shared
+                                # global sweep.
+                                backfilled = await self._fetch_backfill_resources(
+                                    subscription,
+                                    now,
+                                )
+                                sub_resources = backfilled + resources
                             sub_processed, sub_found = await self._process_subscription(
                                 session,
                                 subscription,
-                                resources,
+                                sub_resources,
                                 now,
                             )
+                            subscription.backfill_after = None
                         processed += sub_processed
                         found += sub_found
                         subscription.last_checked_at = now
@@ -232,7 +262,7 @@ class SubscriptionWorker:
                         latest = _latest_resource_time(
                             [
                                 resource
-                                for resource in resources
+                                for resource in sub_resources
                                 if _resource_after_cursor(resource, subscription.cursor_at, now)
                             ]
                         )
@@ -306,6 +336,20 @@ class SubscriptionWorker:
             types=tuple(subscription.resource_types or ("动画",)),
         )
 
+    async def _fetch_backfill_resources(
+        self,
+        subscription: Subscription,
+        now: datetime,
+    ) -> list[AnimeGardenResource]:
+        anime = subscription.anime
+        return await self._fetch_resources(
+            after=_naive_utc(subscription.backfill_after or now),
+            before=now,
+            subjects=_subjects_for(anime, subscription.use_subject_id),
+            search=tuple(subscription.search_keywords or ()),
+            types=tuple(subscription.resource_types or ("动画",)),
+        )
+
     async def _fetch_draft_resources(
         self,
         anime: Anime,
@@ -375,6 +419,7 @@ class SubscriptionWorker:
                 )
             )
         )
+        await self._retry_deferred(session, subscription, episodes, anime)
         processed = 0
         found = 0
         for resource in resources:
@@ -413,7 +458,11 @@ class SubscriptionWorker:
                         resource,
                         evaluation,
                         episode_index=None,
-                        state="needs_review",
+                        # ``deferred`` waits for Bangumi to publish the episode
+                        # table; ``needs_review`` waits for a human. Confusing
+                        # the two would strand the first episode of every show
+                        # subscribed before it aired.
+                        state="deferred" if parsed.deferred else "needs_review",
                         reason=parsed.reason,
                         parsed=parsed,
                     )
@@ -450,7 +499,56 @@ class SubscriptionWorker:
             existing_indices,
             now,
         )
+        # After settling, ``existing_indices`` includes whatever was just
+        # imported, so the cached "next episode" reflects this sweep.
+        (
+            subscription.next_episode_index,
+            subscription.next_episode_air_date,
+        ) = next_expected_episode(episodes, existing_indices)
         return processed, found
+
+    async def _retry_deferred(
+        self,
+        session: AsyncSession,
+        subscription: Subscription,
+        episodes: list[Any],
+        anime: Anime,
+    ) -> None:
+        """Re-resolve rows that were waiting for Bangumi's episode table.
+
+        They already passed the hard filters and were scored; the only thing
+        missing was the ep/sort ranges. Once Bangumi publishes them, the row
+        rejoins the candidate pool with its original ``first_seen_at``, so the
+        waiting window is not restarted.
+        """
+        if not episodes:
+            return
+        deferred = list(
+            await session.scalars(
+                select(SubscriptionEpisode).where(
+                    SubscriptionEpisode.subscription_id == subscription.id,
+                    SubscriptionEpisode.state == "deferred",
+                )
+            )
+        )
+        for row in deferred:
+            attributes = row.attributes or {}
+            parsed = parse_episode_index(
+                row.resource_title,
+                episodes,
+                attributes.get("created_at") or row.first_seen_at,
+                episode_offset_override=subscription.episode_offset_override,
+                anime_name=anime.name,
+            )
+            if parsed.deferred:
+                continue
+            row.episode_index = parsed.index
+            row.state = "candidate" if parsed.index is not None else "needs_review"
+            row.reason = parsed.reason
+            row.attributes = {
+                **attributes,
+                "episode_parse": _episode_parse_attributes(parsed),
+            }
 
     async def _settle_candidates(
         self,
@@ -631,15 +729,7 @@ def _ledger_entry(
         }
     )
     if parsed is not None:
-        attributes["episode_parse"] = {
-            "raw_number": parsed.raw_number,
-            "season_number": parsed.season_number,
-            "reason": parsed.reason,
-            "bangumi_ep": parsed.episode.ep if parsed.episode else None,
-            "bangumi_sort": parsed.episode.sort if parsed.episode else None,
-            "name": parsed.episode.name if parsed.episode else "",
-            "name_cn": parsed.episode.name_cn if parsed.episode else "",
-        }
+        attributes["episode_parse"] = _episode_parse_attributes(parsed)
     return SubscriptionEpisode(
         subscription_id=subscription.id,
         episode_index=episode_index,
@@ -651,6 +741,19 @@ def _ledger_entry(
         reason=reason or evaluation.reason,
         first_seen_at=_naive_utc(resource.created_at) if resource.created_at else _utcnow(),
     )
+
+
+def _episode_parse_attributes(parsed: EpisodeParseResult) -> dict[str, Any]:
+    return {
+        "raw_number": parsed.raw_number,
+        "season_number": parsed.season_number,
+        "reason": parsed.reason,
+        "deferred": parsed.deferred,
+        "bangumi_ep": parsed.episode.ep if parsed.episode else None,
+        "bangumi_sort": parsed.episode.sort if parsed.episode else None,
+        "name": parsed.episode.name if parsed.episode else "",
+        "name_cn": parsed.episode.name_cn if parsed.episode else "",
+    }
 
 
 def _preview_row(

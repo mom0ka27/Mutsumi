@@ -8,6 +8,8 @@
 - [设计目标](#设计目标)
 - [实测：标题属性解析覆盖率](#实测标题属性解析覆盖率)
 - [语言：硬过滤（token + 字形双通道）](#语言硬过滤token--字形双通道)
+- [番剧身份与库内容](#番剧身份与库内容)
+- [番剧状态：推导而非查询](#番剧状态推导而非查询)
 - [数据模型](#数据模型)
 - [属性解析器](#属性解析器)
 - [偏好打分模型](#偏好打分模型)
@@ -24,6 +26,8 @@
 1. 每周番剧更新后自动下载最新一集，无需人工介入。
 2. 用户在添加订阅时选择字幕组，并按偏好（分辨率、编码、语言等）自动挑选发布版本。
 3. 宁可漏一集等人处理，也不要错配一集。
+4. **订阅一部本地一集都没有的番是主场景。** 新番开播时用户手上什么都没有，
+   这恰恰是最需要追番的时刻——见[番剧身份与库内容](#番剧身份与库内容)。
 
 ### 上游选择：不用 RSS
 
@@ -235,6 +239,126 @@ prefer_subtitle   json  list[str]          软偏好，默认 ['日', '无']
 所以这个条件会漏掉全部依赖字形判定的资源（含最大发布者）。
 建议客户端搜索改为不带语言条件，把语言判定交给统一的 `detect_language`。
 
+## 番剧身份与库内容
+
+### 原设计错在哪
+
+初版把订阅绑定到「已存在的 `Anime`」上。但在这个项目里，`Anime` 行至今**只由下载或本地导入创建**
+——`anime_garden_download_coordinator.dart:49` 和 `local_add_coordinator.dart:31` 是唯二的
+`createAnime` 调用点，两者都必带 `downloadHash` + `episodes`。也就是说：
+
+> 库里有一行 `Anime` ⇔ 本地已经有这部番的文件。
+
+于是「先把番加进库，再追番」这个前置条件要求用户**先手动下一集**才能开始自动追番，
+把功能的前提变成了它要解决的问题。新番开播时用户手上什么都没有，而那正是唯一需要追番的时刻。
+
+### 修正：`Anime` 是番剧身份，不是库内容
+
+`Anime` 已经以 `bangumi_id` 唯一索引，本来就是身份表 + Bangumi 元数据缓存，
+只是从来没有人创建过「没有文件的番」。所以不新增表、不新增状态字段，改一条定义：
+
+| 概念 | 定义 |
+| --- | --- |
+| `Anime` 行 | 番剧身份 + Bangumi 元数据快照。**可以没有文件** |
+| 库内容 | 派生概念：`EXISTS(episodes) OR download_hash IS NOT NULL` 的 `Anime` |
+| 追番中 | 有 `subscriptions` 行的 `Anime`，与库内容**正交**（可以同时是，也可以只是其中之一） |
+
+创建订阅时按 `bangumi_id` upsert 出 `Anime`：命中则复用，未命中则拉 Bangumi 元数据建一行
+**stub**（`download_hash = NULL`，`episodes = []`）。worker 抓到第一集就往这行里加 `Episode`，
+stub 自动变成库内容——**没有状态迁移，没有数据搬运，没有第二套身份**。
+
+这么选的理由是它把改动压在了定义和查询上，而不是数据模型上：
+
+- 订阅表结构完全不动，`anime_id` 仍是唯一外键（不必引入可空 `anime_id` + 独立 `bangumi_id`
+  的双身份，那会带来元数据快照重复和 worker 的双状态分支）
+- `Episode.download_hash`（每集一个种子）、`_episode_file_path()`、`WatchProgress`
+  全部照常工作，因为它们从来只依赖 `Episode`
+- 「有没有文件」是可派生的事实，不加 `is_library` 之类的布尔字段——加了就会有不一致的状态
+
+代价只有一处：`GET /anime` 必须过滤 stub，否则 stub 会以「0 集」空卡片的形式污染库内容。
+过滤是默认行为，所以旧客户端看不到 stub，行为不变。
+
+### 三个必须一起改的地方
+
+1. **`POST /anime` 的 409。** 现在遇到已存在的 `bangumi_id` 直接 409
+   （`routes/anime.py:117`）。stub 建好之后，用户手动下载同一部番就会撞上它。
+   改为合并语义：按 `index` 合并 episodes、`download_hash` 仅在为空时写入、刷新元数据。
+   这顺带修掉「重复添加报错」这个与追番无关的老毛病。
+2. **客户端优先走已存在的番。** `AnimeListStore` 已经维护 `animeMap[bangumiId]`，
+   下载流程命中时改调 `submitEpisodesForAnime(animeId)` 而不是 `createAnime`。
+   服务端幂等是兜底（旧客户端 / 并发），客户端分流是正常路径。
+3. **取消追番时清理 stub。** `DELETE /subscriptions/{id}`：若绑定的 `Anime` 既无 episodes
+   又无 `download_hash`，连带删除该 `Anime` 行；否则只删订阅。一条规则，不需要问用户。
+   注意这条删除走 `require_download_permission`，不借用 Admin 专属的 `DELETE /anime/{id}`
+   ——纯 stub 没有文件、没有种子、没有观看进度，删除它不构成破坏性操作。
+
+## 番剧状态：推导而非查询
+
+「未开播 / 连载中 / 已完结」决定了三个入口按钮里哪个是对的。**Bangumi 不提供这个状态**，
+必须自己推导。
+
+### 实测：`/v0/subjects/{id}` 没有状态字段
+
+全部非文本字段就这些，没有 `status`：
+
+```
+date  platform  name  name_cn  total_episodes  eps  volumes  series  locked  nsfw  type
+```
+
+`infobox` 里有 `话数`、`放送开始`、`放送星期`，但都是自由文本（`'2026年8月12日'`），
+不能当结构化字段用。
+
+### 推导规则
+
+```
+未开播   subject.date > now
+连载中   subject.date ≤ now < max(正片 airdate)
+已完结   max(正片 airdate) ≤ now
+未知     subject.date 为空 → 不猜，不做任何限制
+```
+
+追番系统本来就要拉 `/v0/episodes` 取 `ep`/`sort`/`airdate`，状态是**免费副产品**，
+零新增上游调用。三条实测约束：
+
+| 实测 | 约束 |
+| --- | --- |
+| 412008《转生成为魔剑 S2》首播 2026-10-07，`/v0/episodes` **total=0**；208829 有 1 条但 `airdate` 为空 | **未开播的番常常没有集数表。** 状态判定以 `subject.date` 为主，`airdate` 只用于区分连载 / 完结 |
+| 芙莉莲 S1 `eps=28` 而 `total_episodes=36` | `eps` 才是正片集数。stub 的 `episode_count` 取 `eps`，与客户端既有映射一致（`bangumi_repository.dart:164`） |
+| Re:Zero S4 末集 airdate `2026-09-30`（未来）；芙莉莲末集 `2024-03-22` | max(airdate) 能干净区分两者，但**必须 `type=0` 过滤**，否则后补的 BD 特典会把 max 永久推到未来 |
+
+若一部番没有任何 `airdate` 而 `subject.date` 已过去，按**已完结**处理：老番数据缺失是常态，
+而误判成连载只会多留一个没用的订阅入口，误判成未开播则会禁掉本该可用的下载。
+
+规则在客户端和服务端各实现一次（客户端直连 Bangumi 判按钮，服务端判「下一集预计时间」
+和集数补齐后自动停订）。这不违反「preview 与 worker 共用代码」那条原则——那条针对的是
+会漂移的打分逻辑，这里是四行日期比较，写在两侧比架一层接口更划算。
+
+### 入口按钮按状态取主次
+
+| 状态 | 订阅 | 下载 | 添加 |
+| --- | --- | --- | --- |
+| 未开播 | **主** | **禁用**，文案「尚未开播，暂无资源」 | 可用 |
+| 连载中 | **主** | 次要（补已播出的集） | 可用 |
+| 已完结 | 次要（等更好的压制） | **主** | 可用 |
+| 未知 | 可用 | 可用 | 可用 |
+
+只有**未开播**是硬禁用，因为那时上游真的什么都没有——现在点进「下载」是一片空搜索结果，
+用户无法区分「搜错了」和「真没有」。
+
+**连载中不禁用下载。** 硬禁会堵死一个正常场景：用户在第 8 集入坑，订阅的
+`cold_start_days` 只回溯 7 天（≈1 集），前 7 集就没有任何途径可拿——「添加」是导入本地
+已有文件，而这个用户手上什么都没有。连载中靠**主次**引导，不靠禁止。
+
+真正让「连载中不必手动下载」成立的不是禁按钮，而是下一条。
+
+### 订阅时可选「补齐已播出的集」
+
+创建订阅时给一个开关：回溯窗口从 `cold_start_days`（7 天）改为**回溯到 `subject.date`**。
+勾上就把整季已播出的集一次性纳入首轮 sweep，走同一套硬过滤 + 打分 + 等待窗口。
+
+这是入坑中途的番的正确答案，也是上表里「连载中不禁用下载」之所以够用的原因：
+有了它，用户自然会选订阅。
+
 ## 数据模型
 
 三张新表。`preference_profiles` 独立出来是因为用户不该为每部番重复配一遍画质偏好。
@@ -267,7 +391,9 @@ grace_hours       float default 3.0       等待窗口，见决策流程
 
 ### `subscriptions`
 
-一部番一行，必须绑定一个已存在的 `Anime`——海报、集数、名称、`bangumi_id` 全部复用。
+一部番一行，绑定一个 `Anime`——海报、集数、名称、`bangumi_id` 全部复用。该 `Anime`
+不必已有文件：创建订阅时按 `bangumi_id` upsert，必要时建 stub，见
+[番剧身份与库内容](#番剧身份与库内容)。
 
 ```
 id                  int   pk
@@ -306,9 +432,9 @@ resource_title    text
 score             float 打分结果
 attributes        json  解析出的属性，排查用
 download_hash     str(40) nullable
-state             str   candidate | matched | downloading | imported
-                        | needs_review | skipped | failed
-reason            text  skip / fail 的原因
+state             str   candidate | deferred | matched | downloading
+                        | imported | needs_review | skipped | failed
+reason            text  skip / fail / defer 的原因
 first_seen_at     datetime   等待窗口的计时起点
 created_at, updated_at
 
@@ -316,6 +442,10 @@ unique(subscription_id, episode_index, resource_id)
 index(subscription_id, episode_index, state)
 index(resource_id)
 ```
+
+`deferred` 与 `needs_review` 的区别是**谁来解决**：`needs_review` 等人，`deferred`
+等上游数据——下一轮 sweep 自动重试，不需要任何人介入。见
+[集数解析](#bangumi-集表还不存在时不判死)。
 
 > **去重的权威来源是 `Episode.index` 是否已存在**，不是这张台账。
 > 种子一加上就立刻建 Episode 行（`add_downloaded_episodes` 的现有行为），
@@ -503,6 +633,7 @@ grace_hours:       72.0                # 蓝光发布慢，窗口开大
   │    └─ 命中合集 / 区间 / 非正片特征
   │
   ├─ 解析集数（见下节）
+  │    ├─ Bangumi 集表为空 ───────────────→ deferred（下轮重试，不判死）
   │    ├─ 解析不出 ──────────────────────→ needs_review
   │    └─ Episode.index 已存在 ──────────→ 丢弃
   │
@@ -527,11 +658,25 @@ grace_hours:       72.0                # 蓝光发布慢，窗口开大
   所以「我只看某个组」的用户感受不到任何延迟。
 - `grace_hours = 0` 就退化成先到先得，这是给不在意版本的用户的选项。
 - qBittorrent 不可用时整轮跳过且**不推进游标**，下一轮自然重试。
+- `deferred` 的资源每轮都重新解析一次集数。它已经过了硬过滤和打分，缺的只是 Bangumi 集表。
 
 ## 集数解析
 
 下载决策发生在拿到文件列表**之前**，所以只能从标题判断集数。现有的 `_matchesEpisodeIndex`
 （`anime_garden_episode_match_controller.dart:307`）是对文件名做事后匹配，用不上。
+
+### Bangumi 集表还不存在时，不判死
+
+集数解析的全部依据是 `ep` / `sort` 两个区间，所以**集表为空时无从判断**。而这不是边缘情况：
+实测未开播的番常常一条集数记录都没有（412008 首播 2026-10-07，`/v0/episodes` total=0），
+而「开播前就订阅」正是主场景。
+
+如果此时把资源打成 `needs_review`，它会**永久躺在那里**——Bangumi 几天后补上集表也不会
+自动回收，用户只会看到第一集莫名其妙没下。
+
+所以集表为空（或全部缺 `airdate`）时标 `deferred`，保留在候选池，下一轮 sweep 重新解析。
+`bangumi_service` 的缓存是 600 秒，Bangumi 一补上，10 分钟内就能正确判定。
+这条同样覆盖上游临时故障——集表拉不到和集表还没有，处理方式应该一样。
 
 ### Bangumi 提供了两套合法编号
 
@@ -611,10 +756,60 @@ N=12 → 季内解读 = ep 12「重逢」    2024-09-25
 
 ## 配置流程
 
+### 两个入口，一个编辑页
+
+订阅由 `bangumi_id` 标识，所以入口不必依附于库内容：
+
+| 入口 | 场景 | 传入 |
+| --- | --- | --- |
+| **Bangumi 详情页第三个 FAB「追番」** | 新番开播，本地什么都没有——**主入口** | `BangumiSubject` |
+| Anime 详情页右上角铃铛 | 已经有几集，季中补自动追番 | `AnimeRead` |
+
+现有 Bangumi 详情页已经并排挂着「添加」「下载」两个 FAB
+（`bangumi_detail_page.dart:75`、`:83`），「追番」是同一排的第三个：
+三者都是「我想要这部番」的不同答法——已经有文件、现在就下、以后自动下。
+哪个是主按钮由番剧状态决定，见[入口按钮按状态取主次](#入口按钮按状态取主次)。
+
+两个入口进同一个 `SubscriptionEditorPage`，差别只是取 `subject.id` 还是 `anime.bangumiId`
+作为 `bangumi_id`。编辑页不需要知道这部番在不在库里。
+
+### 首页「追番中」分区
+
+库内容分区只列有文件的番，追番中的番（含还没有文件的）单独一个横向分区，压在库列表
+上方、作为同一个 `ListView` 的首个 item——这样库内容仍是懒构建的。
+
+每张卡片一行状态，**按可操作性排序**，最需要人处理的排最前：
+
+| 优先级 | 状态 | 依据 |
+| --- | --- | --- |
+| 1 | `已暂停` | `enabled = false` |
+| 2 | `N 集待确认` | `needs_review_count`——**必须给**，否则解析失败的集静默堆在服务端，用户只觉得「这集怎么没下」 |
+| 3 | `上次检查失败` | `last_error` |
+| 4 | `第 N 集 · 8/26` | 下一集尚未播出 |
+| 5 | `第 N 集 · 等待资源` | 已播出但还没抓到——规则可能配得太严 |
+| 6 | `已补齐 N 集` | 没有缺集 |
+
+数据全部来自 `GET /subscriptions` 一次请求：
+
+- **`next_episode_index` / `next_episode_air_date` 存在订阅行上**（migration 0006），
+  由 worker 每轮 sweep 顺手更新。worker 本来就持有 Bangumi 集表，而按请求现算会把一次
+  上游调用塞到订阅列表接口背后。创建订阅时也播种一次，否则新订阅要等满一个轮询间隔
+  才有预计时间可显示。
+- **`needs_review_count` 是一条分组查询**覆盖整个列表，不是每行一次 count。
+
+「最早缺的一集」而不是「第一集未播出的」：中间的缺口正是最该被暴露的东西，
+而一集播出日已过却仍然缺失，说明 worker 还没找到能过规则的发布。
+
+卡片点进去仍是 Anime 详情页（按 `id` 取，不过滤 stub）。stub 的 `episode_count`
+来自 Bangumi 的 `eps`，所以空态也能给出有意义的进度。
+
+订阅状态由 `SubscriptionStore` 统一持有，首页分区和两个详情页共用同一份——
+在任一处追番，其余两处立刻看到，不需要手动下拉。
+
 ### 添加订阅
 
-1. 用户在 Anime 详情页点「追番」。
-2. 服务端用 `subjects=[anime.bangumi_id]` 拉取该番已有资源，**聚合出真实候选列表**，
+1. 用户在上述任一入口点「追番」。
+2. 服务端用 `subjects=[bangumi_id]` 拉取该番已有资源，**聚合出真实候选列表**，
    而不是让用户手打字幕组名。实测输出：
 
    ```
@@ -631,7 +826,9 @@ N=12 → 季内解读 = ep 12「重逢」    2024-09-25
 
 3. 字幕组多选，顺序即优先级（拖拽排序）。
 4. 画质偏好默认继承 `is_default` 的 profile，可在本订阅内覆盖。
-5. 底部挂 `/preview` 的实时结果。
+5. 连载中的番多给一个「补齐已播出的集」开关，见
+   [订阅时可选「补齐已播出的集」](#订阅时可选补齐已播出的集)。
+6. 底部挂 `/preview` 的实时结果。
 
 ### `/preview` 是必需的，不是加分项
 
@@ -645,12 +842,12 @@ N=12 → 季内解读 = ep 12「重逢」    2024-09-25
 
 ```
 GET    /api/v1/subscriptions                    列表，含下次检查时间、最近命中
-POST   /api/v1/subscriptions                    创建
+POST   /api/v1/subscriptions                    创建，body 传 bangumi_id（不是 anime_id）
 PUT    /api/v1/subscriptions/{id}               改过滤条件 / 开关
-DELETE /api/v1/subscriptions/{id}
+DELETE /api/v1/subscriptions/{id}               纯 stub 时连带删除 Anime 行
 POST   /api/v1/subscriptions/{id}/check          立即检查
 GET    /api/v1/subscriptions/{id}/episodes       台账，含 needs_review 与候选池
-POST   /api/v1/subscriptions/preview             试跑规则，不下载
+POST   /api/v1/subscriptions/preview             试跑规则，不下载，body 传 bangumi_id
 GET    /api/v1/subscriptions/fansubs?bangumi_id= 聚合该番的字幕组候选列表
 
 GET    /api/v1/preference-profiles
@@ -658,6 +855,22 @@ POST   /api/v1/preference-profiles
 PUT    /api/v1/preference-profiles/{id}
 DELETE /api/v1/preference-profiles/{id}
 ```
+
+订阅接口一律以 `bangumi_id` 为入参：客户端两个入口都拿得到它
+（`AnimeRead.bangumiId` / `BangumiSubject.id`），而 `anime_id` 在建 stub 之前根本不存在。
+服务端负责 upsert 出 `Anime` 并把 `anime_id` 写进订阅行，响应里照常返回 `anime_id`。
+
+现有接口的连带改动：
+
+```
+POST   /api/v1/anime          409 → 合并语义（按 index 合并 episodes，
+                              download_hash 仅在为空时写入）
+GET    /api/v1/anime          过滤 stub：EXISTS(episodes) OR download_hash IS NOT NULL
+GET    /api/v1/storage        同一过滤：stub 没有文件，否则是一行 0 B 记录
+```
+
+过滤条件收在 `models/anime.py` 的 `anime_has_content()` 里，两个路由共用一份——
+「什么算库内容」只能有一个定义。`GET /api/v1/anime/{id}` **不过滤**：追番中的番需要能进详情页。
 
 权限沿用现有约定：写操作 `require_download_permission`（与「添加下载任务」同级，Guest 不可），
 读操作 `get_current_user`。`/preview` 归入写侧——它是配置流程的一部分，且会代表用户打上游；
@@ -707,7 +920,11 @@ subscription:
 需新增的服务端外部客户端（`httpx` 已在依赖内）：
 
 - `services/animegarden_service.py` — sweep 查询
-- `services/bangumi_service.py` — episodes（`ep`/`sort`/`airdate`/集名），带缓存
+- `services/bangumi_service.py` — episodes（`ep`/`sort`/`airdate`/集名）+ subject 元数据
+  （建 stub 用：名称、海报、总集数、评分），共用同一份缓存
+
+`bangumi_service` 拉 subject 不是新依赖：服务端本来就必须调 Bangumi 取 episodes
+（自动入库的集需要正确集名），`/v0/subjects/{id}` 是同一个上游的同一套鉴权。
 
 ### 下载后的文件匹配
 
@@ -723,11 +940,17 @@ subscription:
 ### P1 — 能跑
 
 - migration 0004 建三张表
-- `animegarden_service` + `bangumi_service`
+- `animegarden_service` + `bangumi_service`（episodes + subject）
 - sweep worker + 标题集数解析（ep/sort 双区间 + airdate 判定 + 未来集护栏）
 - 属性解析器 + 打分模型 + 等待窗口
-- CRUD / `preview` / `fansubs` 接口
-- 详情页追番开关 + 字幕组选择器 + 偏好继承
+- CRUD / `preview` / `fansubs` 接口，入参一律 `bangumi_id`
+- **按 `bangumi_id` upsert `Anime`（含建 stub）+ 删订阅时清理 stub**
+- **`POST /anime` 改合并语义；`GET /anime` 过滤 stub**
+- **番剧状态推导 + `deferred`（集表为空时不判死）**
+- Bangumi 详情页「追番」FAB（主入口）+ Anime 详情页铃铛
+- 三个 FAB 按状态取主次；未开播禁用「下载」
+- 字幕组选择器 + 偏好继承 + 「补齐已播出的集」开关
+- 首页「追番中」分区（下一集预计时间 + `needs_review` 计数）
 
 ### P2 — 好用
 
@@ -752,6 +975,17 @@ subscription:
   若将来要迁移，应先补上启动时的版本校验，并采用透传代理而非重新包装业务逻辑。
 - **不为音频 / 来源 / 容器各建一个偏好维度。** 实测这些维度没有排序空间
   （aac 297 : flac 4）。统一交给 `must_include`，用户想卡就自己写，不想卡就留空。
+- **订阅不建自己的番剧身份。** 不引入「`subscriptions.bangumi_id` 唯一 + 可空 `anime_id`」
+  的方案：那需要在订阅行上快照名称/海报（与 `Anime` 重复且会过期），worker 要为
+  「anime 还不存在」分出第二条代码路径，客户端也要处理两种番剧标识。
+  upsert 出 stub 只花一次 Bangumi 请求，之后全系统只有一个番剧身份。
+- **不在 `Anime` 上加 `is_library` 字段。** 「有没有文件」由 episodes / `download_hash`
+  完全决定，是可派生的事实。加了字段就会出现字段与事实不一致的第三种状态。
+- **不缓存番剧状态。** 「未开播 / 连载中 / 已完结」是 `subject.date` 和 `airdate` 与当前
+  时间的比较结果，会随时间自己变。存下来就需要定时刷新，而刷新失败时用户会看到一部早已
+  完结的番仍禁着「下载」。每次现算，成本是两个日期比较。
+- **不因为「已完结」就禁用订阅。** 冷门番完结后仍会有新压制和迟发的字幕组版本。
+  已完结只是让「下载」变成主按钮，不移除任何能力。
 - **`has_jp` 不作硬过滤。** 只占 14.7%，硬要求会砍掉 85% 的候选。它只影响排序。
 
 ## 实测依据
@@ -763,7 +997,12 @@ subscription:
 - 语言标注与字形判定、按发布者一致性、各档通过率：近 28 天 **600** 条 / 33 个发布者
 - 集数编号（`ep` / `sort` / offset 恒定性）：6 部番，覆盖首季 / 续季 / 分割季
 - SP 是否占用整数 `sort` 槽位：我推的孩子 S1 + S2（结论：不占用，SP 用 `sort=0` 或小数）
-- 测量日期：2026-08-20
+- 番剧状态字段：`api.bgm.tv` `/v0/subjects/{id}` 字段清单（结论：**无** status 字段，
+  只有 `date` / `eps` / `total_episodes`；`infobox` 的 `放送开始` 是自由文本）
+- 未开播番的集表：412008（首播 2026-10-07，`/v0/episodes?type=0` total=**0**）、
+  208829（1 条但 `airdate` 为空）；对照 633836 末集 `2026-09-30`、400602 末集 `2024-03-22`
+- `eps` 与 `total_episodes` 的差别：400602 为 28 / 36（结论：`eps` 才是正片集数）
+- 测量日期：2026-08-20；番剧状态部分 2026-08-21
 
 所有数字都可用文档内给出的参数复现。若上游资源结构变化（例如某大发布者改变标注习惯），
 覆盖率和通过率需重测——`language_unknown` 的默认值直接依赖「最大发布者不写 token」这一事实。

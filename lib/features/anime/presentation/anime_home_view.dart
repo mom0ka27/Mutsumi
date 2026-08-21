@@ -8,14 +8,21 @@ import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../../core/widgets/media_summary_card.dart';
 import '../../../app/page_bindings.dart';
+import '../../subscriptions/data/subscription_store.dart';
+import '../../subscriptions/presentation/following_section.dart';
 import '../data/anime_list_store.dart';
 import '../data/anime_service.dart';
 import 'anime_detail_page.dart';
 
 class AnimeHomeView extends StatefulWidget {
-  const AnimeHomeView({super.key, required this.store});
+  const AnimeHomeView({
+    super.key,
+    required this.store,
+    required this.subscriptionStore,
+  });
 
   final AnimeListStore store;
+  final SubscriptionStore subscriptionStore;
 
   @override
   State<AnimeHomeView> createState() => _AnimeHomeViewState();
@@ -24,6 +31,10 @@ class AnimeHomeView extends StatefulWidget {
 class _AnimeHomeViewState extends State<AnimeHomeView>
     with AutomaticKeepAliveClientMixin {
   AnimeListStore get store => widget.store;
+  SubscriptionStore get subscriptionStore => widget.subscriptionStore;
+
+  Future<void> _refreshAll() =>
+      Future.wait([store.refresh(), subscriptionStore.refresh()]);
 
   @override
   bool get wantKeepAlive => true;
@@ -42,7 +53,12 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
     super.build(context);
     return Obx(() {
       final ungrouped = store.ungroupedAnimes;
-      final itemCount = store.series.length + ungrouped.length;
+      final subscriptions = subscriptionStore.subscriptions;
+      // The following strip is one leading item of the same list, so the
+      // library below it stays lazily built.
+      final leading = subscriptions.isEmpty ? 0 : 1;
+      final libraryCount = store.series.length + ungrouped.length;
+      final itemCount = leading + libraryCount;
       return GlassScaffold(
         appBar: GlassAppBar(
           padding: EdgeInsets.symmetric(horizontal: 16),
@@ -61,7 +77,7 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
         body: store.isLoading.value
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
-                onRefresh: store.refresh,
+                onRefresh: _refreshAll,
                 child: itemCount == 0
                     ? ListView(
                         padding: context.pageContentPadding(horizontal: 356),
@@ -69,14 +85,22 @@ class _AnimeHomeViewState extends State<AnimeHomeView>
                     : ListView.separated(
                         padding: context.pageContentPadding(bottom: 72),
                         itemBuilder: (context, index) {
-                          if (index < store.series.length) {
+                          if (leading == 1 && index == 0) {
+                            return FollowingSection(
+                              subscriptions: subscriptions.toList(),
+                              onChanged: _refreshAll,
+                            );
+                          }
+                          final libraryIndex = index - leading;
+                          if (libraryIndex < store.series.length) {
                             return _SeriesCard(
-                              series: store.series[index],
+                              series: store.series[libraryIndex],
                               refresh: store.refresh,
                             );
                           }
                           return _AnimeCard(
-                            anime: ungrouped[index - store.series.length],
+                            anime:
+                                ungrouped[libraryIndex - store.series.length],
                             refresh: store.refresh,
                           );
                         },

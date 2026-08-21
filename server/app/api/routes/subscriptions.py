@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+import httpx
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,6 +14,7 @@ from app.core.auth import get_current_user, get_session, require_download_permis
 from app.core.config import config
 from app.models import (
     Anime,
+    Episode,
     PermissionGroup,
     PreferenceProfile,
     Subscription,
@@ -33,6 +35,8 @@ from app.schemas import (
     SubscriptionUpdate,
 )
 from app.services.animegarden_service import AnimeGardenService
+from app.services.bangumi_service import BangumiService
+from app.services.subscription_engine import next_expected_episode
 from app.services.subscription_worker import SubscriptionWorker
 
 
@@ -144,7 +148,14 @@ async def list_subscriptions(
     if current_user.permission_group != PermissionGroup.ADMIN:
         query = query.where(Subscription.created_by == current_user.id)
     subscriptions = list(await session.scalars(query))
-    return [_subscription_read(subscription) for subscription in subscriptions]
+    review_counts = await _needs_review_counts(
+        session,
+        [subscription.id for subscription in subscriptions],
+    )
+    return [
+        _subscription_read(subscription, review_counts=review_counts)
+        for subscription in subscriptions
+    ]
 
 
 @router.post("", response_model=SubscriptionRead, status_code=status.HTTP_201_CREATED)
@@ -153,21 +164,28 @@ async def create_subscription(
     current_user: User = Depends(require_download_permission),
     session: AsyncSession = Depends(get_session),
 ):
-    anime = await session.scalar(select(Anime).where(Anime.id == payload.anime_id))
-    if anime is None:
-        raise HTTPException(status_code=404, detail="Anime not found")
+    anime = await _resolve_or_create_anime(session, payload.bangumi_id)
     existing = await session.scalar(
-        select(Subscription).where(Subscription.anime_id == payload.anime_id)
+        select(Subscription).where(Subscription.anime_id == anime.id)
     )
     if existing:
         raise HTTPException(status_code=409, detail="Anime is already subscribed")
     profile = await _resolve_profile(session, payload.profile_id)
     subscription = Subscription(
-        **payload.model_dump(exclude={"profile_id", "anime_id"}),
+        **payload.model_dump(
+            exclude={"profile_id", "bangumi_id", "backfill_aired"}
+        ),
         anime_id=anime.id,
         profile_id=profile.id,
         created_by=current_user.id,
+        backfill_after=_backfill_after(anime) if payload.backfill_aired else None,
     )
+    # Seeded here as well as in the worker: waiting up to a full sweep interval
+    # would leave the new subscription with no expected date to show.
+    (
+        subscription.next_episode_index,
+        subscription.next_episode_air_date,
+    ) = await _next_episode(anime)
     session.add(subscription)
     await session.commit()
     loaded = await session.scalar(_subscription_query().where(Subscription.id == subscription.id))
@@ -204,7 +222,15 @@ async def delete_subscription(
     subscription = await _get_manageable_subscription(
         session, subscription_id, current_user
     )
+    anime = subscription.anime
     await session.delete(subscription)
+    await session.flush()
+    if anime is not None and await _is_placeholder_anime(session, anime):
+        # The Anime row exists only because this subscription created it: no
+        # episodes, no torrent, nothing on disk. Removing it keeps the library
+        # free of shows the user never actually acquired. Animes that do have
+        # content are left alone -- only the subscription goes away.
+        await session.delete(anime)
     await session.commit()
 
 
@@ -273,13 +299,14 @@ async def preview_subscription(
     _: User = Depends(require_download_permission),
     session: AsyncSession = Depends(get_session),
 ):
+    # Preview runs before the subscription exists, so it must work for a show
+    # that has no library row yet. An unsaved draft never creates one: the
+    # in-memory Anime carries just what the engine reads.
     anime = await session.scalar(
         select(Anime)
         .options(selectinload(Anime.episodes))
-        .where(Anime.id == payload.anime_id)
-    )
-    if anime is None:
-        raise HTTPException(status_code=404, detail="Anime not found")
+        .where(Anime.bangumi_id == payload.bangumi_id)
+    ) or Anime(id=0, bangumi_id=payload.bangumi_id, name="", name_cn="", episodes=[])
     profile = await _resolve_profile(session, payload.profile_id)
     try:
         result = await SubscriptionWorker().preview(
@@ -288,7 +315,7 @@ async def preview_subscription(
             draft=payload,
         )
     except Exception as error:
-        logger.exception("Subscription preview failed anime=%s", payload.anime_id)
+        logger.exception("Subscription preview failed bangumi_id=%s", payload.bangumi_id)
         raise HTTPException(status_code=502, detail=f"预览失败: {error}") from error
     return result
 
@@ -331,6 +358,93 @@ async def list_subscription_fansubs(
             counts, key=lambda item: (-counts[item], item)
         )
     ]
+
+
+async def _resolve_or_create_anime(session: AsyncSession, bangumi_id: int) -> Anime:
+    """Find the Anime for a Bangumi subject, creating a placeholder if needed.
+
+    Subscribing to a show that has no episodes yet is the main use case, so the
+    library row is created on demand from Bangumi metadata. It carries no
+    ``download_hash`` and no episodes until the worker imports the first one.
+    """
+    anime = await session.scalar(
+        select(Anime)
+        .options(selectinload(Anime.episodes))
+        .where(Anime.bangumi_id == bangumi_id)
+    )
+    if anime is not None:
+        return anime
+
+    try:
+        subject = await BangumiService().get_subject(bangumi_id)
+    except (httpx.HTTPError, ValueError) as error:
+        logger.warning("Bangumi subject fetch failed id=%s: %s", bangumi_id, error)
+        raise HTTPException(
+            status_code=502,
+            detail="无法从 Bangumi 获取番剧信息，请稍后重试",
+        ) from error
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Bangumi 上找不到这部番剧")
+
+    anime = Anime(
+        bangumi_id=subject.bangumi_id or bangumi_id,
+        name=subject.name,
+        name_cn=subject.name_cn,
+        summary=subject.summary,
+        image_url=subject.image_url,
+        score=subject.score,
+        episode_count=subject.episode_count,
+        air_date=subject.air_date,
+        rank=subject.rank,
+        platform=subject.platform,
+        tags=subject.tags,
+        infobox=subject.infobox,
+        # Initialized so later reads do not trigger a lazy load on a fresh
+        # instance, which async SQLAlchemy cannot service.
+        episodes=[],
+    )
+    session.add(anime)
+    await session.flush()
+    return anime
+
+
+async def _next_episode(anime: Anime) -> tuple[int | None, datetime | None]:
+    """Earliest missing episode, or ``(None, None)`` if Bangumi is unavailable.
+
+    A subscription must be creatable even when the episode table cannot be
+    read; the worker fills this in on its next sweep.
+    """
+    try:
+        episodes = await BangumiService().get_episodes(anime.bangumi_id)
+    except (httpx.HTTPError, ValueError) as error:
+        logger.warning(
+            "Bangumi episode fetch failed id=%s: %s", anime.bangumi_id, error
+        )
+        return None, None
+    return next_expected_episode(
+        episodes,
+        (episode.index for episode in anime.episodes if episode.index is not None),
+    )
+
+
+async def _is_placeholder_anime(session: AsyncSession, anime: Anime) -> bool:
+    if anime.download_hash:
+        return False
+    episodes = await session.scalar(
+        select(func.count()).select_from(Episode).where(Episode.anime_id == anime.id)
+    )
+    return not episodes
+
+
+def _backfill_after(anime: Anime) -> datetime | None:
+    """The season's first-broadcast date, as the one-shot backfill window."""
+    text = (anime.air_date or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text[:10])
+    except ValueError:
+        return None
 
 
 async def _ensure_default_profile(session: AsyncSession) -> PreferenceProfile:
@@ -378,9 +492,30 @@ async def _resolve_profile(
 
 def _subscription_query():
     return select(Subscription).options(
-        selectinload(Subscription.anime),
+        selectinload(Subscription.anime).selectinload(Anime.episodes),
         selectinload(Subscription.profile),
     )
+
+
+async def _needs_review_counts(
+    session: AsyncSession,
+    subscription_ids: list[int],
+) -> dict[int, int]:
+    """One grouped query for the whole list, rather than a count per row."""
+    if not subscription_ids:
+        return {}
+    rows = await session.execute(
+        select(
+            SubscriptionEpisode.subscription_id,
+            func.count(SubscriptionEpisode.id),
+        )
+        .where(
+            SubscriptionEpisode.subscription_id.in_(subscription_ids),
+            SubscriptionEpisode.state == "needs_review",
+        )
+        .group_by(SubscriptionEpisode.subscription_id)
+    )
+    return {subscription_id: count for subscription_id, count in rows}
 
 
 async def _get_readable_subscription(
@@ -409,7 +544,10 @@ async def _get_manageable_subscription(
     return await _get_readable_subscription(session, subscription_id, current_user)
 
 
-def _subscription_read(subscription: Subscription) -> SubscriptionRead:
+def _subscription_read(
+    subscription: Subscription,
+    review_counts: dict[int, int] | None = None,
+) -> SubscriptionRead:
     anime = subscription.anime
     last_checked = subscription.last_checked_at
     interval_minutes = _subscription_interval_minutes()
@@ -421,6 +559,7 @@ def _subscription_read(subscription: Subscription) -> SubscriptionRead:
     return SubscriptionRead(
         id=subscription.id,
         anime_id=subscription.anime_id,
+        bangumi_id=anime.bangumi_id if anime else 0,
         anime_name=anime.name if anime else "",
         anime_name_cn=anime.name_cn if anime else "",
         image_url=anime.image_url if anime else "",
@@ -436,11 +575,17 @@ def _subscription_read(subscription: Subscription) -> SubscriptionRead:
         profile_overrides=subscription.profile_overrides,
         episode_offset_override=subscription.episode_offset_override,
         cursor_at=subscription.cursor_at,
+        backfill_after=subscription.backfill_after,
         last_checked_at=subscription.last_checked_at,
         last_found_at=subscription.last_found_at,
         last_error=subscription.last_error,
         created_by=subscription.created_by,
         next_check_at=next_check,
+        episode_count=anime.episode_count if anime else 0,
+        owned_episode_count=len(anime.episodes) if anime else 0,
+        next_episode_index=subscription.next_episode_index,
+        next_episode_air_date=subscription.next_episode_air_date,
+        needs_review_count=(review_counts or {}).get(subscription.id, 0),
     )
 
 

@@ -50,6 +50,7 @@ class SubscriptionRead {
   const SubscriptionRead({
     required this.id,
     required this.animeId,
+    required this.bangumiId,
     required this.animeName,
     required this.animeNameCn,
     required this.imageUrl,
@@ -67,6 +68,11 @@ class SubscriptionRead {
     required this.lastCheckedAt,
     required this.lastFoundAt,
     required this.lastError,
+    this.episodeCount = 0,
+    this.ownedEpisodeCount = 0,
+    this.nextEpisodeIndex,
+    this.nextEpisodeAirDate,
+    this.needsReviewCount = 0,
   });
 
   factory SubscriptionRead.fromJson(Map<String, dynamic> json) {
@@ -80,6 +86,7 @@ class SubscriptionRead {
     return SubscriptionRead(
       id: json['id'] as int? ?? 0,
       animeId: json['anime_id'] as int? ?? 0,
+      bangumiId: json['bangumi_id'] as int? ?? 0,
       animeName: json['anime_name'] as String? ?? '',
       animeNameCn: json['anime_name_cn'] as String? ?? '',
       imageUrl: json['image_url'] as String? ?? '',
@@ -101,11 +108,19 @@ class SubscriptionRead {
       ),
       lastFoundAt: DateTime.tryParse(json['last_found_at'] as String? ?? ''),
       lastError: json['last_error'] as String?,
+      episodeCount: json['episode_count'] as int? ?? 0,
+      ownedEpisodeCount: json['owned_episode_count'] as int? ?? 0,
+      nextEpisodeIndex: json['next_episode_index'] as int?,
+      nextEpisodeAirDate: DateTime.tryParse(
+        json['next_episode_air_date'] as String? ?? '',
+      ),
+      needsReviewCount: json['needs_review_count'] as int? ?? 0,
     );
   }
 
   final int id;
   final int animeId;
+  final int bangumiId;
   final String animeName;
   final String animeNameCn;
   final String imageUrl;
@@ -120,9 +135,16 @@ class SubscriptionRead {
   final List<String> resourceTypes;
   final Map<String, dynamic>? profileOverrides;
   final int? episodeOffsetOverride;
+  String get displayName => animeNameCn.isEmpty ? animeName : animeNameCn;
+
   final DateTime? lastCheckedAt;
   final DateTime? lastFoundAt;
   final String? lastError;
+  final int episodeCount;
+  final int ownedEpisodeCount;
+  final int? nextEpisodeIndex;
+  final DateTime? nextEpisodeAirDate;
+  final int needsReviewCount;
 }
 
 class FansubCandidateRead {

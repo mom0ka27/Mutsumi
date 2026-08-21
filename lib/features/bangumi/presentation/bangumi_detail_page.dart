@@ -9,6 +9,8 @@ import '../../anime/data/anime_list_store.dart';
 import '../../anime_garden/presentation/anime_garden_download_page.dart';
 import '../../anime_garden/presentation/anime_garden_bindings.dart';
 import '../../anime_garden/presentation/local_add_prepare_page.dart';
+import '../../subscriptions/presentation/subscription_editor_page.dart';
+import '../data/airing_status.dart';
 import '../data/bangumi_repository.dart';
 import 'bangumi_detail_controller.dart';
 
@@ -80,28 +82,93 @@ class _BangumiDetailPageState extends State<BangumiDetailPage> {
                 icon: const Icon(Icons.add_rounded),
               ),
               const SizedBox(height: 16),
-              FloatingActionButton.extended(
-                heroTag: 'download',
-                onPressed: () => Get.to(
-                  () => AnimeGardenDownloadPage(
-                    subject: subject,
-                    backgroundImageUrl: subject.imageUrl,
-                  ),
-                  binding: AnimeGardenDownloadBinding(
-                    subject: subject,
-                    animeListStore: Get.find<AnimeListStore>(),
-                  ),
-                ),
-                shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
-                label: const Text("下载"),
-                icon: const Icon(Icons.download_rounded),
-              ),
+              ..._acquisitionActions(context, subject),
             ],
           ),
         ),
       );
     });
   }
+
+  /// The two ways of getting a show, ordered by which one fits its status.
+  ///
+  /// The last entry sits closest to the thumb, so the primary action goes last.
+  List<Widget> _acquisitionActions(
+    BuildContext context,
+    BangumiSubject subject,
+  ) {
+    final status = _controller.status.value;
+    final download = _downloadAction(context, subject, primary: !status.prefersSubscription);
+    if (!_controller.canSubscribe) return [download];
+    final subscribe = _subscribeAction(context, subject, primary: status.prefersSubscription);
+    final ordered = status.prefersSubscription
+        ? [download, subscribe]
+        : [subscribe, download];
+    return [ordered.first, const SizedBox(height: 16), ordered.last];
+  }
+
+  Widget _downloadAction(
+    BuildContext context,
+    BangumiSubject subject, {
+    required bool primary,
+  }) {
+    // Nothing has been released yet, so there is genuinely nothing to search
+    // for. Saying so beats an empty result page the user cannot explain.
+    final unaired = _controller.status.value == AiringStatus.unaired;
+    return FloatingActionButton.extended(
+      heroTag: 'download',
+      onPressed: unaired
+          ? null
+          : () => Get.to(
+              () => AnimeGardenDownloadPage(
+                subject: subject,
+                backgroundImageUrl: subject.imageUrl,
+              ),
+              binding: AnimeGardenDownloadBinding(
+                subject: subject,
+                animeListStore: Get.find<AnimeListStore>(),
+              ),
+            ),
+      shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
+      backgroundColor: primary ? null : _secondaryColor(context),
+      label: Text(unaired ? '尚未开播' : '下载'),
+      icon: const Icon(Icons.download_rounded),
+    );
+  }
+
+  Widget _subscribeAction(
+    BuildContext context,
+    BangumiSubject subject, {
+    required bool primary,
+  }) {
+    final existing = _controller.subscription.value;
+    return FloatingActionButton.extended(
+      heroTag: 'subscribe',
+      onPressed: () async {
+        final saved = await Get.to<bool>(
+          () => SubscriptionEditorPage(
+            bangumiId: subject.id,
+            title: subject.displayName,
+            subtitle: subject.originalName,
+            status: _controller.status.value,
+            existing: existing,
+          ),
+        );
+        if (saved == true) await _controller.loadSubscription();
+      },
+      shape: LiquidRoundedRectangle(borderRadius: Constants.radius.x),
+      backgroundColor: primary ? null : _secondaryColor(context),
+      label: Text(existing == null ? '追番' : '追番设置'),
+      icon: Icon(
+        existing == null
+            ? Icons.notifications_none_rounded
+            : Icons.notifications_active_rounded,
+      ),
+    );
+  }
+
+  Color _secondaryColor(BuildContext context) =>
+      Theme.of(context).colorScheme.surfaceContainerHighest;
 
   MediaDetailOverviewData _overviewData(
     BangumiSubject subject,

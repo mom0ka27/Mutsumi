@@ -63,6 +63,21 @@ class Subscription(Base):
         Integer, nullable=True
     )
 
+    # A pending one-shot backfill: sweep this subscription from here once, then
+    # clear the field. Holding a date rather than a boolean keeps "what is left
+    # to do" in a single column, and keeps the season-length backfill out of the
+    # shared global sweep window.
+    backfill_after: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # The earliest episode still missing, refreshed on every sweep. Cached on
+    # the row because the worker already holds Bangumi's episode table, and
+    # recomputing it per API request would put an upstream call behind the
+    # subscription list.
+    next_episode_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    next_episode_air_date: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+
     cursor_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_found_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

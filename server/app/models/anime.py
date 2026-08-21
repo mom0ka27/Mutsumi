@@ -1,7 +1,20 @@
-from sqlalchemy import Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import ColumnElement, Float, ForeignKey, Integer, JSON, String, Text, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
+
+
+def anime_has_content() -> ColumnElement[bool]:
+    """Filter for library content: an Anime that has files behind it.
+
+    Subscribing to a show creates its Anime row before anything is downloaded.
+    Those placeholders stay reachable by id and through the subscription list,
+    but they are not library content -- listing them would show empty cards and
+    zero-byte storage rows.
+    """
+    return Anime.download_hash.is_not(None) | select(Episode.id).where(
+        Episode.anime_id == Anime.id
+    ).exists()
 
 
 class Anime(Base):

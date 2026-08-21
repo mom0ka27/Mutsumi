@@ -16,6 +16,7 @@ from app.core.auth import (
     require_download_permission,
 )
 from app.models import Anime, Episode, Series, User, WatchProgress
+from app.models.anime import anime_has_content
 from app.schemas import (
     AnimeCreate,
     EpisodeDownloadCreate,
@@ -95,6 +96,7 @@ async def list_anime(
     result = await session.scalars(
         select(Anime)
         .options(selectinload(Anime.episodes))
+        .where(anime_has_content())
         .order_by(Anime.id)
         .offset(skip)
         .limit(limit)
@@ -110,20 +112,49 @@ async def create_anime(
     _: User = Depends(require_download_permission),
     session: AsyncSession = Depends(get_session),
 ):
-    exists = await session.scalar(
-        select(Anime).where(Anime.bangumi_id == payload.bangumi_id)
+    # Merge instead of rejecting duplicates. A subscription creates the Anime
+    # row before any file exists, so a later manual download of the same show
+    # arrives here with the row already present -- and a 409 would abort a
+    # download that is perfectly valid.
+    anime = await session.scalar(
+        select(Anime)
+        .options(selectinload(Anime.episodes))
+        .where(Anime.bangumi_id == payload.bangumi_id)
     )
-    if exists:
-        raise HTTPException(status_code=409, detail="Anime already exists")
+    if anime is None:
+        anime = Anime(bangumi_id=payload.bangumi_id, download_hash=payload.download_hash)
+        _apply_metadata(anime, payload)
+        anime.episodes = [
+            Episode(index=episode.index, name=episode.name, filename=episode.filename)
+            for episode in payload.episodes or []
+        ]
+        session.add(anime)
+    else:
+        _apply_metadata(anime, payload)
+        # Never overwrite an existing torrent: episodes carry their own hash,
+        # and the anime-level one is the fallback for the first import.
+        anime.download_hash = anime.download_hash or payload.download_hash
+        by_index = {episode.index: episode for episode in anime.episodes}
+        for payload_episode in payload.episodes or []:
+            # These episodes come from this payload's torrent, which may differ
+            # from the anime-level hash, so pin it per episode as
+            # ``add_downloaded_episodes`` does.
+            episode = by_index.get(payload_episode.index)
+            if episode is None:
+                anime.episodes.append(
+                    Episode(
+                        index=payload_episode.index,
+                        name=payload_episode.name,
+                        filename=payload_episode.filename,
+                        download_hash=payload.download_hash,
+                    )
+                )
+            else:
+                episode.name = payload_episode.name
+                episode.filename = payload_episode.filename
+                episode.download_hash = payload.download_hash
+                episode.file_hash = None
 
-    anime = Anime(bangumi_id=payload.bangumi_id, download_hash=payload.download_hash)
-    _apply_metadata(anime, payload)
-    anime.episodes = [
-        Episode(index=episode.index, name=episode.name, filename=episode.filename)
-        for episode in payload.episodes or []
-    ]
-
-    session.add(anime)
     await session.commit()
 
     created = await session.scalar(

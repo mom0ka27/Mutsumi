@@ -72,9 +72,14 @@ class PreferenceProfileRead(BaseModel):
 
 
 class SubscriptionCreate(BaseModel):
-    anime_id: int = Field(gt=0)
+    # Keyed by Bangumi subject, not by ``anime_id``: the show being subscribed
+    # to usually has no library row yet, and the server creates one on demand.
+    bangumi_id: int = Field(gt=0)
     profile_id: int | None = Field(default=None, gt=0)
     enabled: bool = True
+    # Sweep the whole season already broadcast, instead of the default
+    # ``cold_start_days`` window. For joining a show mid-season.
+    backfill_aired: bool = False
     fansubs: list[str] = Field(default_factory=list)
     allow_no_fansub: bool = False
     search_keywords: list[str] = Field(default_factory=list)
@@ -103,6 +108,7 @@ class SubscriptionUpdate(BaseModel):
 class SubscriptionRead(BaseModel):
     id: int
     anime_id: int
+    bangumi_id: int
     anime_name: str
     anime_name_cn: str
     image_url: str
@@ -118,11 +124,19 @@ class SubscriptionRead(BaseModel):
     profile_overrides: dict[str, Any] | None
     episode_offset_override: int | None
     cursor_at: datetime | None
+    backfill_after: datetime | None = None
     last_checked_at: datetime | None
     last_found_at: datetime | None
     last_error: str | None
     created_by: int
     next_check_at: datetime | None = None
+    # For the "追番中" home section: the earliest missing episode and how many
+    # resources are stuck waiting for a human.
+    episode_count: int = 0
+    owned_episode_count: int = 0
+    next_episode_index: int | None = None
+    next_episode_air_date: datetime | None = None
+    needs_review_count: int = 0
 
 
 class SubscriptionEpisodeRead(BaseModel):
@@ -169,6 +183,7 @@ class SubscriptionPreviewCandidateRead(BaseModel):
 
 class SubscriptionPreviewRead(BaseModel):
     anime_id: int
+    bangumi_id: int
     resource_count: int
     accepted_count: int
     candidates: list[SubscriptionPreviewCandidateRead]

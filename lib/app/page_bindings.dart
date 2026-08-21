@@ -15,6 +15,7 @@ import '../features/settings/presentation/storage_status_controller.dart';
 import '../features/settings/data/authenticated_server_client.dart';
 import '../features/settings/data/server_update_service.dart';
 import '../features/subscriptions/data/subscription_service.dart';
+import '../features/subscriptions/data/subscription_store.dart';
 import '../features/setup/presentation/create_admin_controller.dart';
 import '../features/users/data/users_repository.dart';
 import '../features/users/presentation/users_management_controller.dart';
@@ -83,6 +84,7 @@ class AnimeDetailBinding extends Bindings {
         bangumiRepository: Get.find<BangumiRepository>(),
         downloadCoordinator: Get.find<AnimeGardenDownloadCoordinator>(),
         subscriptionService: Get.find<SubscriptionService>(),
+        subscriptionStore: Get.find<SubscriptionStore>(),
         currentUserController: Get.find<CurrentUserController>(),
       ),
     );
@@ -124,6 +126,8 @@ class BangumiDetailBinding extends Bindings {
       () => BangumiDetailController(
         subject: subject,
         repository: Get.find<BangumiRepository>(),
+        subscriptionStore: Get.find<SubscriptionStore>(),
+        currentUserController: Get.find<CurrentUserController>(),
       ),
     );
   }

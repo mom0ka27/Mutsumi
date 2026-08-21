@@ -7,8 +7,11 @@ from app.models import PermissionGroup
 from app.models import Anime, Episode, PreferenceProfile, Subscription
 from app.schemas.qbittorrent import QBittorrentFileRead, QBittorrentTorrentAddResult
 from app.services.animegarden_service import AnimeGardenResource
+from app.api.routes import subscriptions as routes_subscriptions
+from app.services.bangumi_service import SubjectInfo
 from app.services.subscription_engine import (
     EpisodeInfo,
+    derive_airing_status,
     evaluate_resource,
     parse_episode_index,
     parse_title_attributes,
@@ -259,7 +262,7 @@ async def test_subscription_crud_and_guest_permission(client, auth_headers):
     created = client.post(
         "/api/v1/subscriptions",
         json={
-            "anime_id": anime_id,
+            "bangumi_id": 4242,
             "profile_id": profile_id,
             "fansubs": ["ANi"],
         },
@@ -267,6 +270,7 @@ async def test_subscription_crud_and_guest_permission(client, auth_headers):
     )
     assert created.status_code == 201, created.text
     assert created.json()["anime_name_cn"] == "测试"
+    assert created.json()["anime_id"] == anime_id
 
     listed = client.get("/api/v1/subscriptions", headers=user_headers)
     assert listed.status_code == 200
@@ -275,7 +279,7 @@ async def test_subscription_crud_and_guest_permission(client, auth_headers):
     guest_headers = await auth_headers(PermissionGroup.GUEST)
     forbidden = client.post(
         "/api/v1/subscriptions",
-        json={"anime_id": anime_id},
+        json={"bangumi_id": 4242},
         headers=guest_headers,
     )
     assert forbidden.status_code == 403
@@ -284,7 +288,7 @@ async def test_subscription_crud_and_guest_permission(client, auth_headers):
     # flow and hits the upstream feed on the user's behalf.
     guest_preview = client.post(
         "/api/v1/subscriptions/preview",
-        json={"anime_id": anime_id},
+        json={"bangumi_id": 4242},
         headers=guest_headers,
     )
     assert guest_preview.status_code == 403
@@ -373,3 +377,206 @@ async def test_subscription_preview_selects_the_highest_scored_candidate():
     assert result["accepted_count"] == 2
     assert len(selected) == 1
     assert selected[0]["resource_id"] == 1
+
+
+@pytest.mark.parametrize(
+    ("air_date", "airdates", "expected"),
+    [
+        # Bangumi has no status field, so it is derived. An unaired show
+        # usually has no episode rows at all -- that case must not read as
+        # "finished" just because the episode list is empty.
+        ("2026-10-07", [], "unaired"),
+        ("2026-08-12", ["2026-08-12", "2026-09-30"], "airing"),
+        ("2023-09-29", ["2023-09-29", "2024-03-22"], "finished"),
+        ("2015-01-01", [], "finished"),
+        ("", ["2024-03-22"], "finished"),
+        ("", [], "unknown"),
+    ],
+)
+def test_airing_status_is_derived_from_dates(air_date, airdates, expected):
+    episodes = [
+        EpisodeInfo(ep=index + 1, sort=index + 1, airdate=value)
+        for index, value in enumerate(airdates)
+    ]
+
+    status = derive_airing_status(
+        air_date,
+        episodes,
+        now=datetime.fromisoformat("2026-08-21T12:00:00"),
+    )
+
+    assert status == expected
+
+
+def test_missing_episode_table_defers_instead_of_needing_review():
+    result = parse_episode_index(
+        "[ANi] 作品 - 01 [1080p]",
+        [],
+        datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    assert result.index is None
+    assert result.deferred is True
+    assert "尚无集数表" in result.reason
+
+
+async def test_deferred_rows_rejoin_the_pool_once_bangumi_publishes_episodes():
+    row = worker_module.SubscriptionEpisode(
+        subscription_id=1,
+        episode_index=None,
+        resource_id=5,
+        resource_title="[ANi] 作品 - 01 [1080p]",
+        score=0.9,
+        attributes={"created_at": "2026-08-20T10:00:00"},
+        state="deferred",
+        first_seen_at=datetime.fromisoformat("2026-08-20T10:00:00"),
+    )
+
+    class FakeSession:
+        async def scalars(self, *_args, **_kwargs):
+            return [row]
+
+    await SubscriptionWorker()._retry_deferred(
+        FakeSession(),
+        Subscription(id=1, episode_offset_override=None),
+        [EpisodeInfo(ep=1, sort=1, name_cn="第一集", airdate="2026-08-19")],
+        Anime(id=1, bangumi_id=4242, name="作品"),
+    )
+
+    assert row.state == "candidate"
+    assert row.episode_index == 1
+    # The waiting window must not restart just because the row was deferred.
+    assert row.first_seen_at == datetime.fromisoformat("2026-08-20T10:00:00")
+
+
+async def test_subscribing_creates_a_placeholder_that_is_not_library_content(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        routes_subscriptions,
+        "BangumiService",
+        lambda: _FakeBangumiSubjects(),
+    )
+    user_headers = await auth_headers(PermissionGroup.USER)
+
+    created = client.post(
+        "/api/v1/subscriptions",
+        json={"bangumi_id": 4242, "fansubs": ["ANi"]},
+        headers=user_headers,
+    )
+    assert created.status_code == 201, created.text
+    subscription = created.json()
+    assert subscription["anime_name_cn"] == "占位番剧"
+    assert subscription["bangumi_id"] == 4242
+    # The home section needs an expected date right away, not after a sweep.
+    assert subscription["next_episode_index"] == 1
+    assert subscription["next_episode_air_date"].startswith("2026-08-12")
+    assert subscription["episode_count"] == 12
+    assert subscription["owned_episode_count"] == 0
+    assert subscription["needs_review_count"] == 0
+
+    # Reachable by id, and through the subscription list...
+    detail = client.get(
+        f"/api/v1/anime/{subscription['anime_id']}", headers=user_headers
+    )
+    assert detail.status_code == 200
+    assert detail.json()["episode_count"] == 12
+    # ...but not library content, so it never shows up as an empty card,
+    # nor as a zero-byte row on the storage page.
+    library = client.get("/api/v1/anime", headers=user_headers)
+    assert library.status_code == 200
+    assert library.json() == []
+    storage = client.get(
+        "/api/v1/storage", headers=await auth_headers(PermissionGroup.ADMIN)
+    )
+    assert storage.status_code == 200, storage.text
+    assert storage.json()["anime"] == []
+
+    removed = client.delete(
+        f"/api/v1/subscriptions/{subscription['id']}", headers=user_headers
+    )
+    assert removed.status_code == 204
+    assert (
+        client.get(
+            f"/api/v1/anime/{subscription['anime_id']}", headers=user_headers
+        ).status_code
+        == 404
+    )
+
+
+async def test_download_after_subscribing_merges_into_the_placeholder(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        routes_subscriptions,
+        "BangumiService",
+        lambda: _FakeBangumiSubjects(),
+    )
+    user_headers = await auth_headers(PermissionGroup.USER)
+    created = client.post(
+        "/api/v1/subscriptions",
+        json={"bangumi_id": 4242, "fansubs": ["ANi"]},
+        headers=user_headers,
+    )
+    assert created.status_code == 201, created.text
+    anime_id = created.json()["anime_id"]
+
+    # The manual download flow posts the whole subject again. A 409 here would
+    # abort a perfectly valid download.
+    merged = client.post(
+        "/api/v1/anime",
+        json={
+            "bangumi_id": 4242,
+            "name": "Placeholder",
+            "name_cn": "占位番剧",
+            "download_hash": "b" * 40,
+            "episodes": [{"index": 1, "name": "第一集", "filename": "01.mkv"}],
+        },
+        headers=user_headers,
+    )
+    assert merged.status_code == 201, merged.text
+    assert merged.json()["id"] == anime_id
+    assert [episode["index"] for episode in merged.json()["episodes"]] == [1]
+
+    # Now it has a file, so it is library content.
+    library = client.get("/api/v1/anime", headers=user_headers)
+    assert [item["id"] for item in library.json()] == [anime_id]
+
+    # And cancelling the subscription must leave the downloaded anime alone.
+    subscription_id = created.json()["id"]
+    assert (
+        client.delete(
+            f"/api/v1/subscriptions/{subscription_id}", headers=user_headers
+        ).status_code
+        == 204
+    )
+    assert (
+        client.get(f"/api/v1/anime/{anime_id}", headers=user_headers).status_code == 200
+    )
+
+
+class _FakeBangumiSubjects:
+    async def get_subject(self, subject_id: int):
+        return SubjectInfo(
+            bangumi_id=subject_id,
+            name="Placeholder Anime",
+            name_cn="占位番剧",
+            image_url="https://example.invalid/cover.jpg",
+            episode_count=12,
+            air_date="2026-08-12",
+        )
+
+    async def get_episodes(self, subject_id: int):
+        return [
+            EpisodeInfo(
+                ep=index,
+                sort=index,
+                name_cn="第$index集",
+                airdate=f"2026-08-{11 + index:02d}",
+            )
+            for index in range(1, 13)
+        ]

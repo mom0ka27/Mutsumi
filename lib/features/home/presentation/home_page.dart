@@ -6,6 +6,7 @@ import '../../../core/extensions/build_context.dart';
 import '../../../core/widgets/app_glass_background.dart';
 import '../../../core/widgets/app_glass_settings.dart';
 import '../../anime/data/anime_list_store.dart';
+import '../../subscriptions/data/subscription_store.dart';
 import '../../anime/presentation/anime_home_view.dart';
 import '../../downloads/presentation/download_progress_view.dart';
 import '../../settings/presentation/settings_home_view.dart';
@@ -58,7 +59,10 @@ class HomePage extends GetView<HomeController> {
                   children: [
                     HeroMode(
                       enabled: selectedIndex == 0,
-                      child: AnimeHomeView(store: animeListStore),
+                      child: AnimeHomeView(
+                        store: animeListStore,
+                        subscriptionStore: Get.find<SubscriptionStore>(),
+                      ),
                     ),
                     HeroMode(
                       enabled: selectedIndex == 1,

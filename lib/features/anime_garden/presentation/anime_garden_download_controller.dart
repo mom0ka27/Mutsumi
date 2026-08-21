@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../anime/data/anime_list_store.dart';
+import '../../anime/data/anime_models.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../../core/network/app_network_error.dart';
@@ -152,6 +153,17 @@ class AnimeGardenDownloadController extends GetxController {
         subject: subject,
         resource: resource,
       );
+      // The show may already have a row — including a placeholder created by a
+      // subscription before anything was downloaded. Adding episodes to it is
+      // the correct path; creating a second anime for the same subject is not.
+      final existing = animeListStore.animeMap[subject.id];
+      Future<void> onSave(List<AnimeEpisodeCreate> episodes) =>
+          _downloadCoordinator.submitEpisodesForAnime(
+            animeId: existing!.id,
+            source: resource.downloadLink,
+            episodes: episodes,
+          );
+
       await Get.to(
         () => AnimeGardenEpisodeMatchPage(
           subject: subject,
@@ -159,6 +171,7 @@ class AnimeGardenDownloadController extends GetxController {
           files: context.files,
           bangumiEpisodes: context.bangumiEpisodes,
           animeListStore: animeListStore,
+          onSave: existing == null ? null : onSave,
         ),
         binding: AnimeGardenEpisodeMatchBinding(
           subject: subject,
@@ -166,6 +179,7 @@ class AnimeGardenDownloadController extends GetxController {
           files: context.files,
           bangumiEpisodes: context.bangumiEpisodes,
           animeListStore: animeListStore,
+          onSave: existing == null ? null : onSave,
         ),
       );
     } catch (error) {

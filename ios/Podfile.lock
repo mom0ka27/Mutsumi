@@ -1,7 +1,7 @@
 PODS:
   - auto_orientation_v2 (2.3.7):
     - Flutter
-  - erika_flutter (0.1.5):
+  - erika_flutter (0.1.4):
     - Flutter
   - Flutter (1.0.0)
 
@@ -20,9 +20,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   auto_orientation_v2: 2d9f355fcc48c37d6fa3d37efa96c3ba15719cc0
-  erika_flutter: 1cbf5fcc4f5110513301d83877e8e215aa6001d6
+  erika_flutter: 19d857ba0482ce5a321271773df6676b3cf7a9ef
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
 
 PODFILE CHECKSUM: e7ef1f6e9f4d94ccdb39e4995ff50b85ebadf1e2
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0

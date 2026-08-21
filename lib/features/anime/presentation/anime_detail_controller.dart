@@ -7,9 +7,11 @@ import '../../anime_garden/data/anime_garden_download_coordinator.dart';
 import '../../anime_garden/presentation/anime_garden_bindings.dart';
 import '../../anime_garden/presentation/anime_garden_episode_match_page.dart';
 import '../../auth/presentation/current_user_controller.dart';
+import '../../bangumi/data/airing_status.dart';
 import '../../bangumi/data/bangumi_repository.dart';
 import '../../subscriptions/data/subscription_models.dart';
 import '../../subscriptions/data/subscription_service.dart';
+import '../../subscriptions/data/subscription_store.dart';
 import '../../subscriptions/presentation/subscription_editor_page.dart';
 import '../data/anime_list_store.dart';
 import '../data/anime_service.dart';
@@ -22,12 +24,15 @@ class AnimeDetailController extends GetxController {
     BangumiRepository? bangumiRepository,
     AnimeGardenDownloadCoordinator? downloadCoordinator,
     SubscriptionService? subscriptionService,
+    SubscriptionStore? subscriptionStore,
     CurrentUserController? currentUserController,
   }) : _animeService = animeService ?? AnimeService(),
        _bangumiRepository = bangumiRepository ?? BangumiRepository(),
        _downloadCoordinator =
            downloadCoordinator ?? AnimeGardenDownloadCoordinator(),
        _subscriptionService = subscriptionService ?? SubscriptionService(),
+       _subscriptionStore =
+           subscriptionStore ?? SubscriptionStore(service: subscriptionService),
        _currentUser = currentUserController ?? CurrentUserController();
 
   final int animeId;
@@ -36,6 +41,7 @@ class AnimeDetailController extends GetxController {
   final BangumiRepository _bangumiRepository;
   final AnimeGardenDownloadCoordinator _downloadCoordinator;
   final SubscriptionService _subscriptionService;
+  final SubscriptionStore _subscriptionStore;
   final CurrentUserController _currentUser;
   final anime = Rxn<AnimeRead>();
   final subscription = Rxn<SubscriptionRead>();
@@ -81,29 +87,49 @@ class AnimeDetailController extends GetxController {
   Future<void> loadSubscription() async {
     final currentAnime = anime.value;
     if (currentAnime == null || !canSubscribe) return;
+    // Refreshing the shared store also updates the home "追番中" section, so a
+    // subscription saved here is visible there without a manual pull.
+    await _subscriptionStore.refresh();
+    if (isClosed) return;
+    subscription.value = _subscriptionStore.forAnime(currentAnime.id);
+  }
+
+  /// Resolves the airing status, which decides whether the editor offers to
+  /// backfill the episodes already broadcast.
+  ///
+  /// A failure is not worth blocking on: `unknown` only hides an optional
+  /// switch.
+  Future<AiringStatus> _airingStatus(AnimeRead currentAnime) async {
     try {
-      final subscriptions = await _subscriptionService.listSubscriptions();
-      if (isClosed) return;
-      subscription.value = subscriptions.firstWhereOrNull(
-        (item) => item.animeId == currentAnime.id,
+      final episodes = await _bangumiRepository.getMainEpisodes(
+        currentAnime.bangumiId,
+      );
+      return deriveAiringStatus(
+        airDate: currentAnime.airDate,
+        episodes: episodes,
       );
     } catch (error, stackTrace) {
-      // 追番 state is supplementary: never block the detail page on it.
       AppLogger.error(
-        '读取追番状态失败 anime=${currentAnime.id}',
-        tag: 'Subscription',
+        '推导放送状态失败 anime=${currentAnime.id}',
+        tag: 'Bangumi',
         error: error,
         stackTrace: stackTrace,
       );
+      return AiringStatus.unknown;
     }
   }
 
   Future<void> openSubscriptionEditor() async {
     final currentAnime = anime.value;
     if (currentAnime == null || !canSubscribe) return;
+    final status = await _airingStatus(currentAnime);
+    if (isClosed) return;
     final result = await Get.to<bool>(
       () => SubscriptionEditorPage(
-        anime: currentAnime,
+        bangumiId: currentAnime.bangumiId,
+        title: currentAnime.displayName,
+        subtitle: currentAnime.originalName,
+        status: status,
         existing: subscription.value,
         service: _subscriptionService,
       ),

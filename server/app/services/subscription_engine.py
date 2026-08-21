@@ -91,6 +91,17 @@ class EpisodeParseResult:
     episode: EpisodeInfo | None = None
     reason: str | None = None
     season_number: int | None = None
+    # ``True`` means "ask again later", not "give up": the title parsed fine but
+    # Bangumi has no episode table yet, which is the normal state of a show
+    # subscribed before it airs. A deferred resource must never be turned into
+    # ``needs_review`` -- nobody would ever clear that queue entry.
+    deferred: bool = False
+
+
+UNAIRED = "unaired"
+AIRING = "airing"
+FINISHED = "finished"
+UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -471,6 +482,65 @@ def _as_datetime(value: datetime | date | str | None) -> datetime | None:
     return result
 
 
+def derive_airing_status(
+    air_date: datetime | date | str | None,
+    episodes: Iterable[EpisodeInfo] = (),
+    now: datetime | None = None,
+) -> str:
+    """Bangumi exposes no status field, so derive it from dates.
+
+    ``air_date`` (the subject's first-broadcast date) decides *unaired*, not the
+    episode list: a show that has not started usually has no episode rows at all.
+    The episode airdates only separate *airing* from *finished*.
+    """
+    current = now or datetime.now(UTC).replace(tzinfo=None)
+    start = _as_datetime(air_date)
+    airdates = [
+        value
+        for value in (_as_datetime(episode.airdate) for episode in episodes)
+        if value is not None
+    ]
+
+    if start is None:
+        # Without a first-broadcast date there is nothing to compare against.
+        # A last airdate alone can still prove the show finished.
+        if airdates and max(airdates) <= current:
+            return FINISHED
+        return UNKNOWN
+    if start > current:
+        return UNAIRED
+    if not airdates:
+        # Started, but no usable episode dates. Old shows commonly lack them,
+        # and calling that "airing" only leaves an extra entry point around,
+        # while calling it "unaired" would disable a download that does work.
+        return FINISHED
+    return FINISHED if max(airdates) <= current else AIRING
+
+
+def next_expected_episode(
+    episodes: Iterable[EpisodeInfo],
+    existing_indices: Iterable[int],
+) -> tuple[int | None, datetime | None]:
+    """The earliest episode not held locally, with its broadcast date.
+
+    "Earliest missing" rather than "first not yet broadcast": a gap in the
+    middle is exactly what the user wants surfaced, and an episode whose date
+    has passed but is still absent says the worker has not found it yet.
+    """
+    held = set(existing_indices)
+    candidates = sorted(
+        (
+            episode
+            for episode in episodes
+            if episode.index is not None and episode.index not in held
+        ),
+        key=lambda episode: episode.index or 0,
+    )
+    if not candidates:
+        return None, None
+    return candidates[0].index, _as_datetime(candidates[0].airdate)
+
+
 def _infer_season_number(anime_name: str) -> int | None:
     patterns = (
         r"\bS(?:eason)?\s*0*(\d+)\b",
@@ -557,6 +627,14 @@ def parse_episode_index(
         )
 
     episode_list = [episode for episode in episodes if episode.index is not None]
+    if not episode_list:
+        return EpisodeParseResult(
+            None,
+            raw_number,
+            reason="Bangumi 尚无集数表，等待上游补全",
+            season_number=season_number,
+            deferred=True,
+        )
     if episode_offset_override is not None:
         override_candidate = next(
             (episode for episode in episode_list if episode.ep == number - episode_offset_override),

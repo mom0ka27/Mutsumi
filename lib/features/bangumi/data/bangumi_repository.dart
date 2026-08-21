@@ -18,6 +18,26 @@ class BangumiRepository {
     return _parseDataList(response.data, BangumiEpisode.fromJson);
   }
 
+  /// Main-story episodes only, for deriving the airing status.
+  ///
+  /// `type=0` matters here: a late BD extra would otherwise push the last
+  /// airdate into the future forever and leave a finished show looking like it
+  /// is still airing. [getEpisodes] deliberately keeps returning everything,
+  /// because the episode-matching page lists specials too.
+  Future<List<BangumiEpisode>> getMainEpisodes(int subjectId) async {
+    AppLogger.info('获取正片章节 subject=$subjectId', tag: 'Bangumi');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/v0/episodes',
+      queryParameters: {
+        'subject_id': subjectId,
+        'type': 0,
+        'limit': 100,
+        'offset': 0,
+      },
+    );
+    return _parseDataList(response.data, BangumiEpisode.fromJson);
+  }
+
   Future<BangumiSubjectDetail> getSubjectDetail(int id) async {
     AppLogger.info('获取详情 subject=$id', tag: 'Bangumi');
     final response = await _dio.get<Map<String, dynamic>>('/v0/subjects/$id');
@@ -117,6 +137,7 @@ class BangumiEpisode {
     required this.index,
     required this.name,
     required this.nameCn,
+    this.airDate = '',
   });
 
   factory BangumiEpisode.fromJson(Map<String, dynamic> json) {
@@ -124,12 +145,14 @@ class BangumiEpisode {
       index: (json['ep'] as num?)?.round() ?? 0,
       name: json['name'] as String? ?? '',
       nameCn: json['name_cn'] as String? ?? '',
+      airDate: json['airdate'] as String? ?? '',
     );
   }
 
   final int index;
   final String name;
   final String nameCn;
+  final String airDate;
 
   String get displayName => nameCn.isEmpty ? name : nameCn;
 }

@@ -47,20 +47,24 @@ class SubscriptionService {
   }
 
   Future<SubscriptionRead> createSubscription({
-    required int animeId,
+    required int bangumiId,
     required int profileId,
     required List<String> fansubs,
     required bool allowNoFansub,
+    bool backfillAired = false,
   }) async {
     return _request('创建追番订阅', () async {
       final response = await _serverClient.dio.post<Map<String, dynamic>>(
         subscriptionsApiPath,
-        data: _subscriptionPayload(
-          animeId: animeId,
-          profileId: profileId,
-          fansubs: fansubs,
-          allowNoFansub: allowNoFansub,
-        ),
+        data: {
+          ..._subscriptionPayload(
+            bangumiId: bangumiId,
+            profileId: profileId,
+            fansubs: fansubs,
+            allowNoFansub: allowNoFansub,
+          ),
+          'backfill_aired': backfillAired,
+        },
       );
       return _parseSubscription(response.data);
     });
@@ -96,7 +100,7 @@ class SubscriptionService {
   }
 
   Future<SubscriptionPreviewRead> previewSubscription({
-    required int animeId,
+    required int bangumiId,
     required int profileId,
     required List<String> fansubs,
     required bool allowNoFansub,
@@ -105,7 +109,7 @@ class SubscriptionService {
       final response = await _serverClient.dio.post<Map<String, dynamic>>(
         '$subscriptionsApiPath/preview',
         data: _subscriptionPayload(
-          animeId: animeId,
+          bangumiId: bangumiId,
           profileId: profileId,
           fansubs: fansubs,
           allowNoFansub: allowNoFansub,
@@ -120,13 +124,15 @@ class SubscriptionService {
   }
 
   Map<String, dynamic> _subscriptionPayload({
-    required int animeId,
+    required int bangumiId,
     required int profileId,
     required List<String> fansubs,
     required bool allowNoFansub,
   }) {
     return {
-      'anime_id': animeId,
+      // Keyed by Bangumi subject: the server creates the library row when the
+      // show has none yet.
+      'bangumi_id': bangumiId,
       'profile_id': profileId,
       'fansubs': fansubs,
       'allow_no_fansub': allowNoFansub,
