@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 import logging
 from pathlib import Path
 import random
 from types import SimpleNamespace
-from typing import Any, Callable, Iterable
+from typing import Any
 
 import httpx
 from sqlalchemy import select
@@ -40,8 +40,6 @@ from app.services.subscription_engine import (
     parse_episode_index,
     profile_values,
     resource_matches_subscription,
-    SubscriptionMatch,
-    season_start,
     subscription_rules,
 )
 from app.services.storage_service import VIDEO_EXTENSIONS
@@ -58,10 +56,6 @@ class _Query:
 
     subjects: tuple[int, ...] = ()
     search: tuple[str, ...] = ()
-
-
-# Called after each page with everything gathered so far; ``True`` ends the walk.
-_StopCheck = Callable[[dict[int, AnimeGardenResource]], bool]
 
 
 class SubscriptionSweepAborted(RuntimeError):
@@ -97,7 +91,7 @@ class SubscriptionWorker:
                 subscription = await _load_subscription(session, subscription_id)
                 if subscription is None:
                     raise LookupError("Subscription not found")
-                resources = await self._fetch_targeted_resources(
+                resources = await self._fetch_subject_history(
                     subscription,
                     current_time,
                 )
@@ -109,13 +103,8 @@ class SubscriptionWorker:
                 )
                 subscription.last_checked_at = current_time
                 subscription.last_error = None
-                subscription.backfill_after = None
                 if found:
                     subscription.last_found_at = current_time
-                if resources:
-                    latest = _latest_resource_time(resources)
-                    if latest and (subscription.cursor_at is None or latest > subscription.cursor_at):
-                        subscription.cursor_at = latest
                 await session.commit()
                 return processed, found
 
@@ -171,25 +160,12 @@ class SubscriptionWorker:
                 anime.air_date = subject.air_date
                 anime.aliases = list(subject.aliases)
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
-        await self._ensure_aliases(anime)
         rules = subscription_rules(draft, anime)
         values = profile_values(profile, getattr(draft, "profile_overrides", None))
         existing_indices = {
             episode.index for episode in anime.episodes if episode.index is not None
         }
-        resources = await self._fetch_draft_resources(
-            anime,
-            draft,
-            current_time,
-            episodes,
-            stop_when=_coverage_stop(
-                rules=rules,
-                values=values,
-                episodes=episodes,
-                owned=existing_indices,
-                now=current_time,
-            ),
-        )
+        resources = await self._fetch_draft_resources(anime, draft, current_time)
         rows: list[dict[str, Any]] = []
         accepted_count = 0
         selected_by_episode: dict[int, tuple[tuple[bool, float], int]] = {}
@@ -246,11 +222,11 @@ class SubscriptionWorker:
                 )
                 continue
             row_index = len(rows)
-            row = _preview_row(resource, parsed, evaluation, "candidate", match=match)
+            row = _preview_row(resource, parsed, evaluation, "candidate")
             rows.append(row)
-            # Proof before preference: a ``subjectId`` match outranks a
-            # title-only one whatever it scores, mirroring ``_settle_candidates``.
-            rank = (match.by_subject, evaluation.score)
+            # Every candidate is a subject match now, so the score decides,
+            # mirroring ``_settle_candidates``.
+            rank = evaluation.score
             current = selected_by_episode.get(parsed.index)
             if current is None or rank > current[0]:
                 selected_by_episode[parsed.index] = (rank, row_index)
@@ -259,16 +235,11 @@ class SubscriptionWorker:
             rows[row_index]["selected"] = True
         for row in rows:
             if row["state"] == "candidate" and not row["selected"]:
-                row["reason"] = (
-                    "同集有 Bangumi subject 命中的候选"
-                    if not row["matched_by_subject"]
-                    else "同集候选得分更高"
-                )
+                row["reason"] = "同集候选得分更高"
         rows.sort(
             key=lambda row: (
                 row["episode_index"] is None,
                 row["episode_index"] or 0,
-                not row["matched_by_subject"],
                 -row["score"],
             )
         )
@@ -313,57 +284,35 @@ class SubscriptionWorker:
             if not subscriptions:
                 return {"subscriptions": 0, "resources": 0, "found": 0, "aborted": False}
 
-            start = min(
-                (
-                    subscription.cursor_at
-                    or now
-                    - timedelta(
-                        days=_config_int("cold_start_days", 7),
-                    )
-                    for subscription in subscriptions
-                ),
-                default=now,
-            )
-            resources = await self._fetch_global_resources(start, now)
             processed = 0
             found = 0
+            resource_count = 0
             try:
                 for subscription in subscriptions:
                     try:
                         async with session.begin_nested():
-                            sub_resources = resources
-                            if subscription.backfill_after is not None:
-                                # A one-shot catch-up for a show joined
-                                # mid-season. It stays a targeted query so the
-                                # season-long window never widens the shared
-                                # global sweep.
-                                backfilled = await self._fetch_backfill_resources(
-                                    subscription,
-                                    now,
-                                )
-                                sub_resources = backfilled + resources
+                            # One request per show, answering with its whole
+                            # history. There is no shared window to draw from any
+                            # more: matching is by Bangumi subject id alone, so a
+                            # resource the subject query does not return could not
+                            # have matched anything anyway.
+                            sub_resources = await self._fetch_subject_history(
+                                subscription,
+                                now,
+                            )
                             sub_processed, sub_found = await self._process_subscription(
                                 session,
                                 subscription,
                                 sub_resources,
                                 now,
                             )
-                            subscription.backfill_after = None
                         processed += sub_processed
                         found += sub_found
+                        resource_count += len(sub_resources)
                         subscription.last_checked_at = now
                         subscription.last_error = None
                         if sub_found:
                             subscription.last_found_at = now
-                        latest = _latest_resource_time(
-                            [
-                                resource
-                                for resource in sub_resources
-                                if _resource_after_cursor(resource, subscription.cursor_at, now)
-                            ]
-                        )
-                        if latest and (subscription.cursor_at is None or latest > subscription.cursor_at):
-                            subscription.cursor_at = latest
                     except SubscriptionSweepAborted:
                         raise
                     except Exception as error:
@@ -378,67 +327,47 @@ class SubscriptionWorker:
                 logger.warning("Subscription sweep aborted: %s", error)
                 return {
                     "subscriptions": len(subscriptions),
-                    "resources": len(resources),
+                    "resources": resource_count,
                     "found": found,
                     "aborted": True,
                 }
             return {
                 "subscriptions": len(subscriptions),
-                "resources": len(resources),
+                "resources": resource_count,
                 "found": found,
                 "aborted": False,
             }
 
-    async def _fetch_global_resources(
-        self,
-        after: datetime,
-        before: datetime,
-    ) -> list[AnimeGardenResource]:
-        resources: dict[int, AnimeGardenResource] = {}
-        await self._walk_pages(
-            after=after,
-            before=before,
-            types=("动画",),
-            into=resources,
-        )
-        return sorted(resources.values(), key=_resource_sort_key)
-
-    async def _fetch_targeted_resources(
+    async def _fetch_subject_history(
         self,
         subscription: Subscription,
         now: datetime,
     ) -> list[AnimeGardenResource]:
-        anime = subscription.anime
-        # A pending backfill always wins: it is the older window, and the whole
-        # point of the first check on a mid-season subscription is to reach past
-        # the cold-start days into the episodes already broadcast.
-        backfill_after = getattr(subscription, "backfill_after", None)
-        if backfill_after is not None:
-            after = _naive_utc(backfill_after)
-        else:
-            after = subscription.cursor_at or now - timedelta(
-                days=_config_int("cold_start_days", 7)
-            )
-        return await self._fetch_resources(
-            after=after,
-            before=now,
-            queries=await self._queries_for(subscription, anime),
-            types=tuple(subscription.resource_types or ("动画",)),
-            stop_when=await self._coverage_stop_for(subscription, anime, now),
-        )
+        """Everything ever published for this show, with no time window at all.
 
-    async def _fetch_backfill_resources(
-        self,
-        subscription: Subscription,
-        now: datetime,
-    ) -> list[AnimeGardenResource]:
-        anime = subscription.anime
+        The window is what loses episodes. Upstream's ``after`` filters on
+        publish time, but the index routinely only learns of a release long
+        after that: measured against the live feed, ~14% of resources are
+        indexed more than an hour late and the tail runs to weeks -- one sampled
+        release was published on 12 July and indexed on 20 August. Such a
+        release is *born* behind the cursor, so it can never come back, and no
+        lookback wide enough to catch it would leave a cursor worth keeping.
+
+        A subject query needs no window: it answers with the show's entire
+        history in a single ``complete`` page. Asking for all of it every sweep
+        costs one request and cannot miss an episode by windowing.
+
+        Returns nothing when there is no subject to ask by -- such a
+        subscription is matched off the shared global window instead.
+        """
+        queries = await self._queries_for(subscription, subscription.anime)
+        if not queries:
+            return []
         return await self._fetch_resources(
-            after=_naive_utc(subscription.backfill_after or now),
+            after=None,
             before=now,
-            queries=await self._queries_for(subscription, anime),
+            queries=queries,
             types=tuple(subscription.resource_types or ("动画",)),
-            stop_when=await self._coverage_stop_for(subscription, anime, now),
         )
 
     async def _fetch_draft_resources(
@@ -446,97 +375,36 @@ class SubscriptionWorker:
         anime: Anime,
         draft: Any,
         now: datetime,
-        episodes: list[Any] = (),
-        stop_when: _StopCheck | None = None,
     ) -> list[AnimeGardenResource]:
+        """What the editor previews: the same unwindowed history as a real check.
+
+        Sharing the fetch is the point. A preview that looked through a
+        cold-start window while the worker reads the whole history would promise
+        less than the worker goes on to find, which is precisely the drift this
+        module exists to avoid.
+        """
         return await self._fetch_resources(
-            after=_draft_window_start(anime, draft, episodes, now),
+            after=None,
             before=now,
             queries=await self._queries_for(draft, anime),
             types=tuple(getattr(draft, "resource_types", None) or ("动画",)),
-            stop_when=stop_when,
-        )
-
-    async def _coverage_stop_for(
-        self,
-        subscription: Any,
-        anime: Anime | None,
-        now: datetime,
-    ) -> _StopCheck | None:
-        """The early-stop condition for one subscription's own walk.
-
-        Built from Bangumi's episode table, which is cached for the duration of
-        a sweep, so asking for it here costs nothing beyond what the check that
-        follows would fetch anyway. A Bangumi failure means no early stop rather
-        than no check -- the walk just runs to the last page.
-        """
-        if anime is None or not getattr(anime, "bangumi_id", 0):
-            return None
-        try:
-            episodes = await self.bangumi.get_episodes(anime.bangumi_id)
-        except (httpx.HTTPError, ValueError) as error:
-            logger.warning(
-                "Bangumi episode fetch failed id=%s: %s", anime.bangumi_id, error
-            )
-            return None
-        return _coverage_stop(
-            rules=subscription_rules(subscription, anime),
-            values=profile_values(
-                getattr(subscription, "profile", None),
-                getattr(subscription, "profile_overrides", None),
-            ),
-            episodes=episodes,
-            owned={
-                episode.index
-                for episode in getattr(anime, "episodes", ())
-                if episode.index is not None
-            },
-            now=now,
         )
 
     async def _queries_for(self, rules_source: Any, anime: Anime | None) -> tuple[_Query, ...]:
-        """How this show is asked for upstream: by subject id, or not at all.
+        """How this show is asked for upstream: by subject id, and only that.
 
         The feed's ``subjectId`` *is* the Bangumi id, so one subject query is
-        both exact and complete. There is deliberately no query by name: the
-        subject filter already covers everything a name would find, and a name
-        query is a guess that costs a request per alias.
+        both exact and complete. There is deliberately no query by name, and no
+        matching by name either: a name is a guess, and a guess that lands on
+        the wrong show files someone else's episode into this library.
 
-        No subject id to ask by -- a subscription that has turned
-        ``use_subject_id`` off -- returns no query at all, and the caller then
-        pulls the plain window and matches locally, exactly as the global sweep
-        does. Names identify the show during matching; they never fetch it.
+        A subject id is therefore all this returns, and nothing without one is
+        reachable at all.
         """
         if anime is None:
             return ()
-        subjects = _subjects_for(anime, getattr(rules_source, "use_subject_id", True))
-        return (_Query(subjects=subjects),) if subjects else ()
-
-    async def _ensure_aliases(self, anime: Anime) -> tuple[str, ...]:
-        """Bangumi's 别名 list, fetched once and then kept on the row.
-
-        Needed for matching, not for fetching: an untagged resource off the
-        global sweep can only be tied to this show by its title, and a release
-        titled with an alias is the common case there.
-
-        Filled in lazily rather than by a data migration: rows created before
-        the column existed have none, and a subject that gained aliases upstream
-        after its row was created would otherwise never pick them up.
-        """
-        stored = tuple(anime.aliases or ())
-        if stored or not anime.bangumi_id:
-            return stored
-        try:
-            subject = await self.bangumi.get_subject(anime.bangumi_id)
-        except (httpx.HTTPError, ValueError) as error:
-            logger.warning(
-                "Bangumi alias fetch failed id=%s: %s", anime.bangumi_id, error
-            )
-            return ()
-        if subject is None or not subject.aliases:
-            return ()
-        anime.aliases = list(subject.aliases)
-        return tuple(subject.aliases)
+        bangumi_id = int(getattr(anime, "bangumi_id", 0) or 0)
+        return (_Query(subjects=(bangumi_id,)),) if bangumi_id else ()
 
     async def recent_resources(
         self,
@@ -565,46 +433,41 @@ class SubscriptionWorker:
     async def _fetch_resources(
         self,
         *,
-        after: datetime,
+        after: datetime | None,
         before: datetime,
         queries: tuple[_Query, ...] = (),
         types: tuple[str, ...] = ("动画",),
-        stop_when: _StopCheck | None = None,
     ) -> list[AnimeGardenResource]:
         """The union of every query, deduped by resource id.
 
-        One query per name variant is the only way to ask for alternative
-        titles: upstream ANDs the terms within a single ``search``. The same
-        release commonly comes back from several of them, hence the dedupe.
+        The same release can come back from more than one query, hence the
+        dedupe -- what it prevents is a resource written to the ledger twice,
+        since the loop reads the ledger's ids once, before it starts.
         """
         resources: dict[int, AnimeGardenResource] = {}
         for query in queries or (_Query(),):
-            if stop_when is not None and stop_when(resources):
-                break
             await self._walk_pages(
                 after=after,
                 before=before,
                 query=query,
                 types=types,
                 into=resources,
-                stop_when=stop_when,
             )
         return sorted(resources.values(), key=_resource_sort_key)
 
     async def _walk_pages(
         self,
         *,
-        after: datetime,
+        after: datetime | None,
         before: datetime,
         query: _Query = _Query(),
         types: tuple[str, ...] = ("动画",),
         into: dict[int, AnimeGardenResource],
-        stop_when: _StopCheck | None = None,
     ) -> None:
         """Page one query to its last page, accumulating into ``into``.
 
-        The walk ends on the feed's own ``complete`` flag, on a page that adds
-        nothing new, or on ``stop_when`` -- and never on a page merely shorter
+        The walk ends on the feed's own ``complete`` flag or on a page that adds
+        nothing new -- and never on a page merely shorter
         than the one requested, because the API silently substitutes its own
         page size when the requested one is out of range. ``max_pages`` is a
         runaway guard, not a window: stopping there is a truncation, so it is
@@ -612,6 +475,7 @@ class SubscriptionWorker:
         """
         page_size = _page_size()
         max_pages = _config_int("max_pages", 200)
+        walked: set[int] = set()
         for page in range(1, max_pages + 1):
             page_resources, complete = await self.anime_garden.search_resources(
                 page=page,
@@ -622,15 +486,19 @@ class SubscriptionWorker:
                 search=query.search,
                 types=types,
             )
-            fresh = sum(1 for resource in page_resources if resource.id not in into)
+            fresh = sum(1 for resource in page_resources if resource.id not in walked)
+            walked.update(resource.id for resource in page_resources)
             into.update({resource.id: resource for resource in page_resources})
             if complete:
                 return
             if not fresh:
-                # Also the escape hatch for a feed that ignores ``page`` and
+                # Novelty is measured against this walk's own ids, never the
+                # shared accumulator: a page whose every resource an earlier
+                # query already contributed is ordinary overlap between queries,
+                # and treating it as the end of the feed would abandon this
+                # query on its first page. Against ``walked`` the check keeps
+                # its real job -- catching a feed that ignores ``page`` and
                 # keeps handing back the same window.
-                return
-            if stop_when is not None and stop_when(into):
                 return
         logger.warning(
             "Feed walk hit the %s-page guard (subjects=%s search=%s); "
@@ -652,9 +520,6 @@ class SubscriptionWorker:
             return 0, 0
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
         values = profile_values(subscription.profile, subscription.profile_overrides)
-        # Aliases are what lets an untagged resource off the global sweep still
-        # be recognised by title, so they have to be on the row before matching.
-        await self._ensure_aliases(anime)
         rules = subscription_rules(subscription, anime)
         existing_indices = {
             episode.index
@@ -674,8 +539,11 @@ class SubscriptionWorker:
         for resource in resources:
             if resource.id in existing_resource_ids:
                 continue
-            if not _resource_after_cursor(resource, subscription.cursor_at, now):
-                continue
+            # Deliberately no cursor comparison here. The ledger already keys on
+            # resource id, so re-seeing a resource is a no-op, whereas dropping
+            # everything published before the cursor would undo the fetch
+            # lookback: a release indexed late is *older* than the cursor by
+            # publish time, and is exactly what this pass exists to pick up.
             match = resource_matches_subscription(resource, rules)
             if not match.matched:
                 continue
@@ -689,7 +557,6 @@ class SubscriptionWorker:
                         evaluation,
                         episode_index=None,
                         state="skipped",
-                        match=match,
                     )
                 )
                 continue
@@ -715,7 +582,6 @@ class SubscriptionWorker:
                         state="deferred" if parsed.deferred else "needs_review",
                         reason=parsed.reason,
                         parsed=parsed,
-                        match=match,
                     )
                 )
                 continue
@@ -729,7 +595,6 @@ class SubscriptionWorker:
                         state="skipped",
                         reason="该集已存在",
                         parsed=parsed,
-                        match=match,
                     )
                 )
                 continue
@@ -741,7 +606,6 @@ class SubscriptionWorker:
                     episode_index=parsed.index,
                     state="candidate",
                     parsed=parsed,
-                    match=match,
                 )
             )
         await session.flush()
@@ -836,20 +700,16 @@ class SubscriptionWorker:
             earliest = min(candidate.first_seen_at for candidate in group)
             age_hours = (now - _naive_utc(earliest)).total_seconds() / 3600
             immediate = any(
-                candidate.score >= profile.accept_now_score
-                and _matched_by_subject(candidate)
-                for candidate in group
+                candidate.score >= profile.accept_now_score for candidate in group
             )
             if not immediate and age_hours < profile.grace_hours:
                 continue
-            # Proof outranks preference: the indexer's ``subjectId`` is the
-            # Bangumi id, so a tagged resource is certainly this show, while a
-            # title-only match is a guess two shows can both satisfy. A guess
-            # never wins over proof, however well it scores.
+            # Every candidate reached the ledger by carrying this show's Bangumi
+            # subject id, so there is no weaker kind of evidence to rank against:
+            # the score decides, and the earlier arrival breaks a tie.
             winner = max(
                 group,
                 key=lambda candidate: (
-                    _matched_by_subject(candidate),
                     candidate.score,
                     -_naive_utc(candidate.first_seen_at).timestamp(),
                 ),
@@ -857,11 +717,7 @@ class SubscriptionWorker:
             for candidate in group:
                 if candidate is not winner:
                     candidate.state = "skipped"
-                    candidate.reason = (
-                        "同集候选得分更高"
-                        if _matched_by_subject(candidate) == _matched_by_subject(winner)
-                        else "同集有 Bangumi subject 命中的候选"
-                    )
+                    candidate.reason = "同集候选得分更高"
             await self._deliver_candidate(
                 session,
                 subscription,
@@ -981,7 +837,6 @@ def _ledger_entry(
     state: str,
     reason: str | None = None,
     parsed: EpisodeParseResult | None = None,
-    match: SubscriptionMatch | None = None,
 ) -> SubscriptionEpisode:
     attributes = dict(evaluation.attributes)
     attributes.update(
@@ -993,8 +848,6 @@ def _ledger_entry(
             "created_at": resource.created_at.isoformat() if resource.created_at else None,
             "provider": resource.provider,
             "provider_id": resource.provider_id,
-            # Read back by ``_settle_candidates`` to rank proof above preference.
-            "matched_by": (match or SubscriptionMatch(True)).matched_by,
         }
     )
     if parsed is not None:
@@ -1010,15 +863,6 @@ def _ledger_entry(
         reason=reason or evaluation.reason,
         first_seen_at=_naive_utc(resource.created_at) if resource.created_at else _utcnow(),
     )
-
-
-def _matched_by_subject(candidate: SubscriptionEpisode) -> bool:
-    """Whether the ledger row was proven to be this show by its Bangumi id.
-
-    Rows written before the evidence was recorded read as unproven, which only
-    means they lose a tie against a tagged resource -- the safe direction.
-    """
-    return (candidate.attributes or {}).get("matched_by") == MATCHED_BY_SUBJECT
 
 
 def _episode_parse_attributes(parsed: EpisodeParseResult) -> dict[str, Any]:
@@ -1041,15 +885,12 @@ def _preview_row(
     state: str,
     *,
     reason: str | None = None,
-    match: SubscriptionMatch | None = None,
 ) -> dict[str, Any]:
     attributes = dict(evaluation.attributes)
     attributes["episode_parse"] = {
         "raw_number": parsed.raw_number if parsed else None,
         "reason": parsed.reason if parsed else None,
     }
-    if match is not None:
-        attributes["matched_by"] = match.matched_by
     return {
         "episode_index": parsed.index if parsed else None,
         "resource_id": resource.id,
@@ -1060,7 +901,6 @@ def _preview_row(
         "reason": reason or parsed.reason if parsed and state == "needs_review" else reason or evaluation.reason,
         "attributes": attributes,
         "selected": False,
-        "matched_by_subject": bool(match and match.by_subject),
         "created_at": resource.created_at,
     }
 
@@ -1079,118 +919,8 @@ async def _load_subscription(
     )
 
 
-def backfill_window_start(
-    air_date: datetime | date | str | None,
-    episodes: Iterable[Any] = (),
-    now: datetime | None = None,
-) -> datetime:
-    """The oldest point a whole-season catch-up has to reach.
-
-    Shared by the editor preview and the first real check, so that what the
-    preview promised is what the worker then goes and fetches. The extra day
-    covers releases that land slightly ahead of the listed broadcast time.
-    """
-    current = now or _utcnow()
-    cold_start = current - timedelta(days=_config_int("cold_start_days", 7))
-    start = season_start(air_date, episodes)
-    if start is None:
-        return cold_start
-    return min(cold_start, start - timedelta(days=1))
-
-
-def _draft_window_start(
-    anime: Anime,
-    draft: Any,
-    episodes: Iterable[Any],
-    now: datetime,
-) -> datetime:
-    """How far back a preview looks.
-
-    With ``backfill_aired`` on it has to span the whole broadcast season: the
-    cold-start window would answer "no resources" for exactly the mid-season
-    case the switch exists for.
-    """
-    if not getattr(draft, "backfill_aired", False):
-        return now - timedelta(days=_config_int("cold_start_days", 7))
-    return backfill_window_start(getattr(anime, "air_date", None), episodes, now)
-
-
-def _coverage_stop(
-    *,
-    rules: Any,
-    values: ProfileValues,
-    episodes: list[Any],
-    owned: Iterable[int],
-    now: datetime,
-) -> _StopCheck | None:
-    """Stop paging once every aired episode still missing has a usable release.
-
-    Sound only because the feed is strictly newest-first: once the oldest thing
-    we lack has been found, older pages cannot hold anything else we need. It
-    asks for an *accepted* release, not merely a resource carrying that episode
-    number, so a walk never ends on candidates the rules would throw away.
-
-    Returns ``None`` -- no early stop, walk to the last page -- when there is
-    nothing known to be missing. That is what keeps a release for an episode
-    Bangumi has not published or dated yet reachable.
-    """
-    held = set(owned)
-    needed = frozenset(
-        index for index in aired_episode_indices(episodes, now) if index not in held
-    )
-    if not needed:
-        return None
-    anime_name = str(getattr(rules, "anime_name", "") or "")
-    offset = getattr(rules, "episode_offset_override", None)
-    covered: set[int] = set()
-    judged: set[int] = set()
-
-    def reached(resources: dict[int, AnimeGardenResource]) -> bool:
-        for resource_id, resource in resources.items():
-            if resource_id in judged:
-                continue
-            judged.add(resource_id)
-            if not resource_matches_subscription(resource, rules).matched:
-                continue
-            if not evaluate_resource(resource, values, rules).accepted:
-                continue
-            parsed = parse_episode_index(
-                resource.title,
-                episodes,
-                resource.created_at,
-                episode_offset_override=offset,
-                anime_name=anime_name,
-            )
-            if parsed.index is not None:
-                covered.add(parsed.index)
-        return needed <= covered
-
-    return reached
-
-
-def _subjects_for(anime: Anime | None, use_subject_id: bool) -> tuple[int, ...]:
-    bangumi_id = int(getattr(anime, "bangumi_id", 0) or 0) if anime else 0
-    return (bangumi_id,) if use_subject_id and bangumi_id else ()
-
-
 def _resource_sort_key(resource: AnimeGardenResource) -> tuple[datetime, int]:
     return (_naive_utc(resource.created_at) if resource.created_at else datetime.min, resource.id)
-
-
-def _latest_resource_time(resources: list[AnimeGardenResource]) -> datetime | None:
-    values = [_naive_utc(resource.created_at) for resource in resources if resource.created_at]
-    return max(values) if values else None
-
-
-def _resource_after_cursor(
-    resource: AnimeGardenResource,
-    cursor: datetime | None,
-    now: datetime,
-) -> bool:
-    if resource.created_at is None:
-        return True
-    created = _naive_utc(resource.created_at)
-    return cursor is None or created > _naive_utc(cursor)
 
 
 def _datetime(value: Any) -> datetime | None:

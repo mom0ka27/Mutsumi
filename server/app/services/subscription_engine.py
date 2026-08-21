@@ -58,9 +58,9 @@ class ProfileValues:
 @dataclass(frozen=True)
 class SubscriptionRules:
     bangumi_id: int
+    # Kept for season inference in title parsing (第3季 / 3rd Season), which is
+    # the only thing a name is still used for -- never for recognising a show.
     anime_name: str = ""
-    anime_name_cn: str = ""
-    aliases: tuple[str, ...] = ()
     # One locked group, not a priority list: a season assembled from whoever
     # published first mixes naming, timing and styling across episodes.
     fansub: str = ""
@@ -68,7 +68,6 @@ class SubscriptionRules:
     search_keywords: tuple[str, ...] = ()
     must_include: tuple[str, ...] = ()
     exclude_keywords: tuple[str, ...] = ()
-    use_subject_id: bool = True
     resource_types: tuple[str, ...] = ("动画",)
     episode_offset_override: int | None = None
 
@@ -180,14 +179,11 @@ def subscription_rules(subscription: Any, anime: Any | None = None) -> Subscript
     return SubscriptionRules(
         bangumi_id=int(getattr(anime, "bangumi_id", 0) or 0),
         anime_name=str(getattr(anime, "name", "") or ""),
-        anime_name_cn=str(getattr(anime, "name_cn", "") or ""),
-        aliases=_string_list(getattr(anime, "aliases", None)),
         fansub=str(getattr(subscription, "fansub", "") or "").strip(),
         allow_no_fansub=bool(getattr(subscription, "allow_no_fansub", False)),
         search_keywords=_string_list(getattr(subscription, "search_keywords", None)),
         must_include=_string_list(getattr(subscription, "must_include", None)),
         exclude_keywords=_string_list(getattr(subscription, "exclude_keywords", None)),
-        use_subject_id=bool(getattr(subscription, "use_subject_id", True)),
         resource_types=_string_list(getattr(subscription, "resource_types", None)) or ("动画",),
         episode_offset_override=getattr(subscription, "episode_offset_override", None),
     )
@@ -284,45 +280,23 @@ def _contains_any(title: str, values: Iterable[str]) -> str | None:
     return None
 
 
-def known_names(rules: SubscriptionRules) -> tuple[str, ...]:
-    """Every title this show is released under, most recognisable first.
-
-    Bangumi's official name is often the one nobody uses: fansubs title their
-    releases with the Chinese name or one of the 别名, so all of them count as
-    the same show. Used to *recognise* a show, never to search for one -- the
-    feed is only ever queried by subject id.
-    """
-    return tuple(
-        name
-        for name in merge_unique(
-            (rules.anime_name_cn, rules.anime_name, *rules.aliases)
-        )
-        if len(name.strip()) >= 2
-    )
-
-
-MATCHED_BY_SUBJECT = "subject"
-MATCHED_BY_TITLE = "title"
-MATCHED_BY_NOTHING = "none"
-
-
 @dataclass(frozen=True)
 class SubscriptionMatch:
-    """Whether a resource belongs to a subscription, and on what evidence.
+    """Whether a resource belongs to a subscription.
 
-    ``matched_by`` is what separates proof from a guess: the indexer's
-    ``subjectId`` *is* the Bangumi id, so a tagged resource is certain, while a
-    title carrying one of the show's names is only likely -- two shows can share
-    a short alias. Selection has to prefer the certain one.
+    There is only one kind of evidence: the indexer's ``subjectId`` *is* the
+    Bangumi id, so a tagged resource is certainly this show. Matching by title
+    was the alternative and is deliberately gone -- it could only ever be a
+    guess (two shows share a short alias, 简 and 繁 spellings of one name do not
+    contain each other), and a guess that lands on the wrong show files someone
+    else's episode into this library.
+
+    The cost is accepted: a resource the indexer left untagged is not this
+    show's as far as the subscription is concerned, however its title reads.
     """
 
     matched: bool
     reason: str | None = None
-    matched_by: str = MATCHED_BY_NOTHING
-
-    @property
-    def by_subject(self) -> bool:
-        return self.matched_by == MATCHED_BY_SUBJECT
 
 
 def resource_matches_subscription(resource: Any, rules: SubscriptionRules) -> SubscriptionMatch:
@@ -332,22 +306,16 @@ def resource_matches_subscription(resource: Any, rules: SubscriptionRules) -> Su
             False, f"资源类型不在允许列表: {resource_type or '未知'}"
         )
 
-    title = str(getattr(resource, "title", "") or "")
-    subject_ids = getattr(resource, "subject_ids", None)
-    matched_by = MATCHED_BY_TITLE
-    if rules.use_subject_id and subject_ids:
-        if rules.bangumi_id not in subject_ids:
-            return SubscriptionMatch(False, "Bangumi subject 不匹配")
-        matched_by = MATCHED_BY_SUBJECT
-    elif rules.use_subject_id and rules.bangumi_id:
-        names = [*known_names(rules), *rules.search_keywords]
-        names = [name.casefold() for name in names if len(name.strip()) >= 2]
-        if names and not any(name in title.casefold() for name in names):
-            return SubscriptionMatch(False, "标题未匹配番剧")
+    subject_ids = getattr(resource, "subject_ids", None) or ()
+    if not subject_ids:
+        return SubscriptionMatch(False, "资源未标记 Bangumi subject")
+    if not rules.bangumi_id or rules.bangumi_id not in subject_ids:
+        return SubscriptionMatch(False, "Bangumi subject 不匹配")
 
+    title = str(getattr(resource, "title", "") or "")
     if rules.search_keywords and not _contains_all(title, rules.search_keywords):
         return SubscriptionMatch(False, "未满足搜索关键词")
-    return SubscriptionMatch(True, None, matched_by)
+    return SubscriptionMatch(True, None)
 
 
 # Numbers that are not episode numbers: resolutions, encoder settings, audio
@@ -367,8 +335,17 @@ _TECHNICAL_NOISE = re.compile(
       (?:\s?x\d|\s?\d\.\d)?(?![a-z0-9])                     # AAC 2.0 / AACx2
     | \d\s?\.\s?\d\s?(?:ch|声道)                             # 5.1ch
     | (?<![a-z0-9])big5(?![a-z0-9])
-    | (?<![a-z0-9])v\d(?![a-z0-9])                          # v2 重发标记
-    | \d{4}\s?[-./年]\s?\d{1,2}(?:\s?[-./月]\s?\d{1,2})?      # 2026-08-20
+    | (?<![a-z])v\d(?![a-z0-9])                              # v2 重发标记
+                                                            # 数字可以紧贴在前: [02v2]
+    | (?:19|20)\d{2}\s?[-./年]\s?\d{1,2}
+      (?:\s?[-./月]\s?\d{1,2})?                              # 2026-08-20
+                                                            # 年份必须像年份: 裸 \d{4}
+                                                            # 会把 1158-1159 的前半当成日期,
+                                                            # 只剩 59 冒充集数
+    | (?<![a-z0-9])(?:19|20)\d{2}(?![a-z0-9])               # 制作年份 [2026]
+                                                            # 必须排在日期规则之后,
+                                                            # 否则 2026.08.16 只会被吃掉年份,
+                                                            # 剩下的 .08. 会被当成集数
     """,
     flags=re.IGNORECASE | re.VERBOSE,
 )
@@ -377,8 +354,8 @@ _TECHNICAL_NOISE = re.compile(
 # carry an explicit unit (``01-12话``). The spaced form is reserved for the
 # ``作品 S2 - 05`` separator, which is a single episode.
 _EPISODE_RANGE = re.compile(
-    r"(?<![a-z0-9])\d{1,3}\s?[-~～－]\s?\d{1,3}\s*(?:话|話|集|eps?)"
-    r"|(?<![a-z0-9])\d{1,3}[-~～－]\d{1,3}(?![a-z0-9])",
+    r"(?<![a-z0-9])\d{1,4}\s?[-~～－]\s?\d{1,4}\s*(?:话|話|集|eps?)"
+    r"|(?<![a-z0-9])\d{1,4}[-~～－]\d{1,4}(?![a-z0-9])",
     flags=re.IGNORECASE,
 )
 
@@ -621,26 +598,6 @@ def aired_episode_indices(
     return tuple(sorted(aired))
 
 
-def season_start(
-    air_date: datetime | date | str | None,
-    episodes: Iterable[EpisodeInfo] = (),
-) -> datetime | None:
-    """Earliest known broadcast time of the season.
-
-    The subject's own first-broadcast date can be later than its first episode
-    (specials, pre-air screenings), so the episode dates get a vote too.
-    """
-    values = [
-        value
-        for value in (
-            _as_datetime(air_date),
-            *(_as_datetime(episode.airdate) for episode in episodes),
-        )
-        if value is not None
-    ]
-    return min(values) if values else None
-
-
 def next_expected_episode(
     episodes: Iterable[EpisodeInfo],
     existing_indices: Iterable[int],
@@ -698,11 +655,22 @@ def _extract_episode_number(title: str, anime_name: str = "") -> tuple[float | N
     # Episode patterns run against the masked title so that ``1080p``,
     # ``10bit`` and ``AAC 2.0`` cannot be mistaken for episode numbers.
     masked = _strip_technical_noise(title)
+    # Counts run to four digits -- 海贼王 is past 1100, 小丸子 past 1500 -- which
+    # is only safe because ``_TECHNICAL_NOISE`` masks production years first:
+    # otherwise ``[2026][05]`` would read as episode 2026.
     patterns = (
-        r"(?:第|(?<![a-z0-9])ep?)\s*[-_. ]?\s*(\d{1,3}(?:\.\d+)?)(?!\d)",
-        r"[\[(]\s*-?\s*(\d{1,3}(?:\.\d+)?)\s*[\])]",
-        r"(?:&nbsp;\s*|^|[\s._])-\s*(\d{1,3}(?:\.\d+)?)(?!\d)",
-        r"(?:^|[\s._-])(\d{1,3}(?:\.\d+)?)(?:\s*(?:end|fin|完))?(?=$|[\s\]._()-])",
+        # ``(?![季期部])`` keeps 第4季 out: read as an episode it would not merely
+        # fail, it would hand episode 4's slot to season 4's file and leave the
+        # episode the title actually carries with nowhere to go.
+        r"(?:第|(?<![a-z0-9])ep?)\s*[-_. ]?\s*(\d{1,4}(?:\.\d+)?)(?!\d)(?![季期部])",
+        # Full-width brackets are what most Chinese groups actually ship: 【44】.
+        r"[\[(【（［]\s*-?\s*(\d{1,4}(?:\.\d+)?)\s*(?:end|fin|完结|完)?\s*[\])】）］]",
+        r"(?:&nbsp;\s*|^|[\s._])-\s*(\d{1,4}(?:\.\d+)?)(?!\d)",
+        r"(?:^|[\s._-])(\d{1,4}(?:\.\d+)?)(?:\s*(?:end|fin|完))?(?=$|[\s\]._()-])",
+        # Last resort: a count glued straight onto a Chinese title, the way the
+        # 搬运 reposts write it (``帝位之争07 1080P``). A hard terminator after
+        # the digits is required, so 第2季 and 全12集 cannot reach this pattern.
+        r"(?<=[\u4e00-\u9fff])(\d{1,4})(?=\s|$|[\[\]|｜])",
     )
     for pattern in patterns:
         for match in re.finditer(pattern, masked, flags=re.IGNORECASE):
@@ -818,14 +786,3 @@ def parse_episode_index(
         episode=chosen,
         season_number=season_number,
     )
-
-
-def merge_unique(values: Iterable[str]) -> tuple[str, ...]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        folded = value.casefold()
-        if value and folded not in seen:
-            seen.add(folded)
-            result.append(value)
-    return tuple(result)

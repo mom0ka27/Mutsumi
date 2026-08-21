@@ -46,6 +46,7 @@ post_install do |installer|
         ldflags = [ldflags] unless ldflags.is_a?(Array)
         ldflags << '-lc++' unless ldflags.include?('-lc++')
         config.build_settings['OTHER_LDFLAGS'] = ldflags
+        config.build_settings['ERIKA_FORCE_SOURCE_BUILD'] = '1'
       end
       # config.build_settings['ERIKA_PREBUILT'] = '1'
       # config.build_settings['ERIKA_PREBUILT_TAG'] = 'feat/http-headers'

@@ -16,10 +16,10 @@ from app.api.routes import subscriptions as routes_subscriptions
 from app.services.bangumi_service import SubjectInfo, _subject_from_json
 from app.services.subscription_engine import (
     EpisodeInfo,
+    _extract_episode_number,
     aired_episode_indices,
     derive_airing_status,
     evaluate_resource,
-    known_names,
     parse_episode_index,
     parse_title_attributes,
     profile_values,
@@ -323,7 +323,7 @@ async def test_targeted_check_does_not_and_the_anime_name_with_the_subject_id():
     await SubscriptionWorker(
         anime_garden=FakeAnimeGarden(),
         bangumi=FakeBangumi(),
-    )._fetch_targeted_resources(
+    )._fetch_subject_history(
         subscription,
         datetime.fromisoformat("2026-08-20T12:00:00"),
     )
@@ -617,6 +617,15 @@ async def test_an_empty_page_is_the_last_page():
     assert complete is True
 
 
+def _subject_subscription() -> SimpleNamespace:
+    """The minimum a fetch needs: a show with a Bangumi id to ask by."""
+    return SimpleNamespace(
+        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
+        search_keywords=[],
+        resource_types=["动画"],
+    )
+
+
 async def test_the_walk_runs_to_the_last_page_not_to_a_page_ceiling():
     seen: list[int] = []
 
@@ -630,8 +639,8 @@ async def test_the_walk_runs_to_the_last_page_not_to_a_page_ceiling():
     resources = await SubscriptionWorker(
         anime_garden=FakeAnimeGarden(),
         bangumi=FakeBangumi(),
-    )._fetch_global_resources(
-        datetime.fromisoformat("2026-08-13T12:00:00"),
+    )._fetch_subject_history(
+        _subject_subscription(),
         datetime.fromisoformat("2026-08-20T12:00:00"),
     )
 
@@ -651,436 +660,13 @@ async def test_a_feed_that_ignores_the_page_number_does_not_loop():
     await SubscriptionWorker(
         anime_garden=FakeAnimeGarden(),
         bangumi=FakeBangumi(),
-    )._fetch_global_resources(
-        datetime.fromisoformat("2026-08-13T12:00:00"),
+    )._fetch_subject_history(
+        _subject_subscription(),
         datetime.fromisoformat("2026-08-20T12:00:00"),
     )
 
     # The second page repeats the first, which is as good as the end of the feed.
     assert seen == [1, 2]
-
-
-async def test_the_walk_stops_once_every_aired_episode_is_covered():
-    pages = {
-        1: [
-            _feed_resource(3, "[ANi] Test Anime - 03 [简][1080p][avc]"),
-            _feed_resource(2, "[ANi] Test Anime - 02 [简][1080p][avc]"),
-        ],
-        2: [_feed_resource(1, "[ANi] Test Anime - 01 [简][1080p][avc]")],
-    }
-    seen: list[int] = []
-
-    class FakeAnimeGarden:
-        async def search_resources(self, *, page, **kwargs):
-            seen.append(page)
-            # Never complete: only the coverage check can end this walk.
-            return pages.get(page, [_feed_resource(90 + page, "[ANi] 别的作品 - 01 [简]")]), False
-
-    episodes = [
-        EpisodeInfo(ep=index, sort=index, airdate="2026-08-0%d" % index)
-        for index in (1, 2, 3)
-    ]
-
-    result = await SubscriptionWorker(
-        anime_garden=FakeAnimeGarden(),
-        bangumi=FakeBangumi(episodes),
-    ).preview(
-        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
-        profile=_PREVIEW_PROFILE,
-        draft=_PREVIEW_DRAFT,
-        now=datetime.fromisoformat("2026-08-20T12:00:00"),
-    )
-
-    assert seen == [1, 2]
-    assert result["matched_episodes"] == [1, 2, 3]
-    assert result["missing_episodes"] == []
-
-
-async def test_the_walk_keeps_paging_while_an_aired_episode_is_still_missing():
-    pages = {
-        1: [_feed_resource(3, "[ANi] Test Anime - 03 [简][1080p][avc]")],
-        2: [_feed_resource(2, "[ANi] Test Anime - 02 [简][1080p][avc]")],
-    }
-    seen: list[int] = []
-
-    class FakeAnimeGarden:
-        async def search_resources(self, *, page, **kwargs):
-            seen.append(page)
-            found = pages.get(page)
-            # Episode 1 is never published, so the walk can only end at the feed.
-            return (found, False) if found else ([], True)
-
-    episodes = [
-        EpisodeInfo(ep=index, sort=index, airdate="2026-08-0%d" % index)
-        for index in (1, 2, 3)
-    ]
-
-    result = await SubscriptionWorker(
-        anime_garden=FakeAnimeGarden(),
-        bangumi=FakeBangumi(episodes),
-    ).preview(
-        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
-        profile=_PREVIEW_PROFILE,
-        draft=_PREVIEW_DRAFT,
-        now=datetime.fromisoformat("2026-08-20T12:00:00"),
-    )
-
-    assert seen == [1, 2, 3]
-    assert result["missing_episodes"] == [1]
-
-
-def test_nothing_missing_means_no_early_stop_at_all():
-    # An empty target set would be trivially "covered" and would end the walk on
-    # page one -- and the whole point of walking on is to reach a release for an
-    # episode Bangumi has not listed or dated yet.
-    episodes = [EpisodeInfo(ep=1, sort=1, airdate="2026-08-01")]
-    rules = SubscriptionRules(bangumi_id=4242, anime_name="Test Anime", fansub="ANi")
-
-    assert (
-        worker_module._coverage_stop(
-            rules=rules,
-            values=profile_values(_PREVIEW_PROFILE),
-            episodes=episodes,
-            owned={1},
-            now=datetime.fromisoformat("2026-08-20T12:00:00"),
-        )
-        is None
-    )
-
-
-def test_coverage_ignores_releases_the_rules_would_throw_away():
-    episodes = [EpisodeInfo(ep=1, sort=1, airdate="2026-08-01")]
-    reached = worker_module._coverage_stop(
-        rules=SubscriptionRules(bangumi_id=4242, anime_name="Test Anime", fansub="ANi"),
-        values=profile_values(_PREVIEW_PROFILE),
-        episodes=episodes,
-        owned=set(),
-        now=datetime.fromisoformat("2026-08-20T12:00:00"),
-    )
-
-    # The locked group has not published it; another group's copy is not cover.
-    other = _feed_resource(1, "[Other] Test Anime - 01 [简][2160p][avc]", "Other")
-    assert reached({1: other}) is False
-    locked = _feed_resource(2, "[ANi] Test Anime - 01 [简][1080p][avc]")
-    assert reached({1: other, 2: locked}) is True
-
-
-@pytest.mark.parametrize(
-    ("air_date", "airdates", "expected"),
-    [
-        # Bangumi has no status field, so it is derived. An unaired show
-        # usually has no episode rows at all -- that case must not read as
-        # "finished" just because the episode list is empty.
-        ("2026-10-07", [], "unaired"),
-        ("2026-08-12", ["2026-08-12", "2026-09-30"], "airing"),
-        ("2023-09-29", ["2023-09-29", "2024-03-22"], "finished"),
-        ("2015-01-01", [], "finished"),
-        ("", ["2024-03-22"], "finished"),
-        ("", [], "unknown"),
-    ],
-)
-def test_airing_status_is_derived_from_dates(air_date, airdates, expected):
-    episodes = [
-        EpisodeInfo(ep=index + 1, sort=index + 1, airdate=value)
-        for index, value in enumerate(airdates)
-    ]
-
-    status = derive_airing_status(
-        air_date,
-        episodes,
-        now=datetime.fromisoformat("2026-08-21T12:00:00"),
-    )
-
-    assert status == expected
-
-
-def test_missing_episode_table_defers_instead_of_needing_review():
-    result = parse_episode_index(
-        "[ANi] 作品 - 01 [1080p]",
-        [],
-        datetime.fromisoformat("2026-08-20T12:00:00"),
-    )
-
-    assert result.index is None
-    assert result.deferred is True
-    assert "尚无集数表" in result.reason
-
-
-async def test_deferred_rows_rejoin_the_pool_once_bangumi_publishes_episodes():
-    row = worker_module.SubscriptionEpisode(
-        subscription_id=1,
-        episode_index=None,
-        resource_id=5,
-        resource_title="[ANi] 作品 - 01 [1080p]",
-        score=0.9,
-        attributes={"created_at": "2026-08-20T10:00:00"},
-        state="deferred",
-        first_seen_at=datetime.fromisoformat("2026-08-20T10:00:00"),
-    )
-
-    class FakeSession:
-        async def scalars(self, *_args, **_kwargs):
-            return [row]
-
-    await SubscriptionWorker()._retry_deferred(
-        FakeSession(),
-        Subscription(id=1, episode_offset_override=None),
-        [EpisodeInfo(ep=1, sort=1, name_cn="第一集", airdate="2026-08-19")],
-        Anime(id=1, bangumi_id=4242, name="作品"),
-    )
-
-    assert row.state == "candidate"
-    assert row.episode_index == 1
-    # The waiting window must not restart just because the row was deferred.
-    assert row.first_seen_at == datetime.fromisoformat("2026-08-20T10:00:00")
-
-
-async def test_subscribing_creates_a_placeholder_that_is_not_library_content(
-    client,
-    auth_headers,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        routes_subscriptions,
-        "BangumiService",
-        lambda: _FakeBangumiSubjects(),
-    )
-    user_headers = await auth_headers(PermissionGroup.USER)
-
-    created = client.post(
-        "/api/v1/subscriptions",
-        json={"bangumi_id": 4242, "fansub": "ANi"},
-        headers=user_headers,
-    )
-    assert created.status_code == 201, created.text
-    subscription = created.json()
-    assert subscription["anime_name_cn"] == "占位番剧"
-    assert subscription["bangumi_id"] == 4242
-    # The home section needs an expected date right away, not after a sweep.
-    assert subscription["next_episode_index"] == 1
-    assert subscription["next_episode_air_date"].startswith("2026-08-12")
-    assert subscription["episode_count"] == 12
-    assert subscription["owned_episode_count"] == 0
-    assert subscription["needs_review_count"] == 0
-
-    # Reachable by id, and through the subscription list...
-    detail = client.get(
-        f"/api/v1/anime/{subscription['anime_id']}", headers=user_headers
-    )
-    assert detail.status_code == 200
-    assert detail.json()["episode_count"] == 12
-    # ...but not library content, so it never shows up as an empty card,
-    # nor as a zero-byte row on the storage page.
-    library = client.get("/api/v1/anime", headers=user_headers)
-    assert library.status_code == 200
-    assert library.json() == []
-    storage = client.get(
-        "/api/v1/storage", headers=await auth_headers(PermissionGroup.ADMIN)
-    )
-    assert storage.status_code == 200, storage.text
-    assert storage.json()["anime"] == []
-
-    removed = client.delete(
-        f"/api/v1/subscriptions/{subscription['id']}", headers=user_headers
-    )
-    assert removed.status_code == 204
-    assert (
-        client.get(
-            f"/api/v1/anime/{subscription['anime_id']}", headers=user_headers
-        ).status_code
-        == 404
-    )
-
-
-async def test_download_after_subscribing_merges_into_the_placeholder(
-    client,
-    auth_headers,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        routes_subscriptions,
-        "BangumiService",
-        lambda: _FakeBangumiSubjects(),
-    )
-    user_headers = await auth_headers(PermissionGroup.USER)
-    created = client.post(
-        "/api/v1/subscriptions",
-        json={"bangumi_id": 4242, "fansub": "ANi"},
-        headers=user_headers,
-    )
-    assert created.status_code == 201, created.text
-    anime_id = created.json()["anime_id"]
-
-    # The manual download flow posts the whole subject again. A 409 here would
-    # abort a perfectly valid download.
-    merged = client.post(
-        "/api/v1/anime",
-        json={
-            "bangumi_id": 4242,
-            "name": "Placeholder",
-            "name_cn": "占位番剧",
-            "download_hash": "b" * 40,
-            "episodes": [{"index": 1, "name": "第一集", "filename": "01.mkv"}],
-        },
-        headers=user_headers,
-    )
-    assert merged.status_code == 201, merged.text
-    assert merged.json()["id"] == anime_id
-    assert [episode["index"] for episode in merged.json()["episodes"]] == [1]
-
-    # Now it has a file, so it is library content.
-    library = client.get("/api/v1/anime", headers=user_headers)
-    assert [item["id"] for item in library.json()] == [anime_id]
-
-    # And cancelling the subscription must leave the downloaded anime alone.
-    subscription_id = created.json()["id"]
-    assert (
-        client.delete(
-            f"/api/v1/subscriptions/{subscription_id}", headers=user_headers
-        ).status_code
-        == 204
-    )
-    assert (
-        client.get(f"/api/v1/anime/{anime_id}", headers=user_headers).status_code == 200
-    )
-
-
-def test_aliases_are_read_from_both_infobox_shapes():
-    subject = _subject_from_json(
-        {
-            "id": 4242,
-            "name": "Official Name",
-            "infobox": [
-                {"key": "别名", "value": [{"v": "中文别名"}, {"v": "Nickname"}]},
-                # A lone alias arrives as a plain string, not a list.
-                {"key": "別名", "value": "繁體別名"},
-                # Case-insensitive dedupe, and one-character noise dropped.
-                {"key": "别名", "value": [{"v": "nickname"}, {"v": "X"}]},
-                {"key": "话数", "value": "12"},
-            ],
-        }
-    )
-
-    assert subject.aliases == ["中文别名", "Nickname", "繁體別名"]
-    # The flat infobox is unchanged: string rows kept, list rows still dropped.
-    assert subject.infobox == [
-        {"key": "別名", "value": "繁體別名"},
-        {"key": "话数", "value": "12"},
-    ]
-
-
-def test_known_names_put_the_chinese_name_first_and_drop_duplicates():
-    rules = SubscriptionRules(
-        bangumi_id=4242,
-        anime_name="Official Name",
-        anime_name_cn="中文名",
-        aliases=("中文名", "俗称"),
-    )
-
-    assert known_names(rules) == ("中文名", "Official Name", "俗称")
-
-
-def test_a_release_titled_with_only_an_alias_still_matches():
-    rules = SubscriptionRules(
-        bangumi_id=4242,
-        anime_name="Official Name",
-        anime_name_cn="中文名",
-        aliases=("俗称",),
-    )
-    untagged = SimpleNamespace(
-        type="动画",
-        title="[ANi] 俗称 - 03 [1080p][简日]",
-        subject_ids=frozenset(),
-    )
-
-    matched = resource_matches_subscription(untagged, rules)
-    assert matched.matched is True
-    # Likely, not proven: an untagged release is only ever a title match, and
-    # loses to a subject-tagged candidate for the same episode.
-    assert matched.by_subject is False
-
-    tagged = resource_matches_subscription(
-        SimpleNamespace(type="动画", title="[ANi] 谁认得出这名字", subject_ids=frozenset({4242})),
-        rules,
-    )
-    assert tagged.matched is True
-    assert tagged.by_subject is True
-
-    rejected = resource_matches_subscription(
-        SimpleNamespace(type="动画", title="[ANi] 别的番 - 03", subject_ids=frozenset()),
-        rules,
-    )
-    assert (rejected.matched, rejected.reason) == (False, "标题未匹配番剧")
-
-
-async def test_a_subject_tagged_candidate_beats_a_better_scoring_title_match():
-    def resource(resource_id: int, title: str, tagged: bool) -> AnimeGardenResource:
-        return AnimeGardenResource(
-            id=resource_id,
-            provider="test",
-            provider_id=str(resource_id),
-            title=title,
-            type="动画",
-            magnet=f"magnet:?xt=urn:btih:{resource_id}",
-            tracker="",
-            size=100,
-            fansub_name="ANi",
-            publisher_name="",
-            created_at=datetime.fromisoformat("2026-08-19T01:00:00"),
-            subject_ids=frozenset({4242}) if tagged else frozenset(),
-        )
-
-    class FakeAnimeGarden:
-        async def search_resources(self, **kwargs):
-            return [
-                resource(1, "[ANi] Test Anime - 01 [简][1080p][AVC]", True),
-                # Scores higher on resolution, but nothing proves it is this
-                # show -- the title merely contains the name.
-                resource(2, "[ANi] Test Anime - 01 [简][2160p][AVC]", False),
-            ], True
-
-    class FakeBangumi:
-        async def get_episodes(self, subject_id):
-            return [EpisodeInfo(ep=1, sort=1, airdate="2026-08-19")]
-
-        async def get_subject(self, subject_id):
-            return None
-
-    result = await SubscriptionWorker(
-        anime_garden=FakeAnimeGarden(),
-        bangumi=FakeBangumi(),
-    ).preview(
-        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
-        profile=PreferenceProfile(
-            name="默认",
-            is_default=True,
-            language_mode="简",
-            language_unknown="accept",
-            prefer_resolution=["2160p", "1080p"],
-            prefer_codec=["avc"],
-            prefer_subtitle=["简", "繁", "日", "无"],
-            prefer_bitdepth=["10bit", "8bit"],
-            weights={"fansub": 45, "resolution": 22, "codec": 15, "subtitle": 12, "bitdepth": 6},
-        ),
-        draft=SimpleNamespace(
-            fansub="ANi",
-            allow_no_fansub=False,
-            search_keywords=[],
-            must_include=[],
-            exclude_keywords=[],
-            use_subject_id=True,
-            resource_types=["动画"],
-            profile_overrides=None,
-            episode_offset_override=None,
-        ),
-        now=datetime.fromisoformat("2026-08-20T12:00:00"),
-    )
-
-    rows = {row["resource_id"]: row for row in result["candidates"]}
-    assert rows[2]["score"] > rows[1]["score"]
-    assert rows[1]["selected"] is True
-    assert rows[2]["selected"] is False
-    assert rows[2]["reason"] == "同集有 Bangumi subject 命中的候选"
 
 
 async def test_the_subject_id_is_asked_by_itself_without_any_name():
@@ -1106,7 +692,7 @@ async def test_the_subject_id_is_asked_by_itself_without_any_name():
         resource_types=["动画"],
     )
 
-    await SubscriptionWorker(anime_garden=FakeAnimeGarden())._fetch_targeted_resources(
+    await SubscriptionWorker(anime_garden=FakeAnimeGarden())._fetch_subject_history(
         subscription,
         datetime.fromisoformat("2026-09-03T12:00:00"),
     )
@@ -1116,68 +702,6 @@ async def test_the_subject_id_is_asked_by_itself_without_any_name():
     assert len(calls) == 1
     assert calls[0]["subjects"] == (4242,)
     assert calls[0]["search"] == ()
-
-
-async def test_no_subject_to_ask_by_pulls_the_window_instead_of_guessing_names():
-    calls: list[dict] = []
-
-    class FakeAnimeGarden:
-        async def search_resources(self, **kwargs):
-            calls.append(kwargs)
-            return [_episode_resource(1, 1, "2026-08-01")], True
-
-    subscription = SimpleNamespace(
-        anime=Anime(
-            id=1,
-            bangumi_id=4242,
-            name="Official Name",
-            name_cn="中文名",
-            aliases=["俗称"],
-        ),
-        cursor_at=None,
-        backfill_after=None,
-        search_keywords=[],
-        use_subject_id=False,
-        resource_types=["动画"],
-    )
-
-    resources = await SubscriptionWorker(
-        anime_garden=FakeAnimeGarden(),
-        bangumi=FakeBangumi(),
-    )._fetch_targeted_resources(
-        subscription,
-        datetime.fromisoformat("2026-09-03T12:00:00"),
-    )
-
-    # One unfiltered window, matched locally -- the same path the global sweep
-    # takes. Names identify the show during matching; they never fetch it, so a
-    # per-alias ``search`` fan-out is not the fallback for a missing subject id.
-    assert len(calls) == 1
-    assert calls[0]["subjects"] == ()
-    assert calls[0]["search"] == ()
-    assert [resource.id for resource in resources] == [1]
-
-
-async def test_aliases_are_fetched_once_and_then_kept_on_the_row():
-    fetches: list[int] = []
-
-    class FakeBangumi:
-        async def get_subject(self, subject_id):
-            fetches.append(subject_id)
-            return SubjectInfo(
-                bangumi_id=subject_id,
-                name="Official Name",
-                aliases=["别称一", "别称二"],
-            )
-
-    anime = Anime(id=1, bangumi_id=4242, name="Official Name", aliases=[])
-    worker = SubscriptionWorker(bangumi=FakeBangumi())
-
-    assert await worker._ensure_aliases(anime) == ("别称一", "别称二")
-    assert anime.aliases == ["别称一", "别称二"]
-    # Cached on the row, so a sweep over many subscriptions does not refetch.
-    assert await worker._ensure_aliases(anime) == ("别称一", "别称二")
-    assert fetches == [4242]
 
 
 @pytest.mark.parametrize(
@@ -1290,12 +814,13 @@ async def test_preview_reports_the_aired_season_and_the_episodes_rules_miss():
     # The whole reason the editor shows this: "no candidate for episode 5" and
     # "episode 6 has not aired" are different answers.
     assert result["missing_episodes"] == [5]
-    # ``backfill_aired`` has to reach past the cold-start window, or a
-    # mid-season preview would only ever see the last few days.
-    assert calls[0]["after"] <= datetime.fromisoformat("2026-07-31T00:00:00")
+    # No window at all, exactly as a real check fetches. A preview reading a
+    # narrower window than the worker would promise less than the worker finds,
+    # which is the drift this module exists to avoid.
+    assert calls[0]["after"] is None
 
 
-async def test_first_check_prefers_the_backfill_window_over_the_cursor():
+async def test_a_subject_query_asks_for_the_whole_history_not_a_window():
     calls: list[dict] = []
 
     class FakeAnimeGarden:
@@ -1312,12 +837,20 @@ async def test_first_check_prefers_the_backfill_window_over_the_cursor():
         resource_types=["动画"],
     )
 
-    await SubscriptionWorker(anime_garden=FakeAnimeGarden())._fetch_targeted_resources(
+    await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_subject_history(
         subscription,
         datetime.fromisoformat("2026-09-03T12:00:00"),
     )
 
-    assert calls[0]["after"] == datetime.fromisoformat("2026-07-31T00:00:00")
+    # Upstream's ``after`` filters on publish time, but the index frequently
+    # only learns of a release weeks later -- such a release is born behind any
+    # cursor and no window can bring it back. A subject query needs none: it
+    # answers with the show's entire history in one complete page. This is what
+    # the backfill window was reaching for, and it supersedes it.
+    assert calls[0]["after"] is None
 
 
 async def test_subscribing_queues_the_first_check_instead_of_waiting_for_a_sweep(
@@ -1349,10 +882,9 @@ async def test_subscribing_queues_the_first_check_instead_of_waiting_for_a_sweep
     # Following a show is a request to fetch it: the download must not wait up
     # to a full sweep interval.
     assert queued == [subscription["id"]]
-    # And the queued check has a window that covers the episodes already aired.
-    assert datetime.fromisoformat(
-        subscription["backfill_after"]
-    ) <= datetime.fromisoformat("2026-08-11T00:00:00")
+    # And it needs no catch-up window to reach the episodes already aired: the
+    # check reads the show's whole history either way.
+    assert subscription["backfill_after"] is None
 
 
 class _FakeBangumiSubjects:
@@ -1376,3 +908,137 @@ class _FakeBangumiSubjects:
             )
             for index in range(1, 13)
         ]
+
+
+async def test_a_second_query_is_not_abandoned_over_its_overlap_with_the_first():
+    seen: list[tuple[tuple[int, ...], int]] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, *, page, subjects=(), **kwargs):
+            seen.append((tuple(subjects), page))
+            if tuple(subjects) == (1,):
+                return [_feed_resource(1, "[ANi] 作品 - 01 [简][1080p]")], True
+            if page == 1:
+                # The very release the first query already contributed.
+                return [_feed_resource(1, "[ANi] 作品 - 01 [简][1080p]")], False
+            return [_feed_resource(2, "[ANi] 作品 - 02 [简][1080p]")], True
+
+    resources = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_resources(
+        after=datetime.fromisoformat("2026-08-13T12:00:00"),
+        before=datetime.fromisoformat("2026-08-20T12:00:00"),
+        queries=(
+            worker_module._Query(subjects=(1,)),
+            worker_module._Query(subjects=(2,)),
+        ),
+    )
+
+    # Overlap between queries is ordinary -- one release is indexed under more
+    # than one subject -- and must not read as "this query has no more pages".
+    assert [page for subjects, page in seen if subjects == (2,)] == [1, 2]
+    assert {resource.id for resource in resources} == {1, 2}
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    (
+        # A v2 re-release glues the version straight onto the count.
+        ("[绿茶字幕组] 无职转生 第三季 / Mushoku Tensei S3 [02v2][WebRip][1080p][简繁日内封]", 2),
+        # Full-width brackets are what many Chinese groups actually ship.
+        ("【极影字幕社】 ★7月新番【死神 千年血战 祸进谭】【Bleach】【44】GB MP4_720P", 44),
+        # 搬运 reposts write the count against the title with no separator.
+        ("[搬运][Erai-raws]最强废渣王子暗中活跃于帝位之争07 1080P 简繁中字", 7),
+        # Long runners are well past three digits.
+        ("[Skymoon-Raws][One Piece 海賊王][1174][ViuTV][WEB-RIP][CHT][1080p][MKV]", 1174),
+        # The end marker sits inside the brackets, ahead of the closer.
+        ("[GM-Team][国漫][神墓 第3季][Tomb of Fallen Gods Ⅲ][2025][52 END][GB][4K HEVC 10Bit]", 52),
+        # 第2季 is a season. Read as episode 2 it did worse than fail: every
+        # episode of the season claimed episode 2's slot, and the episode the
+        # title really carries was never recorded at all.
+        ("[GM-Team][国漫][逆天邪神 第2季][Against the Gods Ⅱ][2026][20][HEVC][GB][4K]", 20),
+        ("[黒ネズミたち] 一人之下 第6季 / The Outcast 6 - 26 (CR 2600x1080 AVC AAC MKV)", 26),
+        # A production year is not an episode number.
+        ("[GM-Team][国漫][记忆管理局][The Memory Bureau][2026][03][AVC][GB][1080P]", 3),
+    ),
+)
+def test_real_world_title_forms_yield_their_episode_number(title, expected):
+    assert _extract_episode_number(title)[0] == expected
+
+
+@pytest.mark.parametrize(
+    "title",
+    (
+        # Four-digit batches. ``1158-1159`` used to lose its front half to the
+        # date rule -- "year 1158, month 11" -- and pass the leftover 59 off as
+        # an episode number.
+        "[OPFans楓雪動漫][ONE PIECE 海賊王][第23季][1158-1159][1080P][MP4][周日版]",
+        "[咪路fans制作组]蜡笔小新 Crayonshinchan [1338-1343][1080P][GB][MP4]",
+        "[愛戀字幕社][7月新番][奇招百出的維多利亞][01-05][1080P][MP4][BIG5][繁中]",
+    ),
+)
+def test_multi_episode_batches_are_not_passed_off_as_one_episode(title):
+    number, _, reason = _extract_episode_number(title)
+    assert number is None
+    assert reason == "集数区间资源"
+
+
+def test_a_broadcast_date_is_still_not_read_as_an_episode_number():
+    # 1543 is the episode; neither the 08 nor the 16 of the date may win.
+    assert _extract_episode_number(
+        "[丸子家族][樱桃小丸子第二期(Chibi Maruko-chan II)][1543]"
+        "户川老师做暑假作业[2026.08.16][GB][1080P][MP4]"
+    )[0] == 1543
+
+
+async def test_the_subject_history_is_fetched_without_a_window_or_an_early_stop():
+    calls: list[dict] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            calls.append(kwargs)
+            return [_feed_resource(1, "[ANi] 作品 - 01 [简][1080p]")], True
+
+    subscription = SimpleNamespace(
+        anime=Anime(id=1, bangumi_id=4242, name="作品", name_cn="作品"),
+        cursor_at=datetime.fromisoformat("2026-09-01T00:00:00"),
+        backfill_after=None,
+        search_keywords=[],
+        use_subject_id=True,
+        resource_types=["动画"],
+    )
+
+    resources = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_subject_history(
+        subscription,
+        datetime.fromisoformat("2026-09-03T12:00:00"),
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["after"] is None
+    assert calls[0]["subjects"] == (4242,)
+    assert [resource.id for resource in resources] == [1]
+
+
+async def test_no_subject_to_ask_by_means_no_history_request_at_all():
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            raise AssertionError("nothing to ask by, so nothing should be asked")
+
+    subscription = SimpleNamespace(
+        anime=Anime(id=1, bangumi_id=0, name="作品", name_cn="作品"),
+        cursor_at=None,
+        backfill_after=None,
+        search_keywords=[],
+        resource_types=["动画"],
+    )
+
+    assert await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    )._fetch_subject_history(
+        subscription, datetime.fromisoformat("2026-09-03T12:00:00")
+    ) == []

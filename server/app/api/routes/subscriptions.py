@@ -38,7 +38,6 @@ from app.services.bangumi_service import BangumiService
 from app.services.subscription_engine import EpisodeInfo, next_expected_episode
 from app.services.subscription_worker import (
     SubscriptionWorker,
-    backfill_window_start,
     request_initial_check,
 )
 
@@ -183,11 +182,6 @@ async def create_subscription(
         anime_id=anime.id,
         profile_id=profile.id,
         created_by=current_user.id,
-        backfill_after=(
-            backfill_window_start(anime.air_date, episodes)
-            if payload.backfill_aired
-            else None
-        ),
     )
     # Seeded here as well as in the worker: waiting up to a full sweep interval
     # would leave the new subscription with no expected date to show.
