@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 import logging
 from pathlib import Path
 import random
-from typing import Any
+from typing import Any, Iterable
 
 import httpx
 from sqlalchemy import select
@@ -28,11 +28,13 @@ from app.services.subscription_engine import (
     EpisodeParseResult,
     ProfileValues,
     ResourceEvaluation,
+    aired_episode_indices,
     evaluate_resource,
     next_expected_episode,
     parse_episode_index,
     profile_values,
     resource_matches_subscription,
+    season_start,
     subscription_rules,
 )
 from app.services.storage_service import VIDEO_EXTENSIONS
@@ -88,6 +90,7 @@ class SubscriptionWorker:
                 )
                 subscription.last_checked_at = current_time
                 subscription.last_error = None
+                subscription.backfill_after = None
                 if found:
                     subscription.last_found_at = current_time
                 if resources:
@@ -96,6 +99,37 @@ class SubscriptionWorker:
                         subscription.cursor_at = latest
                 await session.commit()
                 return processed, found
+
+    async def run_initial_check(self, subscription_id: int) -> None:
+        """The first pass over a brand-new subscription.
+
+        Nobody is waiting on the result, so a failure is recorded on the row
+        instead of raised: an unreported failure here is exactly what leaves a
+        card sitting at 等待资源 with no explanation.
+        """
+        try:
+            processed, found = await self.check_subscription(subscription_id)
+        except LookupError:
+            return  # Unsubscribed again before the loop got to it.
+        except Exception as error:
+            logger.exception("Initial subscription check failed id=%s", subscription_id)
+            await self._record_error(subscription_id, error)
+            return
+        logger.info(
+            "Initial subscription check done id=%s processed=%s found=%s",
+            subscription_id,
+            processed,
+            found,
+        )
+
+    async def _record_error(self, subscription_id: int, error: Exception) -> None:
+        async with self.session_factory() as session:
+            subscription = await session.get(Subscription, subscription_id)
+            if subscription is None:
+                return
+            subscription.last_error = str(error)
+            subscription.last_checked_at = _utcnow()
+            await session.commit()
 
     async def preview(
         self,
@@ -108,18 +142,26 @@ class SubscriptionWorker:
         current_time = now or _utcnow()
         if not anime.name and not anime.id:
             # A draft for a show with no library row: fill the transient Anime
-            # so season inference and title fallback matching behave as they
-            # will once the subscription exists.
+            # so season inference, the backfill window, and title fallback
+            # matching behave as they will once the subscription exists.
             subject = await self.bangumi.get_subject(anime.bangumi_id)
             if subject is not None:
                 anime.name = subject.name
                 anime.name_cn = subject.name_cn
                 anime.episode_count = subject.episode_count
-        resources = await self._fetch_draft_resources(anime, draft, current_time)
+                anime.air_date = subject.air_date
         episodes = await self.bangumi.get_episodes(anime.bangumi_id)
+        resources = await self._fetch_draft_resources(
+            anime,
+            draft,
+            current_time,
+            episodes,
+        )
         rules = subscription_rules(draft, anime)
         values = profile_values(profile, getattr(draft, "profile_overrides", None))
-        existing_indices = {episode.index for episode in anime.episodes}
+        existing_indices = {
+            episode.index for episode in anime.episodes if episode.index is not None
+        }
         rows: list[dict[str, Any]] = []
         accepted_count = 0
         selected_by_episode: dict[int, tuple[float, int]] = {}
@@ -193,11 +235,28 @@ class SubscriptionWorker:
                 -row["score"],
             )
         )
+        # What the editor shows before anything is saved: how much of the season
+        # has aired, and which of those episodes these rules actually cover.
+        # "Nothing matched" and "nothing aired yet" look identical without it.
+        aired = aired_episode_indices(episodes, current_time)
+        matched = sorted(selected_by_episode)
+        indexed_episodes = [
+            episode for episode in episodes if episode.index is not None
+        ]
         return {
             "anime_id": anime.id,
             "bangumi_id": anime.bangumi_id,
             "resource_count": len(resources),
             "accepted_count": accepted_count,
+            "episode_count": len(indexed_episodes) or int(anime.episode_count or 0),
+            "aired_episode_count": len(aired),
+            "owned_episode_count": len(existing_indices),
+            "matched_episodes": matched,
+            "missing_episodes": [
+                index
+                for index in aired
+                if index not in existing_indices and index not in selected_by_episode
+            ],
             "candidates": rows,
         }
 
@@ -320,7 +379,16 @@ class SubscriptionWorker:
         now: datetime,
     ) -> list[AnimeGardenResource]:
         anime = subscription.anime
-        after = subscription.cursor_at or now - timedelta(days=_config_int("cold_start_days", 7))
+        # A pending backfill always wins: it is the older window, and the whole
+        # point of the first check on a mid-season subscription is to reach past
+        # the cold-start days into the episodes already broadcast.
+        backfill_after = getattr(subscription, "backfill_after", None)
+        if backfill_after is not None:
+            after = _naive_utc(backfill_after)
+        else:
+            after = subscription.cursor_at or now - timedelta(
+                days=_config_int("cold_start_days", 7)
+            )
         subjects = _subjects_for(anime, subscription.use_subject_id)
         # ``subjects`` and ``search`` are ANDed upstream, and resource titles
         # rarely carry the full Bangumi name, so the name is only a fallback for
@@ -355,13 +423,14 @@ class SubscriptionWorker:
         anime: Anime,
         draft: Any,
         now: datetime,
+        episodes: list[Any] = (),
     ) -> list[AnimeGardenResource]:
         subjects = _subjects_for(anime, getattr(draft, "use_subject_id", True))
         search = tuple(getattr(draft, "search_keywords", None) or ())
         if not search and not subjects:
             search = (anime.name,)
         return await self._fetch_resources(
-            after=now - timedelta(days=_config_int("cold_start_days", 7)),
+            after=_draft_window_start(anime, draft, episodes, now),
             before=now,
             subjects=subjects,
             search=search,
@@ -797,6 +866,42 @@ async def _load_subscription(
     )
 
 
+def backfill_window_start(
+    air_date: datetime | date | str | None,
+    episodes: Iterable[Any] = (),
+    now: datetime | None = None,
+) -> datetime:
+    """The oldest point a whole-season catch-up has to reach.
+
+    Shared by the editor preview and the first real check, so that what the
+    preview promised is what the worker then goes and fetches. The extra day
+    covers releases that land slightly ahead of the listed broadcast time.
+    """
+    current = now or _utcnow()
+    cold_start = current - timedelta(days=_config_int("cold_start_days", 7))
+    start = season_start(air_date, episodes)
+    if start is None:
+        return cold_start
+    return min(cold_start, start - timedelta(days=1))
+
+
+def _draft_window_start(
+    anime: Anime,
+    draft: Any,
+    episodes: Iterable[Any],
+    now: datetime,
+) -> datetime:
+    """How far back a preview looks.
+
+    With ``backfill_aired`` on it has to span the whole broadcast season: the
+    cold-start window would answer "no resources" for exactly the mid-season
+    case the switch exists for.
+    """
+    if not getattr(draft, "backfill_aired", False):
+        return now - timedelta(days=_config_int("cold_start_days", 7))
+    return backfill_window_start(getattr(anime, "air_date", None), episodes, now)
+
+
 def _subjects_for(anime: Anime | None, use_subject_id: bool) -> tuple[int, ...]:
     bangumi_id = int(getattr(anime, "bangumi_id", 0) or 0) if anime else 0
     return (bangumi_id,) if use_subject_id and bangumi_id else ()
@@ -862,18 +967,51 @@ def _config_bool(key: str, default: bool) -> bool:
     return bool(value)
 
 
+def request_initial_check(subscription_id: int) -> None:
+    """Ask the worker loop to check a just-created subscription now.
+
+    Queued for the loop rather than run inline: the sweep lock serialises feed
+    access, so a user adding several shows in a row must not fan out into
+    parallel sweeps, and the create request must not wait on torrent metadata.
+    """
+    _pending_initial_checks.add(subscription_id)
+    _wakeup.set()
+
+
+_pending_initial_checks: set[int] = set()
+_wakeup = asyncio.Event()
+
+
+async def _wait_for_work(timeout: float) -> tuple[int, ...]:
+    """Sleep until the next sweep is due, or until a new subscription arrives."""
+    try:
+        await asyncio.wait_for(_wakeup.wait(), timeout=max(0.0, timeout))
+    except TimeoutError:
+        return ()
+    _wakeup.clear()
+    pending = tuple(sorted(_pending_initial_checks))
+    _pending_initial_checks.clear()
+    return pending
+
+
+def _sweep_interval(*, first_run: bool = False) -> float:
+    interval = max(1, _config_int("interval_minutes", 15)) * 60
+    spread = min(60, interval if first_run else interval / 10)
+    return interval + random.uniform(0, spread)
+
+
 async def subscription_worker_loop(worker: SubscriptionWorker | None = None) -> None:
     worker = worker or SubscriptionWorker()
-    interval_minutes = max(1, _config_int("interval_minutes", 15))
-    first_run = True
+    deadline = asyncio.get_running_loop().time() + _sweep_interval(first_run=True)
     while True:
-        interval = interval_minutes * 60
-        if first_run:
-            first_run = False
-            interval += random.uniform(0, min(60, interval))
-        else:
-            interval += random.uniform(0, min(60, interval / 10))
-        await asyncio.sleep(interval)
+        pending = await _wait_for_work(deadline - asyncio.get_running_loop().time())
+        if pending:
+            # An early wake-up serves the new subscriptions only; the scheduled
+            # sweep keeps its own deadline so adding shows cannot starve it.
+            for subscription_id in pending:
+                await worker.run_initial_check(subscription_id)
+            continue
+        deadline = asyncio.get_running_loop().time() + _sweep_interval()
         try:
             result = await worker.run_sweep()
             logger.info("Subscription sweep finished: %s", result)

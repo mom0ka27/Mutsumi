@@ -517,6 +517,50 @@ def derive_airing_status(
     return FINISHED if max(airdates) <= current else AIRING
 
 
+def aired_episode_indices(
+    episodes: Iterable[EpisodeInfo],
+    now: datetime | None = None,
+) -> tuple[int, ...]:
+    """Episode indices already broadcast, earliest first.
+
+    An episode without a date counts as aired only when the whole season lacks
+    dates -- old subjects commonly carry none, whereas a season that dates every
+    episode it has published means a missing date is a future episode.
+    """
+    current = now or datetime.now(UTC).replace(tzinfo=None)
+    indexed = [episode for episode in episodes if episode.index is not None]
+    dated = any(_as_datetime(episode.airdate) is not None for episode in indexed)
+    aired: set[int] = set()
+    for episode in indexed:
+        airdate = _as_datetime(episode.airdate)
+        if airdate is None:
+            if not dated:
+                aired.add(episode.index)  # type: ignore[arg-type]
+        elif airdate <= current:
+            aired.add(episode.index)  # type: ignore[arg-type]
+    return tuple(sorted(aired))
+
+
+def season_start(
+    air_date: datetime | date | str | None,
+    episodes: Iterable[EpisodeInfo] = (),
+) -> datetime | None:
+    """Earliest known broadcast time of the season.
+
+    The subject's own first-broadcast date can be later than its first episode
+    (specials, pre-air screenings), so the episode dates get a vote too.
+    """
+    values = [
+        value
+        for value in (
+            _as_datetime(air_date),
+            *(_as_datetime(episode.airdate) for episode in episodes),
+        )
+        if value is not None
+    ]
+    return min(values) if values else None
+
+
 def next_expected_episode(
     episodes: Iterable[EpisodeInfo],
     existing_indices: Iterable[int],

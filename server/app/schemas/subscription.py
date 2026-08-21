@@ -186,6 +186,14 @@ class SubscriptionPreviewRead(BaseModel):
     bangumi_id: int
     resource_count: int
     accepted_count: int
+    # The season as it stands, so the editor can say what following this show
+    # will actually fetch. Without these, "no candidates" reads the same whether
+    # the rules matched nothing or nothing has aired yet.
+    episode_count: int = 0
+    aired_episode_count: int = 0
+    owned_episode_count: int = 0
+    matched_episodes: list[int] = Field(default_factory=list)
+    missing_episodes: list[int] = Field(default_factory=list)
     candidates: list[SubscriptionPreviewCandidateRead]
 
 

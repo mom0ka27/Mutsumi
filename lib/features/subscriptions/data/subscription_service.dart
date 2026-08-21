@@ -104,16 +104,22 @@ class SubscriptionService {
     required int profileId,
     required List<String> fansubs,
     required bool allowNoFansub,
+    bool backfillAired = false,
   }) async {
     return _request('预览追番规则', () async {
       final response = await _serverClient.dio.post<Map<String, dynamic>>(
         '$subscriptionsApiPath/preview',
-        data: _subscriptionPayload(
-          bangumiId: bangumiId,
-          profileId: profileId,
-          fansubs: fansubs,
-          allowNoFansub: allowNoFansub,
-        ),
+        data: {
+          ..._subscriptionPayload(
+            bangumiId: bangumiId,
+            profileId: profileId,
+            fansubs: fansubs,
+            allowNoFansub: allowNoFansub,
+          ),
+          // Widens the preview window to the whole broadcast season, so it
+          // reports the same episodes the first check will go and fetch.
+          'backfill_aired': backfillAired,
+        },
       );
       final data = response.data;
       if (data == null) {

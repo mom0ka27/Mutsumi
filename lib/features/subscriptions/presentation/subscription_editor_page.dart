@@ -52,8 +52,14 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   bool _loading = true;
   bool _saving = false;
   bool _previewing = false;
+  bool _previewStale = false;
+  String? _previewError;
 
   bool get _isNew => widget.existing == null;
+
+  /// Nothing to catch up on before a show starts, so the switch only exists
+  /// once it has aired at all.
+  bool get _canBackfill => _isNew && widget.status != AiringStatus.unaired;
 
   @override
   void initState() {
@@ -63,6 +69,9 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
     _orderedFansubs.addAll(existing?.fansubs ?? const []);
     _allowNoFansub = existing?.allowNoFansub ?? false;
     _enabled = existing?.enabled ?? true;
+    // On by default: following a show that is already airing almost always
+    // means wanting the episodes broadcast so far, not just the next one.
+    _backfillAired = _canBackfill;
     _loadOptions();
   }
 
@@ -87,6 +96,9 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
           profiles.firstWhereOrNull((profile) => profile.isDefault)?.id ??
           (profiles.isEmpty ? null : profiles.first.id);
       setState(() => _loading = false);
+      // Run unprompted: how much of the season has aired is the first thing
+      // this page has to answer, and it costs the same query as the button.
+      await _previewRules(silent: true);
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -177,20 +189,35 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
     }
   }
 
-  Future<void> _previewRules() async {
+  /// Ask the server what these rules would fetch right now.
+  ///
+  /// [silent] is for the automatic run on open: a modal is right when the user
+  /// pressed a button, and just noise when they only opened the page.
+  Future<void> _previewRules({bool silent = false}) async {
     final profileId = _profileId;
     if (profileId == null || _previewing) return;
-    setState(() => _previewing = true);
+    setState(() {
+      _previewing = true;
+      _previewError = null;
+    });
     try {
       final preview = await _service.previewSubscription(
         bangumiId: widget.bangumiId,
         profileId: profileId,
         fansubs: _selectedFansubsInOrder,
         allowNoFansub: _allowNoFansub,
+        backfillAired: _backfillAired,
       );
-      if (mounted) setState(() => _preview = preview);
+      if (mounted) {
+        setState(() {
+          _preview = preview;
+          _previewStale = false;
+        });
+      }
     } catch (error) {
       if (!mounted) return;
+      setState(() => _previewError = errorMessageOf(error));
+      if (silent) return;
       await showErrorDialog(
         title: '预览失败',
         message: errorMessageOf(error),
@@ -212,7 +239,9 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
       if (!_selectedFansubs.remove(name)) {
         _selectedFansubs.add(name);
       }
-      _preview = null;
+      // Marked stale rather than dropped: how much of the season has aired does
+      // not depend on the rules, and it is the part worth keeping on screen.
+      _previewStale = true;
     });
   }
 
@@ -220,7 +249,7 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
     setState(() {
       final item = _orderedFansubs.removeAt(oldIndex);
       _orderedFansubs.insert(newIndex, item);
-      _preview = null;
+      _previewStale = true;
     });
   }
 
@@ -337,7 +366,7 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
                     .toList(),
                 onChanged: (value) => setState(() {
                   _profileId = value;
-                  _preview = null;
+                  _previewStale = true;
                 }),
               ),
             ),
@@ -348,17 +377,25 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
                 value: _enabled,
                 onChanged: (value) => setState(() {
                   _enabled = value;
-                  _preview = null;
+                  _previewStale = true;
                 }),
               ),
-            if (_isNew && widget.status == AiringStatus.airing)
+            if (_canBackfill)
               _switchRow(
                 title: '补齐已播出的集',
                 // Without this, joining mid-season only ever picks up the
                 // last few days of resources.
                 subtitle: '从首播日起扫一遍，而不是只看最近几天',
                 value: _backfillAired,
-                onChanged: (value) => setState(() => _backfillAired = value),
+                // Re-runs straight away: it changes which episodes the preview
+                // can see at all, which is the number the user is reading.
+                onChanged: (value) {
+                  setState(() {
+                    _backfillAired = value;
+                    _previewStale = true;
+                  });
+                  _previewRules(silent: true);
+                },
               ),
           ],
         ),
@@ -415,7 +452,7 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
                 value: _allowNoFansub,
                 onChanged: (value) => setState(() {
                   _allowNoFansub = value;
-                  _preview = null;
+                  _previewStale = true;
                 }),
               ),
           ],
@@ -427,14 +464,19 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   Widget _previewSection(ThemeData theme) {
     final preview = _preview;
     return _Section(
-      title: '规则预览',
-      subtitle: '先看看当前设置会挑中哪些资源',
+      title: '已播出与匹配',
+      subtitle: _isNew ? '保存后会立刻按这个结果开始下载' : '当前规则会挑中哪些资源',
       child: _GlassPanel(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (preview == null)
+                _previewPlaceholder(theme)
+              else
+                _seasonSummary(theme, preview),
+              const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: _previewing || _profileId == null
                     ? null
@@ -444,14 +486,16 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.visibility_outlined),
-                label: const Text('预览最近资源'),
+                    : const Icon(Icons.refresh_rounded),
+                label: Text(_previewStale ? '规则已改，重新匹配' : '重新匹配'),
               ),
-              if (preview != null) ...[
-                const SizedBox(height: 16),
+              if (preview != null && !_previewStale) ...[
+                const SizedBox(height: 8),
                 Text(
                   '${preview.resourceCount} 条资源 · ${preview.acceptedCount} 条通过硬过滤',
-                  style: theme.textTheme.titleSmall,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 if (preview.candidates.isEmpty)
                   const Padding(
@@ -467,6 +511,81 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _previewPlaceholder(ThemeData theme) {
+    final error = _previewError;
+    if (_previewing) {
+      return Row(
+        children: [
+          const SizedBox.square(
+            dimension: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text('正在查询已播出的集和可用资源', style: theme.textTheme.bodyMedium),
+        ],
+      );
+    }
+    return Text(
+      error == null ? '还没有匹配结果' : '查询失败：$error',
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: error == null
+            ? theme.colorScheme.onSurfaceVariant
+            : theme.colorScheme.error,
+      ),
+    );
+  }
+
+  /// The season, then what the rules do with it.
+  ///
+  /// The aired count does not depend on the rules, so it survives a stale
+  /// preview: it is the number that tells the user whether "nothing matched"
+  /// means "nothing has aired" or "the rules are too narrow".
+  Widget _seasonSummary(ThemeData theme, SubscriptionPreviewRead preview) {
+    final aired = preview.airedEpisodeCount;
+    final total = preview.episodeCount;
+    final missing = preview.missingEpisodes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          total == 0
+              ? '暂无集数信息'
+              : aired == 0
+              ? '还没有开播 · 共 $total 集'
+              : '已播出 $aired 集 · 共 $total 集',
+          style: theme.textTheme.titleSmall,
+        ),
+        if (preview.ownedEpisodeCount > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            '库里已有 ${preview.ownedEpisodeCount} 集',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (!_previewStale) ...[
+          const SizedBox(height: 6),
+          Text(
+            preview.matchedEpisodes.isEmpty
+                ? '当前规则没有匹配到任何一集'
+                : '${_isNew ? '将下载' : '会下载'} ${preview.matchedEpisodes.length} 集：${_episodeRange(preview.matchedEpisodes)}',
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (missing.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '第 ${_episodeRange(missing)} 集已播出但没有匹配到资源',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ],
+        ],
+      ],
     );
   }
 
@@ -529,10 +648,15 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
   String get _selectionSummary {
     if (_profileId == null) return '没有可用的偏好配置';
     final count = _selectedFansubs.length;
-    if (count == 0) {
-      return _allowNoFansub ? '不限字幕组' : '未选择字幕组';
-    }
-    return _allowNoFansub ? '$count 个字幕组 · 含无字幕组' : '$count 个字幕组';
+    final fansubs = count == 0
+        ? (_allowNoFansub ? '不限字幕组' : '未选择字幕组')
+        : (_allowNoFansub ? '$count 个字幕组 · 含无字幕组' : '$count 个字幕组');
+    final preview = _preview;
+    if (preview == null || _previewStale || !_isNew) return fansubs;
+    // What pressing the button will actually do, next to the button.
+    return preview.matchedEpisodes.isEmpty
+        ? '$fansubs · 暂无可下载的集'
+        : '$fansubs · 立即下载 ${preview.matchedEpisodes.length} 集';
   }
 
   Widget _switchRow({
@@ -572,6 +696,29 @@ class _SubscriptionEditorPageState extends State<SubscriptionEditorPage> {
     final mode = profile.languageMode == 'any' ? '不限字形' : profile.languageMode;
     return '${profile.name} · $mode';
   }
+}
+
+/// Collapses consecutive episode numbers: `[1,2,3,5]` reads as `1-3, 5`.
+///
+/// A backfilled season is a dozen numbers, and listing them all turns the one
+/// line the user has to read into a wall of digits.
+String _episodeRange(List<int> indices) {
+  if (indices.isEmpty) return '';
+  final sorted = [...indices]..sort();
+  final parts = <String>[];
+  var start = sorted.first;
+  var previous = start;
+  for (final index in sorted.skip(1)) {
+    if (index == previous + 1) {
+      previous = index;
+      continue;
+    }
+    parts.add(start == previous ? '$start' : '$start-$previous');
+    start = index;
+    previous = index;
+  }
+  parts.add(start == previous ? '$start' : '$start-$previous');
+  return parts.join('、');
 }
 
 /// A titled block: label outside, controls inside a glass panel.

@@ -36,8 +36,12 @@ from app.schemas import (
 )
 from app.services.animegarden_service import AnimeGardenService
 from app.services.bangumi_service import BangumiService
-from app.services.subscription_engine import next_expected_episode
-from app.services.subscription_worker import SubscriptionWorker
+from app.services.subscription_engine import EpisodeInfo, next_expected_episode
+from app.services.subscription_worker import (
+    SubscriptionWorker,
+    backfill_window_start,
+    request_initial_check,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -171,6 +175,7 @@ async def create_subscription(
     if existing:
         raise HTTPException(status_code=409, detail="Anime is already subscribed")
     profile = await _resolve_profile(session, payload.profile_id)
+    episodes = await _bangumi_episodes(anime)
     subscription = Subscription(
         **payload.model_dump(
             exclude={"profile_id", "bangumi_id", "backfill_aired"}
@@ -178,16 +183,28 @@ async def create_subscription(
         anime_id=anime.id,
         profile_id=profile.id,
         created_by=current_user.id,
-        backfill_after=_backfill_after(anime) if payload.backfill_aired else None,
+        backfill_after=(
+            backfill_window_start(anime.air_date, episodes)
+            if payload.backfill_aired
+            else None
+        ),
     )
     # Seeded here as well as in the worker: waiting up to a full sweep interval
     # would leave the new subscription with no expected date to show.
     (
         subscription.next_episode_index,
         subscription.next_episode_air_date,
-    ) = await _next_episode(anime)
+    ) = next_expected_episode(
+        episodes,
+        (episode.index for episode in anime.episodes if episode.index is not None),
+    )
     session.add(subscription)
     await session.commit()
+    # Don't wait for the next sweep: following a show is a request to fetch it,
+    # so the first check runs now. Queued on the worker, which owns the sweep
+    # lock, rather than inline -- torrent metadata for a whole backfilled season
+    # is far too slow to hold a request open.
+    request_initial_check(subscription.id)
     loaded = await session.scalar(_subscription_query().where(Subscription.id == subscription.id))
     return _subscription_read(loaded or subscription)
 
@@ -408,23 +425,19 @@ async def _resolve_or_create_anime(session: AsyncSession, bangumi_id: int) -> An
     return anime
 
 
-async def _next_episode(anime: Anime) -> tuple[int | None, datetime | None]:
-    """Earliest missing episode, or ``(None, None)`` if Bangumi is unavailable.
+async def _bangumi_episodes(anime: Anime) -> list[EpisodeInfo]:
+    """The episode table, or ``[]`` if Bangumi is unavailable.
 
-    A subscription must be creatable even when the episode table cannot be
-    read; the worker fills this in on its next sweep.
+    A subscription must be creatable even when the table cannot be read; the
+    worker fills in what depends on it during its next sweep.
     """
     try:
-        episodes = await BangumiService().get_episodes(anime.bangumi_id)
+        return await BangumiService().get_episodes(anime.bangumi_id)
     except (httpx.HTTPError, ValueError) as error:
         logger.warning(
             "Bangumi episode fetch failed id=%s: %s", anime.bangumi_id, error
         )
-        return None, None
-    return next_expected_episode(
-        episodes,
-        (episode.index for episode in anime.episodes if episode.index is not None),
-    )
+        return []
 
 
 async def _is_placeholder_anime(session: AsyncSession, anime: Anime) -> bool:
@@ -434,17 +447,6 @@ async def _is_placeholder_anime(session: AsyncSession, anime: Anime) -> bool:
         select(func.count()).select_from(Episode).where(Episode.anime_id == anime.id)
     )
     return not episodes
-
-
-def _backfill_after(anime: Anime) -> datetime | None:
-    """The season's first-broadcast date, as the one-shot backfill window."""
-    text = (anime.air_date or "").strip()
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text[:10])
-    except ValueError:
-        return None
 
 
 async def _ensure_default_profile(session: AsyncSession) -> PreferenceProfile:

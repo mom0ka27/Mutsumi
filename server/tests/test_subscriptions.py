@@ -11,6 +11,7 @@ from app.api.routes import subscriptions as routes_subscriptions
 from app.services.bangumi_service import SubjectInfo
 from app.services.subscription_engine import (
     EpisodeInfo,
+    aired_episode_indices,
     derive_airing_status,
     evaluate_resource,
     parse_episode_index,
@@ -557,6 +558,178 @@ async def test_download_after_subscribing_merges_into_the_placeholder(
     assert (
         client.get(f"/api/v1/anime/{anime_id}", headers=user_headers).status_code == 200
     )
+
+
+@pytest.mark.parametrize(
+    ("airdates", "expected"),
+    [
+        # A season that dates what it has published: an undated row is a future
+        # episode, not one that quietly aired.
+        (["2026-08-01", "2026-08-08", None], (1, 2)),
+        # A season with no dates at all is an old subject, so all of it aired.
+        ([None, None, None], (1, 2, 3)),
+        (["2026-08-01", "2026-09-30"], (1,)),
+    ],
+)
+def test_aired_episodes_only_trust_dates_when_the_season_has_them(airdates, expected):
+    episodes = [
+        EpisodeInfo(ep=index + 1, sort=index + 1, airdate=value)
+        for index, value in enumerate(airdates)
+    ]
+    assert (
+        aired_episode_indices(episodes, datetime.fromisoformat("2026-08-20T12:00:00"))
+        == expected
+    )
+
+
+def _episode_resource(resource_id: int, index: int, airdate: str) -> AnimeGardenResource:
+    return AnimeGardenResource(
+        id=resource_id,
+        provider="test",
+        provider_id=str(resource_id),
+        title=f"[ANi] Test Anime - {index:02d} [简][1080p][AVC]",
+        type="动画",
+        magnet=f"magnet:?xt=urn:btih:{resource_id}",
+        tracker="",
+        size=100,
+        fansub_name="ANi",
+        publisher_name="",
+        # An hour after broadcast: an earlier resource would be rejected as a
+        # mis-parse of an episode that had not aired yet.
+        created_at=datetime.fromisoformat(f"{airdate}T01:00:00"),
+        subject_ids=frozenset({4242}),
+    )
+
+
+async def test_preview_reports_the_aired_season_and_the_episodes_rules_miss():
+    airdates = [
+        "2026-08-01",
+        "2026-08-08",
+        "2026-08-15",
+        "2026-08-22",
+        "2026-08-29",
+        "2026-09-05",
+    ]
+    calls: list[dict] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            calls.append(kwargs)
+            # Episode 5 aired, but nobody published anything for it.
+            return [
+                _episode_resource(index + 1, index + 1, airdates[index])
+                for index in range(4)
+            ], True
+
+    class FakeBangumi:
+        async def get_episodes(self, subject_id):
+            return [
+                EpisodeInfo(ep=index + 1, sort=index + 1, airdate=value)
+                for index, value in enumerate(airdates)
+            ]
+
+    anime = Anime(
+        id=1,
+        bangumi_id=4242,
+        name="Test Anime",
+        name_cn="测试",
+        air_date="2026-08-01",
+        episode_count=6,
+        episodes=[],
+    )
+    draft = SimpleNamespace(
+        backfill_aired=True,
+        fansubs=["ANi"],
+        allow_no_fansub=False,
+        search_keywords=[],
+        must_include=[],
+        exclude_keywords=[],
+        use_subject_id=True,
+        resource_types=["动画"],
+        profile_overrides=None,
+        episode_offset_override=None,
+    )
+
+    result = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    ).preview(
+        anime=anime,
+        profile=PreferenceProfile(name="默认", is_default=True),
+        draft=draft,
+        now=datetime.fromisoformat("2026-09-03T12:00:00"),
+    )
+
+    assert result["episode_count"] == 6
+    assert result["aired_episode_count"] == 5
+    assert result["owned_episode_count"] == 0
+    assert result["matched_episodes"] == [1, 2, 3, 4]
+    # The whole reason the editor shows this: "no candidate for episode 5" and
+    # "episode 6 has not aired" are different answers.
+    assert result["missing_episodes"] == [5]
+    # ``backfill_aired`` has to reach past the cold-start window, or a
+    # mid-season preview would only ever see the last few days.
+    assert calls[0]["after"] <= datetime.fromisoformat("2026-07-31T00:00:00")
+
+
+async def test_first_check_prefers_the_backfill_window_over_the_cursor():
+    calls: list[dict] = []
+
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            calls.append(kwargs)
+            return [], True
+
+    subscription = SimpleNamespace(
+        anime=Anime(id=1, bangumi_id=4242, name="作品", name_cn="作品"),
+        cursor_at=datetime.fromisoformat("2026-09-01T00:00:00"),
+        backfill_after=datetime.fromisoformat("2026-07-31T00:00:00"),
+        search_keywords=[],
+        use_subject_id=True,
+        resource_types=["动画"],
+    )
+
+    await SubscriptionWorker(anime_garden=FakeAnimeGarden())._fetch_targeted_resources(
+        subscription,
+        datetime.fromisoformat("2026-09-03T12:00:00"),
+    )
+
+    assert calls[0]["after"] == datetime.fromisoformat("2026-07-31T00:00:00")
+
+
+async def test_subscribing_queues_the_first_check_instead_of_waiting_for_a_sweep(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    queued: list[int] = []
+    monkeypatch.setattr(
+        routes_subscriptions,
+        "BangumiService",
+        lambda: _FakeBangumiSubjects(),
+    )
+    monkeypatch.setattr(
+        routes_subscriptions,
+        "request_initial_check",
+        queued.append,
+    )
+    user_headers = await auth_headers(PermissionGroup.USER)
+
+    created = client.post(
+        "/api/v1/subscriptions",
+        json={"bangumi_id": 4242, "fansubs": ["ANi"], "backfill_aired": True},
+        headers=user_headers,
+    )
+
+    assert created.status_code == 201, created.text
+    subscription = created.json()
+    # Following a show is a request to fetch it: the download must not wait up
+    # to a full sweep interval.
+    assert queued == [subscription["id"]]
+    # And the queued check has a window that covers the episodes already aired.
+    assert datetime.fromisoformat(
+        subscription["backfill_after"]
+    ) <= datetime.fromisoformat("2026-08-11T00:00:00")
 
 
 class _FakeBangumiSubjects:

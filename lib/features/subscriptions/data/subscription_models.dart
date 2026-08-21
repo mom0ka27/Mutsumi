@@ -209,14 +209,29 @@ class SubscriptionPreviewRead {
   const SubscriptionPreviewRead({
     required this.resourceCount,
     required this.acceptedCount,
+    required this.episodeCount,
+    required this.airedEpisodeCount,
+    required this.ownedEpisodeCount,
+    required this.matchedEpisodes,
+    required this.missingEpisodes,
     required this.candidates,
   });
 
   factory SubscriptionPreviewRead.fromJson(Map<String, dynamic> json) {
     final values = json['candidates'];
+    List<int> readIndices(String key) {
+      final value = json[key];
+      return value is List ? value.whereType<int>().toList() : const <int>[];
+    }
+
     return SubscriptionPreviewRead(
       resourceCount: json['resource_count'] as int? ?? 0,
       acceptedCount: json['accepted_count'] as int? ?? 0,
+      episodeCount: json['episode_count'] as int? ?? 0,
+      airedEpisodeCount: json['aired_episode_count'] as int? ?? 0,
+      ownedEpisodeCount: json['owned_episode_count'] as int? ?? 0,
+      matchedEpisodes: readIndices('matched_episodes'),
+      missingEpisodes: readIndices('missing_episodes'),
       candidates: values is List
           ? values
                 .whereType<Map<String, dynamic>>()
@@ -228,5 +243,15 @@ class SubscriptionPreviewRead {
 
   final int resourceCount;
   final int acceptedCount;
+
+  /// The season as the server sees it, independent of the current rules.
+  final int episodeCount;
+  final int airedEpisodeCount;
+  final int ownedEpisodeCount;
+
+  /// Episodes these rules will fetch, and aired ones they cover with nothing.
+  final List<int> matchedEpisodes;
+  final List<int> missingEpisodes;
+
   final List<SubscriptionPreviewCandidateRead> candidates;
 }
