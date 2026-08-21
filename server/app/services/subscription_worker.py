@@ -36,6 +36,7 @@ from app.services.subscription_engine import (
     parse_episode_index,
     profile_values,
     resource_matches_subscription,
+    SubscriptionMatch,
     search_variants,
     season_start,
     subscription_rules,
@@ -176,11 +177,11 @@ class SubscriptionWorker:
         }
         rows: list[dict[str, Any]] = []
         accepted_count = 0
-        selected_by_episode: dict[int, tuple[float, int]] = {}
+        selected_by_episode: dict[int, tuple[tuple[bool, float], int]] = {}
 
         for resource in resources:
-            matches, match_reason = resource_matches_subscription(resource, rules)
-            if not matches:
+            match = resource_matches_subscription(resource, rules)
+            if not match.matched:
                 rows.append(
                     _preview_row(
                         resource,
@@ -188,7 +189,7 @@ class SubscriptionWorker:
                         ResourceEvaluation(
                             accepted=False,
                             score=0,
-                            reason=match_reason,
+                            reason=match.reason,
                             attributes={"resource_type": resource.type},
                             component_scores={},
                         ),
@@ -230,20 +231,29 @@ class SubscriptionWorker:
                 )
                 continue
             row_index = len(rows)
-            rows.append(_preview_row(resource, parsed, evaluation, "candidate"))
+            row = _preview_row(resource, parsed, evaluation, "candidate", match=match)
+            rows.append(row)
+            # Proof before preference: a ``subjectId`` match outranks a
+            # title-only one whatever it scores, mirroring ``_settle_candidates``.
+            rank = (match.by_subject, evaluation.score)
             current = selected_by_episode.get(parsed.index)
-            if current is None or evaluation.score > current[0]:
-                selected_by_episode[parsed.index] = (evaluation.score, row_index)
+            if current is None or rank > current[0]:
+                selected_by_episode[parsed.index] = (rank, row_index)
 
         for _, row_index in selected_by_episode.values():
             rows[row_index]["selected"] = True
         for row in rows:
             if row["state"] == "candidate" and not row["selected"]:
-                row["reason"] = "同集候选得分更高"
+                row["reason"] = (
+                    "同集有 Bangumi subject 命中的候选"
+                    if not row["matched_by_subject"]
+                    else "同集候选得分更高"
+                )
         rows.sort(
             key=lambda row: (
                 row["episode_index"] is None,
                 row["episode_index"] or 0,
+                not row["matched_by_subject"],
                 -row["score"],
             )
         )
@@ -436,23 +446,25 @@ class SubscriptionWorker:
         )
 
     async def _queries_for(self, rules_source: Any, anime: Anime | None) -> tuple[_Query, ...]:
-        """The subject query plus one query per name this show goes by.
+        """How this show is asked for upstream: by subject id whenever there is one.
 
-        The subject id is the precise filter, but a release the indexer never
-        tagged is invisible to it -- and that silent gap is the usual reason an
-        episode sits at 等待资源. The name queries are the net underneath it.
+        The feed's ``subjectId`` *is* the Bangumi id, so one subject query is
+        both exact and complete -- sending names alongside it would only add
+        queries whose results the subject filter already covers. Names are the
+        fallback for when there is no subject id to ask by, and then each alias
+        needs its own query because the API ANDs the terms within one.
         """
         if anime is None:
             return ()
-        await self._ensure_aliases(anime)
-        rules = subscription_rules(rules_source, anime)
-        queries = []
         subjects = _subjects_for(anime, getattr(rules_source, "use_subject_id", True))
         if subjects:
-            queries.append(_Query(subjects=subjects))
+            return (_Query(subjects=subjects),)
+        await self._ensure_aliases(anime)
+        rules = subscription_rules(rules_source, anime)
         limit = _config_int("max_name_variants", 4)
-        queries.extend(_Query(search=variant) for variant in search_variants(rules, limit))
-        return tuple(queries)
+        return tuple(
+            _Query(search=variant) for variant in search_variants(rules, limit)
+        )
 
     async def _ensure_aliases(self, anime: Anime) -> tuple[str, ...]:
         """Bangumi's 别名 list, fetched once and then kept on the row.
@@ -484,10 +496,10 @@ class SubscriptionWorker:
         before: datetime,
         types: tuple[str, ...] = ("动画",),
     ) -> list[AnimeGardenResource]:
-        """Everything published for a subject, by id and by every known name.
+        """Everything published for a subject, for the fansub picker.
 
-        Used by the fansub picker, which would otherwise list nothing at all for
-        a show whose releases the indexer never tagged with a subject.
+        Goes through the same query shaping as a real check, so the groups on
+        offer are exactly the groups a subscription would be able to follow.
         """
         subject = await self.bangumi.get_subject(bangumi_id)
         anime = Anime(
@@ -569,8 +581,8 @@ class SubscriptionWorker:
                 continue
             if not _resource_after_cursor(resource, subscription.cursor_at, now):
                 continue
-            matches, _ = resource_matches_subscription(resource, rules)
-            if not matches:
+            match = resource_matches_subscription(resource, rules)
+            if not match.matched:
                 continue
             processed += 1
             evaluation = evaluate_resource(resource, values, rules)
@@ -582,6 +594,7 @@ class SubscriptionWorker:
                         evaluation,
                         episode_index=None,
                         state="skipped",
+                        match=match,
                     )
                 )
                 continue
@@ -607,6 +620,7 @@ class SubscriptionWorker:
                         state="deferred" if parsed.deferred else "needs_review",
                         reason=parsed.reason,
                         parsed=parsed,
+                        match=match,
                     )
                 )
                 continue
@@ -620,6 +634,7 @@ class SubscriptionWorker:
                         state="skipped",
                         reason="该集已存在",
                         parsed=parsed,
+                        match=match,
                     )
                 )
                 continue
@@ -631,6 +646,7 @@ class SubscriptionWorker:
                     episode_index=parsed.index,
                     state="candidate",
                     parsed=parsed,
+                    match=match,
                 )
             )
         await session.flush()
@@ -724,12 +740,21 @@ class SubscriptionWorker:
                 continue
             earliest = min(candidate.first_seen_at for candidate in group)
             age_hours = (now - _naive_utc(earliest)).total_seconds() / 3600
-            immediate = any(candidate.score >= profile.accept_now_score for candidate in group)
+            immediate = any(
+                candidate.score >= profile.accept_now_score
+                and _matched_by_subject(candidate)
+                for candidate in group
+            )
             if not immediate and age_hours < profile.grace_hours:
                 continue
+            # Proof outranks preference: the indexer's ``subjectId`` is the
+            # Bangumi id, so a tagged resource is certainly this show, while a
+            # title-only match is a guess two shows can both satisfy. A guess
+            # never wins over proof, however well it scores.
             winner = max(
                 group,
                 key=lambda candidate: (
+                    _matched_by_subject(candidate),
                     candidate.score,
                     -_naive_utc(candidate.first_seen_at).timestamp(),
                 ),
@@ -737,7 +762,11 @@ class SubscriptionWorker:
             for candidate in group:
                 if candidate is not winner:
                     candidate.state = "skipped"
-                    candidate.reason = "同集候选得分更高"
+                    candidate.reason = (
+                        "同集候选得分更高"
+                        if _matched_by_subject(candidate) == _matched_by_subject(winner)
+                        else "同集有 Bangumi subject 命中的候选"
+                    )
             await self._deliver_candidate(
                 session,
                 subscription,
@@ -857,6 +886,7 @@ def _ledger_entry(
     state: str,
     reason: str | None = None,
     parsed: EpisodeParseResult | None = None,
+    match: SubscriptionMatch | None = None,
 ) -> SubscriptionEpisode:
     attributes = dict(evaluation.attributes)
     attributes.update(
@@ -868,6 +898,8 @@ def _ledger_entry(
             "created_at": resource.created_at.isoformat() if resource.created_at else None,
             "provider": resource.provider,
             "provider_id": resource.provider_id,
+            # Read back by ``_settle_candidates`` to rank proof above preference.
+            "matched_by": (match or SubscriptionMatch(True)).matched_by,
         }
     )
     if parsed is not None:
@@ -883,6 +915,15 @@ def _ledger_entry(
         reason=reason or evaluation.reason,
         first_seen_at=_naive_utc(resource.created_at) if resource.created_at else _utcnow(),
     )
+
+
+def _matched_by_subject(candidate: SubscriptionEpisode) -> bool:
+    """Whether the ledger row was proven to be this show by its Bangumi id.
+
+    Rows written before the evidence was recorded read as unproven, which only
+    means they lose a tie against a tagged resource -- the safe direction.
+    """
+    return (candidate.attributes or {}).get("matched_by") == MATCHED_BY_SUBJECT
 
 
 def _episode_parse_attributes(parsed: EpisodeParseResult) -> dict[str, Any]:
@@ -905,12 +946,15 @@ def _preview_row(
     state: str,
     *,
     reason: str | None = None,
+    match: SubscriptionMatch | None = None,
 ) -> dict[str, Any]:
     attributes = dict(evaluation.attributes)
     attributes["episode_parse"] = {
         "raw_number": parsed.raw_number if parsed else None,
         "reason": parsed.reason if parsed else None,
     }
+    if match is not None:
+        attributes["matched_by"] = match.matched_by
     return {
         "episode_index": parsed.index if parsed else None,
         "resource_id": resource.id,
@@ -921,6 +965,7 @@ def _preview_row(
         "reason": reason or parsed.reason if parsed and state == "needs_review" else reason or evaluation.reason,
         "attributes": attributes,
         "selected": False,
+        "matched_by_subject": bool(match and match.by_subject),
         "created_at": resource.created_at,
     }
 

@@ -709,19 +709,136 @@ def test_a_release_titled_with_only_an_alias_still_matches():
         subject_ids=frozenset(),
     )
 
-    assert resource_matches_subscription(untagged, rules) == (True, None)
-    assert resource_matches_subscription(
+    matched = resource_matches_subscription(untagged, rules)
+    assert matched.matched is True
+    # Likely, not proven: an untagged release is only ever a title match, and
+    # loses to a subject-tagged candidate for the same episode.
+    assert matched.by_subject is False
+
+    tagged = resource_matches_subscription(
+        SimpleNamespace(type="动画", title="[ANi] 谁认得出这名字", subject_ids=frozenset({4242})),
+        rules,
+    )
+    assert tagged.matched is True
+    assert tagged.by_subject is True
+
+    rejected = resource_matches_subscription(
         SimpleNamespace(type="动画", title="[ANi] 别的番 - 03", subject_ids=frozenset()),
         rules,
-    ) == (False, "标题未匹配番剧")
+    )
+    assert (rejected.matched, rejected.reason) == (False, "标题未匹配番剧")
 
 
-async def test_targeted_check_queries_every_alias_and_merges_the_results():
+async def test_a_subject_tagged_candidate_beats_a_better_scoring_title_match():
+    def resource(resource_id: int, title: str, tagged: bool) -> AnimeGardenResource:
+        return AnimeGardenResource(
+            id=resource_id,
+            provider="test",
+            provider_id=str(resource_id),
+            title=title,
+            type="动画",
+            magnet=f"magnet:?xt=urn:btih:{resource_id}",
+            tracker="",
+            size=100,
+            fansub_name="ANi",
+            publisher_name="",
+            created_at=datetime.fromisoformat("2026-08-19T01:00:00"),
+            subject_ids=frozenset({4242}) if tagged else frozenset(),
+        )
+
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            return [
+                resource(1, "[ANi] Test Anime - 01 [简][1080p][AVC]", True),
+                # Scores higher on resolution, but nothing proves it is this
+                # show -- the title merely contains the name.
+                resource(2, "[ANi] Test Anime - 01 [简][2160p][AVC]", False),
+            ], True
+
+    class FakeBangumi:
+        async def get_episodes(self, subject_id):
+            return [EpisodeInfo(ep=1, sort=1, airdate="2026-08-19")]
+
+        async def get_subject(self, subject_id):
+            return None
+
+    result = await SubscriptionWorker(
+        anime_garden=FakeAnimeGarden(),
+        bangumi=FakeBangumi(),
+    ).preview(
+        anime=Anime(id=1, bangumi_id=4242, name="Test Anime", name_cn="测试"),
+        profile=PreferenceProfile(
+            name="默认",
+            is_default=True,
+            language_mode="简",
+            language_unknown="accept",
+            prefer_resolution=["2160p", "1080p"],
+            prefer_codec=["avc"],
+            prefer_subtitle=["简", "繁", "日", "无"],
+            prefer_bitdepth=["10bit", "8bit"],
+            weights={"fansub": 45, "resolution": 22, "codec": 15, "subtitle": 12, "bitdepth": 6},
+        ),
+        draft=SimpleNamespace(
+            fansub="ANi",
+            allow_no_fansub=False,
+            search_keywords=[],
+            must_include=[],
+            exclude_keywords=[],
+            use_subject_id=True,
+            resource_types=["动画"],
+            profile_overrides=None,
+            episode_offset_override=None,
+        ),
+        now=datetime.fromisoformat("2026-08-20T12:00:00"),
+    )
+
+    rows = {row["resource_id"]: row for row in result["candidates"]}
+    assert rows[2]["score"] > rows[1]["score"]
+    assert rows[1]["selected"] is True
+    assert rows[2]["selected"] is False
+    assert rows[2]["reason"] == "同集有 Bangumi subject 命中的候选"
+
+
+async def test_the_subject_id_is_asked_by_itself_without_any_name():
     calls: list[dict] = []
-    # The same release comes back from several name queries, and one is only
-    # reachable by the alias -- which is the whole point of the fan-out.
+
+    class FakeAnimeGarden:
+        async def search_resources(self, **kwargs):
+            calls.append(kwargs)
+            return [_episode_resource(1, 1, "2026-08-01")], True
+
+    subscription = SimpleNamespace(
+        anime=Anime(
+            id=1,
+            bangumi_id=4242,
+            name="Official Name",
+            name_cn="中文名",
+            aliases=["俗称"],
+        ),
+        cursor_at=None,
+        backfill_after=None,
+        search_keywords=[],
+        use_subject_id=True,
+        resource_types=["动画"],
+    )
+
+    await SubscriptionWorker(anime_garden=FakeAnimeGarden())._fetch_targeted_resources(
+        subscription,
+        datetime.fromisoformat("2026-09-03T12:00:00"),
+    )
+
+    # ``subjectId`` upstream is the Bangumi id, so it is exact and complete on
+    # its own -- name queries would only re-fetch what it already covers.
+    assert len(calls) == 1
+    assert calls[0]["subjects"] == (4242,)
+    assert calls[0]["search"] == ()
+
+
+async def test_names_are_the_fallback_when_there_is_no_subject_to_ask_by():
+    calls: list[dict] = []
+    # One release is reachable only by the alias, so each name needs its own
+    # query: the API ANDs the terms inside a single ``search``.
     by_search = {
-        (): [1],
         ("中文名",): [1, 2],
         ("Official Name",): [2],
         ("俗称",): [3],
@@ -746,7 +863,7 @@ async def test_targeted_check_queries_every_alias_and_merges_the_results():
         cursor_at=None,
         backfill_after=None,
         search_keywords=[],
-        use_subject_id=True,
+        use_subject_id=False,
         resource_types=["动画"],
     )
 
@@ -757,14 +874,13 @@ async def test_targeted_check_queries_every_alias_and_merges_the_results():
         datetime.fromisoformat("2026-09-03T12:00:00"),
     )
 
-    # The subject id stays the first, most precise query; the names come after.
-    assert [call["subjects"] for call in calls] == [(4242,), (), (), ()]
+    assert [call["subjects"] for call in calls] == [(), (), ()]
     assert [call["search"] for call in calls] == [
-        (),
         ("中文名",),
         ("Official Name",),
         ("俗称",),
     ]
+    # Merged and deduped: resource 2 came back from two of the three queries.
     assert [resource.id for resource in resources] == [1, 2, 3]
 
 

@@ -315,25 +315,53 @@ def search_variants(rules: SubscriptionRules, limit: int = 4) -> tuple[tuple[str
     return tuple((name,) for name in known_names(rules)[: max(1, limit)])
 
 
-def resource_matches_subscription(resource: Any, rules: SubscriptionRules) -> tuple[bool, str | None]:
+MATCHED_BY_SUBJECT = "subject"
+MATCHED_BY_TITLE = "title"
+MATCHED_BY_NOTHING = "none"
+
+
+@dataclass(frozen=True)
+class SubscriptionMatch:
+    """Whether a resource belongs to a subscription, and on what evidence.
+
+    ``matched_by`` is what separates proof from a guess: the indexer's
+    ``subjectId`` *is* the Bangumi id, so a tagged resource is certain, while a
+    title carrying one of the show's names is only likely -- two shows can share
+    a short alias. Selection has to prefer the certain one.
+    """
+
+    matched: bool
+    reason: str | None = None
+    matched_by: str = MATCHED_BY_NOTHING
+
+    @property
+    def by_subject(self) -> bool:
+        return self.matched_by == MATCHED_BY_SUBJECT
+
+
+def resource_matches_subscription(resource: Any, rules: SubscriptionRules) -> SubscriptionMatch:
     resource_type = str(getattr(resource, "type", "") or "")
     if rules.resource_types and resource_type not in rules.resource_types:
-        return False, f"资源类型不在允许列表: {resource_type or '未知'}"
+        return SubscriptionMatch(
+            False, f"资源类型不在允许列表: {resource_type or '未知'}"
+        )
 
     title = str(getattr(resource, "title", "") or "")
     subject_ids = getattr(resource, "subject_ids", None)
+    matched_by = MATCHED_BY_TITLE
     if rules.use_subject_id and subject_ids:
         if rules.bangumi_id not in subject_ids:
-            return False, "Bangumi subject 不匹配"
+            return SubscriptionMatch(False, "Bangumi subject 不匹配")
+        matched_by = MATCHED_BY_SUBJECT
     elif rules.use_subject_id and rules.bangumi_id:
         names = [*known_names(rules), *rules.search_keywords]
         names = [name.casefold() for name in names if len(name.strip()) >= 2]
         if names and not any(name in title.casefold() for name in names):
-            return False, "标题未匹配番剧"
+            return SubscriptionMatch(False, "标题未匹配番剧")
 
     if rules.search_keywords and not _contains_all(title, rules.search_keywords):
-        return False, "未满足搜索关键词"
-    return True, None
+        return SubscriptionMatch(False, "未满足搜索关键词")
+    return SubscriptionMatch(True, None, matched_by)
 
 
 # Numbers that are not episode numbers: resolutions, encoder settings, audio
