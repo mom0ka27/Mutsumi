@@ -15,6 +15,20 @@ from app.schemas.anime import (
 from app.schemas.auth import Token
 from app.schemas.config import QBittorrentConfigRead, QBittorrentConfigUpdate
 from app.schemas.storage import AnimeStorageRead, StorageStatusRead
+from app.schemas.subscription import (
+    FansubCandidateRead,
+    PreferenceProfileCreate,
+    PreferenceProfileRead,
+    PreferenceProfileUpdate,
+    SubscriptionCheckRead,
+    SubscriptionCreate,
+    SubscriptionEpisodeRead,
+    SubscriptionPreviewCandidateRead,
+    SubscriptionPreviewRead,
+    SubscriptionPreviewRequest,
+    SubscriptionRead,
+    SubscriptionUpdate,
+)
 from app.schemas.qbittorrent import (
     QBittorrentFileRead,
     QBittorrentTorrentAddResult,
@@ -64,4 +78,16 @@ __all__ = [
     "ServerUpdateStatusRead",
     "ServerUpdateChannelRead",
     "ServerUpdateChannelUpdate",
+    "FansubCandidateRead",
+    "PreferenceProfileCreate",
+    "PreferenceProfileRead",
+    "PreferenceProfileUpdate",
+    "SubscriptionCheckRead",
+    "SubscriptionCreate",
+    "SubscriptionEpisodeRead",
+    "SubscriptionPreviewCandidateRead",
+    "SubscriptionPreviewRead",
+    "SubscriptionPreviewRequest",
+    "SubscriptionRead",
+    "SubscriptionUpdate",
 ]

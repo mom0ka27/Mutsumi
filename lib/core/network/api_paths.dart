@@ -12,3 +12,5 @@ const qbittorrentConfigApiPath = '$apiPrefix/config/qbittorrent';
 const storageApiPath = '$apiPrefix/storage';
 const usersApiPath = '$apiPrefix/users';
 const changePasswordApiPath = '$usersApiPath/me/password';
+const subscriptionsApiPath = '$apiPrefix/subscriptions';
+const preferenceProfilesApiPath = '$apiPrefix/preference-profiles';

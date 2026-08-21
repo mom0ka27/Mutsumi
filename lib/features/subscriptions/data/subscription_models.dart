@@ -1,0 +1,210 @@
+class PreferenceProfileRead {
+  const PreferenceProfileRead({
+    required this.id,
+    required this.name,
+    required this.isDefault,
+    required this.languageMode,
+    required this.languageUnknown,
+    required this.preferResolution,
+    required this.preferCodec,
+    required this.preferSubtitle,
+    required this.preferBitdepth,
+    required this.graceHours,
+  });
+
+  factory PreferenceProfileRead.fromJson(Map<String, dynamic> json) {
+    List<String> readList(String key) {
+      final value = json[key];
+      return value is List
+          ? value.whereType<String>().toList()
+          : const <String>[];
+    }
+
+    return PreferenceProfileRead(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      isDefault: json['is_default'] as bool? ?? false,
+      languageMode: json['language_mode'] as String? ?? '简',
+      languageUnknown: json['language_unknown'] as String? ?? 'accept',
+      preferResolution: readList('prefer_resolution'),
+      preferCodec: readList('prefer_codec'),
+      preferSubtitle: readList('prefer_subtitle'),
+      preferBitdepth: readList('prefer_bitdepth'),
+      graceHours: (json['grace_hours'] as num?)?.toDouble() ?? 3,
+    );
+  }
+
+  final int id;
+  final String name;
+  final bool isDefault;
+  final String languageMode;
+  final String languageUnknown;
+  final List<String> preferResolution;
+  final List<String> preferCodec;
+  final List<String> preferSubtitle;
+  final List<String> preferBitdepth;
+  final double graceHours;
+}
+
+class SubscriptionRead {
+  const SubscriptionRead({
+    required this.id,
+    required this.animeId,
+    required this.animeName,
+    required this.animeNameCn,
+    required this.imageUrl,
+    required this.enabled,
+    required this.profileId,
+    required this.fansubs,
+    required this.allowNoFansub,
+    required this.searchKeywords,
+    required this.mustInclude,
+    required this.excludeKeywords,
+    required this.useSubjectId,
+    required this.resourceTypes,
+    required this.profileOverrides,
+    required this.episodeOffsetOverride,
+    required this.lastCheckedAt,
+    required this.lastFoundAt,
+    required this.lastError,
+  });
+
+  factory SubscriptionRead.fromJson(Map<String, dynamic> json) {
+    List<String> readList(String key) {
+      final value = json[key];
+      return value is List
+          ? value.whereType<String>().toList()
+          : const <String>[];
+    }
+
+    return SubscriptionRead(
+      id: json['id'] as int? ?? 0,
+      animeId: json['anime_id'] as int? ?? 0,
+      animeName: json['anime_name'] as String? ?? '',
+      animeNameCn: json['anime_name_cn'] as String? ?? '',
+      imageUrl: json['image_url'] as String? ?? '',
+      enabled: json['enabled'] as bool? ?? true,
+      profileId: json['profile_id'] as int? ?? 0,
+      fansubs: readList('fansubs'),
+      allowNoFansub: json['allow_no_fansub'] as bool? ?? false,
+      searchKeywords: readList('search_keywords'),
+      mustInclude: readList('must_include'),
+      excludeKeywords: readList('exclude_keywords'),
+      useSubjectId: json['use_subject_id'] as bool? ?? true,
+      resourceTypes: readList('resource_types'),
+      profileOverrides: json['profile_overrides'] is Map
+          ? Map<String, dynamic>.from(json['profile_overrides'] as Map)
+          : null,
+      episodeOffsetOverride: json['episode_offset_override'] as int?,
+      lastCheckedAt: DateTime.tryParse(
+        json['last_checked_at'] as String? ?? '',
+      ),
+      lastFoundAt: DateTime.tryParse(json['last_found_at'] as String? ?? ''),
+      lastError: json['last_error'] as String?,
+    );
+  }
+
+  final int id;
+  final int animeId;
+  final String animeName;
+  final String animeNameCn;
+  final String imageUrl;
+  final bool enabled;
+  final int profileId;
+  final List<String> fansubs;
+  final bool allowNoFansub;
+  final List<String> searchKeywords;
+  final List<String> mustInclude;
+  final List<String> excludeKeywords;
+  final bool useSubjectId;
+  final List<String> resourceTypes;
+  final Map<String, dynamic>? profileOverrides;
+  final int? episodeOffsetOverride;
+  final DateTime? lastCheckedAt;
+  final DateTime? lastFoundAt;
+  final String? lastError;
+}
+
+class FansubCandidateRead {
+  const FansubCandidateRead({
+    required this.name,
+    required this.count,
+    required this.latestAt,
+    required this.isNoFansub,
+  });
+
+  factory FansubCandidateRead.fromJson(Map<String, dynamic> json) {
+    return FansubCandidateRead(
+      name: json['name'] as String? ?? '',
+      count: json['count'] as int? ?? 0,
+      latestAt: DateTime.tryParse(json['latest_at'] as String? ?? ''),
+      isNoFansub: json['is_no_fansub'] as bool? ?? false,
+    );
+  }
+
+  final String name;
+  final int count;
+  final DateTime? latestAt;
+  final bool isNoFansub;
+}
+
+class SubscriptionPreviewCandidateRead {
+  const SubscriptionPreviewCandidateRead({
+    required this.episodeIndex,
+    required this.resourceId,
+    required this.resourceTitle,
+    required this.fansub,
+    required this.score,
+    required this.state,
+    required this.reason,
+    required this.selected,
+  });
+
+  factory SubscriptionPreviewCandidateRead.fromJson(Map<String, dynamic> json) {
+    return SubscriptionPreviewCandidateRead(
+      episodeIndex: json['episode_index'] as int?,
+      resourceId: json['resource_id'] as int? ?? 0,
+      resourceTitle: json['resource_title'] as String? ?? '',
+      fansub: json['fansub'] as String? ?? '',
+      score: (json['score'] as num?)?.toDouble() ?? 0,
+      state: json['state'] as String? ?? '',
+      reason: json['reason'] as String?,
+      selected: json['selected'] as bool? ?? false,
+    );
+  }
+
+  final int? episodeIndex;
+  final int resourceId;
+  final String resourceTitle;
+  final String fansub;
+  final double score;
+  final String state;
+  final String? reason;
+  final bool selected;
+}
+
+class SubscriptionPreviewRead {
+  const SubscriptionPreviewRead({
+    required this.resourceCount,
+    required this.acceptedCount,
+    required this.candidates,
+  });
+
+  factory SubscriptionPreviewRead.fromJson(Map<String, dynamic> json) {
+    final values = json['candidates'];
+    return SubscriptionPreviewRead(
+      resourceCount: json['resource_count'] as int? ?? 0,
+      acceptedCount: json['accepted_count'] as int? ?? 0,
+      candidates: values is List
+          ? values
+                .whereType<Map<String, dynamic>>()
+                .map(SubscriptionPreviewCandidateRead.fromJson)
+                .toList()
+          : const [],
+    );
+  }
+
+  final int resourceCount;
+  final int acceptedCount;
+  final List<SubscriptionPreviewCandidateRead> candidates;
+}

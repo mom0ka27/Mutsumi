@@ -293,6 +293,22 @@ async def get_torrent_metadata_files(
     return _metadata_files(metadata)
 
 
+async def fetch_torrent_metadata_files(source: str) -> list[QBittorrentFileRead]:
+    """Wait for metadata and return its file list, for non-interactive callers.
+
+    The route above answers a UI poll and returns whatever is ready right now.
+    The subscription worker has nobody to retry on its behalf, so it needs the
+    waiting variant: a freshly submitted magnet has no metadata yet.
+    """
+    client = await _qbittorrent_client(timeout=30)
+    try:
+        metadata = await _wait_for_metadata(client, source)
+    finally:
+        await client.aclose()
+
+    return _metadata_files(metadata)
+
+
 @router.get("/torrents/{torrent_hash}/files", response_model=list[QBittorrentFileRead])
 async def get_torrent_files(
     torrent_hash: str,

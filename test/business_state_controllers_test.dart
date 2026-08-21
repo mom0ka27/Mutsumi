@@ -1,8 +1,13 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 
+import 'package:mutsumi/features/anime/data/anime_models.dart';
+import 'package:mutsumi/features/anime/presentation/anime_detail_controller.dart';
+import 'package:mutsumi/features/anime_garden/data/anime_garden_download_coordinator.dart';
+import 'package:mutsumi/features/bangumi/data/bangumi_repository.dart';
 import 'package:mutsumi/features/downloads/data/download_repository.dart';
 import 'package:mutsumi/features/downloads/presentation/download_progress_controller.dart';
 import 'package:mutsumi/features/auth/presentation/current_user_controller.dart';
@@ -13,6 +18,8 @@ import 'package:mutsumi/features/settings/presentation/saved_servers_controller.
 import 'package:mutsumi/features/settings/presentation/settings_home_binding.dart';
 import 'package:mutsumi/features/settings/presentation/settings_home_controller.dart';
 import 'package:mutsumi/features/settings/presentation/storage_status_controller.dart';
+import 'package:mutsumi/features/subscriptions/data/subscription_models.dart';
+import 'package:mutsumi/features/subscriptions/data/subscription_service.dart';
 
 void main() {
   tearDown(Get.reset);
@@ -106,6 +113,86 @@ void main() {
 
     expect(Get.find<SettingsHomeController>(), isA<SettingsHomeController>());
   });
+
+  group('追番入口的权限判定', () {
+    test('Guest 不能管理下载和订阅', () {
+      final user = CurrentUserController();
+      user.setPermissionGroup('Guest');
+
+      expect(user.canManageDownloads, isFalse);
+      expect(_detailController(user).canSubscribe, isFalse);
+    });
+
+    test('User 和 Admin 可以管理下载和订阅', () {
+      for (final group in ['User', 'Admin']) {
+        final user = CurrentUserController();
+        user.setPermissionGroup(group);
+
+        expect(user.canManageDownloads, isTrue, reason: group);
+        expect(_detailController(user).canSubscribe, isTrue, reason: group);
+      }
+    });
+
+    test('权限组未知时保持允许，由服务端裁决', () {
+      final user = CurrentUserController();
+
+      expect(user.canManageDownloads, isTrue);
+      expect(_detailController(user).canSubscribe, isTrue);
+    });
+
+    test('Guest 不请求订阅列表，User 会请求', () async {
+      final guestService = _RecordingSubscriptionService();
+      final guest = _detailController(
+        CurrentUserController()..setPermissionGroup('Guest'),
+        service: guestService,
+      );
+      guest.anime.value = AnimeRead.fromJson({'id': 1});
+
+      await guest.loadSubscription();
+
+      expect(guestService.calls, 0);
+      expect(guest.subscription.value, isNull);
+
+      final userService = _RecordingSubscriptionService();
+      final user = _detailController(
+        CurrentUserController()..setPermissionGroup('User'),
+        service: userService,
+      );
+      user.anime.value = AnimeRead.fromJson({'id': 1});
+
+      await user.loadSubscription();
+
+      expect(userService.calls, 1);
+    });
+  });
+}
+
+AnimeDetailController _detailController(
+  CurrentUserController user, {
+  SubscriptionService? service,
+}) {
+  // The default BangumiRepository reads the app-wide packageInfo for its
+  // user-agent, which only exists once main() ran.
+  final bangumi = BangumiRepository(dio: Dio());
+  return AnimeDetailController(
+    animeId: 1,
+    bangumiRepository: bangumi,
+    downloadCoordinator: AnimeGardenDownloadCoordinator(
+      bangumiRepository: bangumi,
+    ),
+    subscriptionService: service ?? _RecordingSubscriptionService(),
+    currentUserController: user,
+  );
+}
+
+class _RecordingSubscriptionService extends SubscriptionService {
+  int calls = 0;
+
+  @override
+  Future<List<SubscriptionRead>> listSubscriptions() async {
+    calls++;
+    return const [];
+  }
 }
 
 DownloadTask _task({

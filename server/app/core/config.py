@@ -53,6 +53,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "download_path": "",
         "share_ratio_limit": 3.0,
     },
+    "subscription": {
+        "enabled": True,
+        "interval_minutes": 15,
+        "cold_start_days": 7,
+        "max_pages_per_sweep": 5,
+        "auto_import": True,
+    },
 }
 
 

@@ -1,11 +1,16 @@
 import 'package:get/get.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/network/app_network_error.dart';
 import '../../../core/widgets/error_dialog.dart';
 import '../../anime_garden/data/anime_garden_download_coordinator.dart';
 import '../../anime_garden/presentation/anime_garden_bindings.dart';
 import '../../anime_garden/presentation/anime_garden_episode_match_page.dart';
+import '../../auth/presentation/current_user_controller.dart';
 import '../../bangumi/data/bangumi_repository.dart';
+import '../../subscriptions/data/subscription_models.dart';
+import '../../subscriptions/data/subscription_service.dart';
+import '../../subscriptions/presentation/subscription_editor_page.dart';
 import '../data/anime_list_store.dart';
 import '../data/anime_service.dart';
 
@@ -16,17 +21,24 @@ class AnimeDetailController extends GetxController {
     AnimeService? animeService,
     BangumiRepository? bangumiRepository,
     AnimeGardenDownloadCoordinator? downloadCoordinator,
+    SubscriptionService? subscriptionService,
+    CurrentUserController? currentUserController,
   }) : _animeService = animeService ?? AnimeService(),
        _bangumiRepository = bangumiRepository ?? BangumiRepository(),
        _downloadCoordinator =
-           downloadCoordinator ?? AnimeGardenDownloadCoordinator();
+           downloadCoordinator ?? AnimeGardenDownloadCoordinator(),
+       _subscriptionService = subscriptionService ?? SubscriptionService(),
+       _currentUser = currentUserController ?? CurrentUserController();
 
   final int animeId;
   final AnimeRead? initialAnime;
   final AnimeService _animeService;
   final BangumiRepository _bangumiRepository;
   final AnimeGardenDownloadCoordinator _downloadCoordinator;
+  final SubscriptionService _subscriptionService;
+  final CurrentUserController _currentUser;
   final anime = Rxn<AnimeRead>();
+  final subscription = Rxn<SubscriptionRead>();
   final loading = true.obs;
   final deleting = false.obs;
   final refreshing = false.obs;
@@ -45,6 +57,7 @@ class AnimeDetailController extends GetxController {
       final loadedAnime = await _animeService.getAnime(animeId);
       if (isClosed) return;
       anime.value = loadedAnime;
+      await loadSubscription();
     } catch (error) {
       if (isClosed) return;
       if (anime.value == null) {
@@ -58,6 +71,45 @@ class AnimeDetailController extends GetxController {
       if (!isClosed) {
         loading.value = false;
       }
+    }
+  }
+
+  /// Guest cannot create or edit subscriptions, so the entry point stays hidden
+  /// for them instead of failing on save with a 403.
+  bool get canSubscribe => _currentUser.canManageDownloads;
+
+  Future<void> loadSubscription() async {
+    final currentAnime = anime.value;
+    if (currentAnime == null || !canSubscribe) return;
+    try {
+      final subscriptions = await _subscriptionService.listSubscriptions();
+      if (isClosed) return;
+      subscription.value = subscriptions.firstWhereOrNull(
+        (item) => item.animeId == currentAnime.id,
+      );
+    } catch (error, stackTrace) {
+      // 追番 state is supplementary: never block the detail page on it.
+      AppLogger.error(
+        '读取追番状态失败 anime=${currentAnime.id}',
+        tag: 'Subscription',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  Future<void> openSubscriptionEditor() async {
+    final currentAnime = anime.value;
+    if (currentAnime == null || !canSubscribe) return;
+    final result = await Get.to<bool>(
+      () => SubscriptionEditorPage(
+        anime: currentAnime,
+        existing: subscription.value,
+        service: _subscriptionService,
+      ),
+    );
+    if (result == true && !isClosed) {
+      await loadSubscription();
     }
   }
 

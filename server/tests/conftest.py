@@ -41,7 +41,16 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.core.auth import get_password_hash  # noqa: E402
 from app.db.session import AsyncSessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Anime, Episode, PermissionGroup, User, WatchProgress  # noqa: E402
+from app.models import (  # noqa: E402
+    Anime,
+    Episode,
+    PermissionGroup,
+    PreferenceProfile,
+    Subscription,
+    SubscriptionEpisode,
+    User,
+    WatchProgress,
+)
 
 ADMIN_PASSWORD = "admin-password"
 
@@ -65,7 +74,15 @@ async def clean_database(client):
     """Depends on `client` so the schema exists before the truncation runs."""
     yield
     async with AsyncSessionLocal() as session:
-        for model in (WatchProgress, Episode, Anime, User):
+        for model in (
+            SubscriptionEpisode,
+            Subscription,
+            WatchProgress,
+            Episode,
+            Anime,
+            PreferenceProfile,
+            User,
+        ):
             await session.execute(model.__table__.delete())
         await session.commit()
 

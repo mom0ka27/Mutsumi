@@ -55,6 +55,25 @@ class _AnimeDetailPageState extends State<AnimeDetailPage> {
             onTap: Get.back,
           ),
           actions: [
+            if (_controller.canSubscribe) ...[
+              Obx(
+                () => GlassButton(
+                  width: 40,
+                  height: 40,
+                  iconSize: 20,
+                  icon: Icon(
+                    _controller.subscription.value?.enabled == true
+                        ? Icons.notifications_active_outlined
+                        : Icons.notifications_none_outlined,
+                  ),
+                  label: _controller.subscription.value == null
+                      ? '添加追番'
+                      : '追番设置',
+                  onTap: _controller.openSubscriptionEditor,
+                ),
+              ),
+              SizedBox(width: 2),
+            ],
             Obx(
               () => _controller.rematching.value
                   ? const Padding(

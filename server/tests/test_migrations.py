@@ -44,7 +44,15 @@ async def test_fresh_database_gets_the_full_schema(tmp_path):
     db_path = tmp_path / "fresh.db"
     await _run_migrations(db_path)
 
-    assert {"anime", "episodes", "users", "watch_progress"} <= _tables(db_path)
+    assert {
+        "anime",
+        "episodes",
+        "users",
+        "watch_progress",
+        "preference_profiles",
+        "subscriptions",
+        "subscription_episodes",
+    } <= _tables(db_path)
     assert _version(db_path)
 
 

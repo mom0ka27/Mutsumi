@@ -13,6 +13,7 @@ import '../features/downloads/data/download_repository.dart';
 import '../features/settings/data/authenticated_server_client.dart';
 import '../features/settings/data/server_update_service.dart';
 import '../features/settings/data/settings_repository.dart';
+import '../features/subscriptions/data/subscription_service.dart';
 import '../features/users/data/users_repository.dart';
 import '../player/model/dandanplay_repository.dart';
 import '../player/model/player_settings_repository.dart';
@@ -58,6 +59,7 @@ class AppBinding extends Bindings {
     Get.put(AnimeGardenRepository(), permanent: true);
     Get.put(DownloadRepository(client: serverClient), permanent: true);
     Get.put(UsersRepository(client: serverClient), permanent: true);
+    Get.put(SubscriptionService(serverClient: serverClient), permanent: true);
     Get.put(ServerUpdateService(client: serverClient), permanent: true);
     Get.put(
       AnimeGardenDownloadCoordinator(

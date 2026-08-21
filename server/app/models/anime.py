@@ -31,6 +31,12 @@ class Anime(Base):
         cascade="all, delete-orphan",
     )
     series: Mapped["Series | None"] = relationship(back_populates="animes")
+    subscription = relationship(
+        "Subscription",
+        back_populates="anime",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class Series(Base):

@@ -32,3 +32,9 @@ qbittorrent:
   password: ''
   download_path: ./data
   share_ratio_limit: 3.0
+subscription:
+  enabled: true
+  interval_minutes: 15
+  cold_start_days: 7
+  max_pages_per_sweep: 5
+  auto_import: true

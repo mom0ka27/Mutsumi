@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -7,10 +8,12 @@ from sqlalchemy import text
 
 from app.api.router import api_router
 from app.core.constants import API_VERSION, SERVER_VERSION
+from app.core.config import config
 from app.core.logging import setup_logging
 from app.core.qbittorrent_error import QBittorrentError
 from app.db.session import engine, init_db
 from app.models import User
+from app.services.subscription_worker import subscription_worker_loop
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,26 @@ setup_logging()
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
-    yield
+    worker_task = None
+    if config_subscription_enabled():
+        worker_task = asyncio.create_task(
+            subscription_worker_loop(),
+            name="mutsumi-subscription-worker",
+        )
+        logger.info("Subscription worker started")
+    try:
+        yield
+    finally:
+        if worker_task is not None:
+            worker_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker_task
+            logger.info("Subscription worker stopped")
+
+
+def config_subscription_enabled() -> bool:
+    value = config.get("subscription")
+    return isinstance(value, dict) and bool(value.get("enabled", True))
 
 
 app = FastAPI(title="Mutsumi Server", lifespan=lifespan)
