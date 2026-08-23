@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  auto_orientation_v2
   erika_flutter
   file_selector_windows
 )

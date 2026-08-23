@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  auto_orientation_v2
   file_selector_linux
 )
 
