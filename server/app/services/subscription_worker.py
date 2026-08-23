@@ -130,6 +130,32 @@ class SubscriptionWorker:
             found,
         )
 
+    async def _record_sweep_abort(
+        self,
+        subscription_ids: list[int],
+        error: Exception,
+        now: datetime,
+    ) -> None:
+        """Leave the abort reason on every subscription the sweep gave up on.
+
+        An aborted sweep rolls the whole session back, which is right -- the
+        run found nothing and imported nothing, so it should leave no half
+        state. But rolling back the explanation too is what turns "qBittorrent
+        is refusing us" into a card that silently never downloads.
+        """
+        reason = f"下载服务不可用，本轮已跳过: {error}"
+        try:
+            async with self.session_factory() as session:
+                for subscription_id in subscription_ids:
+                    subscription = await session.get(Subscription, subscription_id)
+                    if subscription is None:
+                        continue
+                    subscription.last_error = reason
+                    subscription.last_checked_at = now
+                await session.commit()
+        except Exception:  # noqa: BLE001 - reporting must not mask the abort
+            logger.exception("Could not record the sweep abort reason")
+
     async def _record_error(self, subscription_id: int, error: Exception) -> None:
         async with self.session_factory() as session:
             subscription = await session.get(Subscription, subscription_id)
@@ -284,6 +310,11 @@ class SubscriptionWorker:
             if not subscriptions:
                 return {"subscriptions": 0, "resources": 0, "found": 0, "aborted": False}
 
+            # Read before any rollback can expire these instances: reloading an
+            # expired attribute is synchronous IO, which on the async session
+            # raises MissingGreenlet and would replace the abort with a crash.
+            subscription_ids = [subscription.id for subscription in subscriptions]
+
             processed = 0
             found = 0
             resource_count = 0
@@ -325,6 +356,11 @@ class SubscriptionWorker:
             except SubscriptionSweepAborted as error:
                 await session.rollback()
                 logger.warning("Subscription sweep aborted: %s", error)
+                # The rollback took the ledger rows with it, so without this the
+                # sweep leaves no trace at all: no download, no error, nothing
+                # for the card to explain itself with. Written on its own
+                # session precisely because this one has just been rolled back.
+                await self._record_sweep_abort(subscription_ids, error, now)
                 return {
                     "subscriptions": len(subscriptions),
                     "resources": resource_count,

@@ -1042,3 +1042,82 @@ async def test_no_subject_to_ask_by_means_no_history_request_at_all():
     )._fetch_subject_history(
         subscription, datetime.fromisoformat("2026-09-03T12:00:00")
     ) == []
+
+
+async def test_an_aborted_sweep_records_why_instead_of_going_quiet(client, monkeypatch):
+    """An abort rolls the ledger back; the explanation has to survive it.
+
+    Without this the run leaves nothing behind -- no download, no error -- and
+    the card reads exactly like "still waiting for a release". Reading the ids
+    after the rollback is not an option either: the instances are expired by
+    then, and reloading one is synchronous IO the async session refuses.
+    """
+    from sqlalchemy import select
+
+    from app.db.session import AsyncSessionLocal
+    from app.models import SubscriptionEpisode, User
+
+    now = datetime.fromisoformat("2026-08-23T12:00:00")
+
+    class FakeGarden:
+        async def search_resources(self, **_kwargs):
+            return [_episode_resource(101, 1, "2026-07-24")], True
+
+    class FakeEpisodes:
+        async def get_episodes(self, _bangumi_id):
+            return [EpisodeInfo(ep=1.0, sort=1.0, name="E1", airdate="2026-07-24")]
+
+        async def get_subject(self, _bangumi_id):
+            return None
+
+    async def dead_qbittorrent(_source):
+        raise worker_module.QBittorrentError(21003, "qBittorrent 登录失败")
+
+    monkeypatch.setattr(worker_module, "fetch_torrent_metadata_files", dead_qbittorrent)
+
+    async with AsyncSessionLocal() as session:
+        user = User(
+            username="sweep-abort",
+            password_hash="x",
+            permission_group=PermissionGroup.USER,
+        )
+        profile = PreferenceProfile(
+            name="默认",
+            is_default=True,
+            prefer_resolution=["1080p", "2160p"],
+            prefer_codec=["av1", "hevc", "avc"],
+            prefer_subtitle=["简", "繁", "日", "无"],
+            prefer_bitdepth=["10bit", "8bit"],
+            weights={
+                "fansub": 45,
+                "resolution": 22,
+                "codec": 15,
+                "subtitle": 12,
+                "bitdepth": 6,
+            },
+        )
+        anime = Anime(bangumi_id=4242, name="作品", name_cn="作品")
+        session.add_all([user, profile, anime])
+        await session.flush()
+        session.add(
+            Subscription(
+                anime_id=anime.id,
+                profile_id=profile.id,
+                created_by=user.id,
+                fansub="ANi",
+                enabled=True,
+            )
+        )
+        await session.commit()
+
+    result = await SubscriptionWorker(
+        anime_garden=FakeGarden(), bangumi=FakeEpisodes()
+    ).run_sweep(now=now)
+
+    assert result["aborted"] is True
+    async with AsyncSessionLocal() as session:
+        subscription = (await session.scalars(select(Subscription))).one()
+        # Rolled back, so nothing was imported -- but the card can say why.
+        assert list(await session.scalars(select(SubscriptionEpisode))) == []
+        assert "qBittorrent 登录失败" in subscription.last_error
+        assert subscription.last_checked_at == now
